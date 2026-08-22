@@ -40,6 +40,11 @@ INSTALLED_APPS = [
     # Project apps
     "users",
     "authentication",
+    "sessions",
+    "measurements",
+    "referrals",
+    "notifications",
+    "pwa",
 ]
 
 MIDDLEWARE = [
@@ -81,34 +86,40 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # ============================================================================
-# DATABASE CONFIGURATION (Single Database)
+# DATABASE
 # ============================================================================
 import dj_database_url
 
-DATABASE_URL = f"postgres://{os.getenv('POSTGRES_USER')}:{os.getenv('POSTGRES_PASSWORD')}@{os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}/{os.getenv('POSTGRES_DB')}"
+if DEBUG:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
+else:
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=(
+                f"postgres://{os.getenv('POSTGRES_USER')}:"
+                f"{os.getenv('POSTGRES_PASSWORD')}@"
+                f"{os.getenv('POSTGRES_HOST')}:"
+                f"{os.getenv('POSTGRES_PORT')}/"
+                f"{os.getenv('POSTGRES_DB')}"
+            ),
+            conn_max_age=600,
+            conn_health_checks=True,
+            ssl_require=False,
+        )
+    }
 
-DATABASES = {
-    "default": dj_database_url.config(
-        default=DATABASE_URL,
-        conn_max_age=600,
-        conn_health_checks=True,
-        ssl_require=False,
-    )
-}
-
-# Production performance optimizations
-if not DEBUG:
     DATABASES["default"]["OPTIONS"] = {
-        # Connection timeout
         "connect_timeout": 10,
-        # TCP Keepalive - prevents stale connections
         "keepalives": 1,
-        "keepalives_idle": 60,  # Send keepalive after 60s idle
-        "keepalives_interval": 30,  # Send keepalive every 30s
-        "keepalives_count": 5,  # Drop connection after 5 failures
-        # Statement timeout - kills slow queries
+        "keepalives_idle": 60,
+        "keepalives_interval": 30,
+        "keepalives_count": 5,
         "options": "-c statement_timeout=15s",
-        # Client encoding
         "client_encoding": "UTF8",
     }
 
@@ -158,11 +169,11 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     # Authentication
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "authentication.auth.VersionedJWTAuthentication",
+        "authentication.backends.AccessTokenAuthentication",
     ],
     # Permissions
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "authentication.permissions.IsUserActive",
     ],
     # Renderers - Only JSON
     "DEFAULT_RENDERER_CLASSES": [
@@ -196,43 +207,62 @@ SIMPLE_JWT = {
 # ============================================================================
 # Channels
 # ============================================================================
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [
-                (
-                    f"redis://:{os.getenv('REDIS_PASSWORD')}"
-                    f"@{os.getenv('REDIS_HOST')}:"
-                    f"{os.getenv('REDIS_PORT')}/0"
-                )
-            ],
-            # Performance
-            "capacity": 1500,
-            "expiry": 60,
-            "group_expiry": 86400,
+if DEBUG:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [
+                    (
+                        f"redis://:{os.getenv('REDIS_PASSWORD')}"
+                        f"@{os.getenv('REDIS_HOST')}:"
+                        f"{os.getenv('REDIS_PORT')}/0"
+                    )
+                ],
+                "capacity": 1500,
+                "expiry": 60,
+                "group_expiry": 86400,
+            },
+        },
+    }
 
 # ============================================================================
 # Caches
 # ============================================================================
-CACHES = {
-    "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/1",
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "PARSER_CLASS": "redis.connection.HiredisParser",  # Faster
-            "CONNECTION_POOL_KWARGS": {
-                "max_connections": 20,
-                "retry_on_timeout": True,
-            },
-        },
-        "TIMEOUT": 300,  # Default cache timeout
+if DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "development-cache",
+            "TIMEOUT": 300,
+        }
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": (
+                f"redis://:{os.getenv('REDIS_PASSWORD')}"
+                f"@{os.getenv('REDIS_HOST')}:"
+                f"{os.getenv('REDIS_PORT')}/1"
+            ),
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "PARSER_CLASS": "redis.connection.HiredisParser",
+                "CONNECTION_POOL_KWARGS": {
+                    "max_connections": 20,
+                    "retry_on_timeout": True,
+                },
+            },
+            "TIMEOUT": 300,
+        }
+    }
 
 # ============================================================================
 # Celery
@@ -339,7 +369,6 @@ ZIBAL_MERCHANT = os.getenv("ZIBAL_MERCHANT")
 # ============================================================================
 SMSIR_API_KEY = os.getenv("SMSIR_API_KEY")
 
-
 # ============================================================================
 # Logging
 # ============================================================================
@@ -361,7 +390,7 @@ LOGGING = {
     "loggers": {
         "django": {
             "handlers": ["console", "file"],
-            "level": "INFO" if not DEBUG else "DEBUG",
+            "level": "INFO",
         },
     },
 }

@@ -1,3 +1,4 @@
+from flask import request
 from rest_framework.renderers import JSONRenderer
 
 
@@ -21,7 +22,7 @@ class GlobalJSONRenderer(JSONRenderer):
         response_data = data or {}
 
         # Extract error code if present
-        error_code = response_data.get("error")
+        error_code = response_data.get("error_code")
 
         # Build the standardized payload
         if is_success:
@@ -31,6 +32,7 @@ class GlobalJSONRenderer(JSONRenderer):
                 "error": None,
             }
         else:
+            print(response_data)
             payload = {
                 "success": False,
                 "data": None,

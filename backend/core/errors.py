@@ -1,0 +1,176 @@
+from rest_framework import status
+from rest_framework.exceptions import APIException
+
+
+class APIError(APIException):
+    def __init__(self, error, data=None):
+        self.error_code = error[0]
+        self.message = error[1]
+        self.status_code = error[2]
+
+        self.detail = {
+            "error_code": error[0],
+            "error_message": error[1],
+        }
+
+
+# ============================================================================
+# AUTHENTICATION & SESSION ERRORS
+# ============================================================================
+class AuthSessionError(APIError):
+    SESSION_EXPIRE = (
+        "SES-001",
+        "Session expired. Please log in again",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    COOKIES_NOT_PROVIDE = (
+        "SES-002",
+        "No cookies found in request",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_ACCESS_TOKEN = (
+        "SES-003",
+        "Invalid or malformed access token",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_REFRESH_TOKEN = (
+        "SES-004",
+        "Invalid or malformed refresh token",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    SESSION_NOT_FOUND = (
+        "SES-005",
+        "Session not found. Please log in again",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    SESSION_INACTIVE = (
+        "SES-006",
+        "Session is inactive. Please log in again",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    NO_REFRESH_TOKEN = (
+        "SES-007",
+        "No refresh token found in request",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# OTP ERRORS
+# ============================================================================
+class AuthOTPError(APIError):
+    OTP_PHONE_REQUIRED = (
+        "OTP-001",
+        "Phone number is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    OTP_NOT_FOUND = (
+        "OTP-002",
+        "OTP not found or expired",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    OTP_INVALID = (
+        "OTP-003",
+        "Invalid OTP code",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# Validation Errors
+# ============================================================================
+class UserValidationError(APIError):
+    INVALID_PHONE_NUMBER = (
+        "VAL-001",
+        "Phone number must start with 09 and be 11 digits",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_NAME = (
+        "VAL-002",
+        "First and last name must be at least 3 characters",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHONE_REQUIRED = (
+        "VAL-003",
+        "Phone number is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    FIRST_NAME_REQUIRED = (
+        "VAL-004",
+        "First name is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    LAST_NAME_REQUIRED = (
+        "VAL-005",
+        "Last name is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# Sign Up
+# ============================================================================
+class SignUpError(APIError):
+    PHONE_NUMBER_REUSE = (
+        "SIG-001",
+        "This phone number already exists",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    UNEXPECTED_ERROR = (
+        "SIG-002",
+        "An unexpected error happened. Please try again.",
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+
+# ============================================================================
+# User Profile
+# ============================================================================
+class UserProfileError(APIError):
+    INVALID_DATE = (
+        "PRO-001",
+        "Date of birth cannot be in the future",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# User Account
+# ============================================================================
+class UserAccountError(APIError):
+    USER_NOT_EXIST = (
+        "ACT-001",
+        "User does not exist",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    USER_ACCOUNT_INACTIVE = (
+        "ACT-002",
+        "User account is inactive",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    USER_ACCOUNT_BLOCKED = (
+        "ACT-003",
+        "User account is blocked",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    USER_NOT_VERIFIED = (
+        "ACT-004",
+        "User account is not verified",
+        status.HTTP_400_BAD_REQUEST,
+    )
