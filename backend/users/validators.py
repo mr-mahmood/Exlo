@@ -5,40 +5,21 @@ from users.models import User
 
 
 def validate_phone(value, instance=None):
-    """
-    Validate phone number.
-
-    Unverified users get deleted to free up their phone number.
-    Verified users block the number (it's taken).
-
-    Note: No need to check "if user.pk == instance.pk" because:
-    1. Same user, same number → caught by early return
-    2. Same user, different number → impossible (unique constraint)
-    3. New signup → instance is None
-    """
     if not value:
         return value
 
     if not re.fullmatch(r"09\d{9}", value):
         raise APIError(UserValidationError.INVALID_PHONE_NUMBER)
 
-    # Same user, same number → skip everything
-    if instance and instance.phone_number == value:
-        return value
+    qs = User.objects.filter(phone_number=value)
 
-    try:
-        user: User = User.objects.get(phone_number=value)
+    if instance is not None:
+        qs = qs.exclude(pk=instance.pk)
 
-        # Free up this number for the real owner
-        if not user.is_verified:
-            user.delete()
-            return value
-
-        # If verified, it's taken
+    if User.objects.filter(phone_number=value).exists():
         raise APIError(SignUpError.PHONE_NUMBER_REUSE)
 
-    except User.DoesNotExist:
-        return value
+    return value
 
 
 def validate_name(value):

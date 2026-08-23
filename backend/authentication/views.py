@@ -7,30 +7,26 @@ from rest_framework_simplejwt.exceptions import TokenError
 from core.errors import APIError, AuthSessionError, AuthOTPError, UserAccountError
 from users.models import User
 from users.serializers import UserProfileSerializer
-from sessions.models import UserSession
-from .services import TokenService
+from user_sessions.models import Session
+from .token_services import create_tokens_for_user, refresh_tokens
+from .utils import make_cookie
 from .backends import RefreshTokenAuthentication
 from .otp_service import generate_otp, verify_otp
-from .utils import make_cookie
 from django.conf import settings
+from django.core.cache import cache
+from .throttles import OTPPhoneThrottle, OTPIPThrottle
 
 
 class RequestOTPApiView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
 
         if not phone_number:
-            raise APIError(AuthOTPError.OTP_PHONE_REQUIRED)
-
-        # Check if user exists and is not blocked
-        try:
-            user: User = User.objects.get(phone_number=phone_number)
-            user.validate_account_status(login=True)
-        except User.DoesNotExist:
-            raise APIError(UserAccountError.USER_NOT_EXIST)
+            raise APIError(AuthOTPError.PHONE_REQUIRED)
 
         # Generate and send OTP
         result = generate_otp(phone_number)
@@ -44,32 +40,35 @@ class RequestOTPApiView(APIView):
 class VerifyOTPApiView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
+    serializer_class = UserProfileSerializer
+    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
         otp_code = request.data.get("otp")
 
         if not phone_number or not otp_code:
-            raise APIError(AuthOTPError.OTP_PHONE_REQUIRED)
+            raise APIError(AuthOTPError.PHONE_REQUIRED)
 
         # Verify OTP
-        result = verify_otp(phone_number, otp_code)
+        verify_otp(phone_number, otp_code)
 
-        if result:
+        # no error raise by verify_otp so otp code is correct
+        try:
+            # Login flow
             user: User = User.objects.get(phone_number=phone_number)
-
-            if not user.is_verified:
-                user.verify()
+            user.validate_account_status()
             user.update_last_login_at()
 
-            session = UserSession.create_session(user, request)
-            tokens = TokenService.create_tokens_for_user(user, session)
+            session = Session.create_session(user, request)
+            tokens = create_tokens_for_user(user, session)
 
             response = Response(
                 {
                     "user": UserProfileSerializer(
                         user, context={"request": request}
                     ).data,
+                    "new_user": False,
                 },
                 status=status.HTTP_200_OK,
             )
@@ -84,6 +83,19 @@ class VerifyOTPApiView(APIView):
 
             return response
 
+        except User.DoesNotExist:
+            # Signup flow
+            cache_key = f"signup_verified_{phone_number}"
+            cache.set(cache_key, {"phone_number": phone_number}, timeout=600)
+
+            return Response(
+                {
+                    "user": None,
+                    "new_user": True,
+                },
+                status=status.HTTP_200_OK,
+            )
+
 
 class RefreshAPIView(APIView):
     authentication_classes = [RefreshTokenAuthentication]
@@ -95,10 +107,7 @@ class RefreshAPIView(APIView):
             raise APIError(AuthSessionError.NO_REFRESH_TOKEN)
 
         try:
-            new_access, new_refresh = TokenService.refresh_tokens(
-                refresh_token,
-                request,
-            )
+            new_access, new_refresh = refresh_tokens(refresh_token, request)
         except:
             raise APIError(AuthSessionError.SESSION_EXPIRE)
 
@@ -128,7 +137,7 @@ class LogoutAPIView(APIView):
                 refresh.blacklist()
 
                 session_id = refresh.get("key_2")
-                session = UserSession.objects.get(session_id=session_id)
+                session: Session = Session.objects.get(session_id=session_id)
                 session.delete()
 
             except TokenError:

@@ -39,12 +39,12 @@ INSTALLED_APPS = [
     "import_export",
     # Project apps
     "users",
+    "user_sessions",
+    "user_referrals",
+    "user_measurements",
+    "user_notifications",
+    "user_pwa",
     "authentication",
-    "sessions",
-    "measurements",
-    "referrals",
-    "notifications",
-    "pwa",
 ]
 
 MIDDLEWARE = [
@@ -184,6 +184,11 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.JSONParser",
         "rest_framework.parsers.MultiPartParser",
     ],
+    "DEFAULT_THROTTLE_RATES": {
+        "otp_phone": "5/day",
+        "otp_ip": "10/day",
+    },
+    "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
     # Date format
     "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%S.%fZ",
     "DATE_FORMAT": "%Y-%m-%d",

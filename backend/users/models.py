@@ -3,6 +3,7 @@ import secrets
 from django.utils import timezone
 from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser, BaseUserManager
+from core.errors import APIError, UserAccountError
 
 
 class UserManager(BaseUserManager):
@@ -29,6 +30,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", False)
 
         with transaction.atomic():
+
             user = self.model(
                 phone_number=phone_number,
                 referral_code=self._generate_unique_referral_code(),
@@ -123,21 +125,12 @@ class User(AbstractUser):
         default=True,
     )
 
-    is_verified = models.BooleanField(
-        default=False,
-    )
-
     is_blocked = models.BooleanField(
         default=False,
     )
 
     # Timestamps
     last_login_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
-
-    verified_at = models.DateTimeField(
         null=True,
         blank=True,
     )
@@ -168,7 +161,6 @@ class User(AbstractUser):
             models.Index(
                 fields=[
                     "is_active",
-                    "is_verified",
                     "is_blocked",
                 ],
                 name="users_status_idx",
@@ -176,6 +168,7 @@ class User(AbstractUser):
             models.Index(fields=["role"], name="users_role_idx"),
             models.Index(fields=["created_at"], name="users_created_idx"),
             models.Index(fields=["last_login_at"], name="users_login_idx"),
+            models.Index(fields=["referral_code"], name="referral_code_idx"),
         ]
 
     def __str__(self):
@@ -189,20 +182,16 @@ class User(AbstractUser):
     @property
     def is_user_active(self):
         """Check if user can access the system at all"""
-        return self.is_active and self.is_verified and not self.is_blocked
+        return self.is_active and not self.is_blocked
 
-    def validate_account_status(self, login=False):
+    def validate_account_status(self):
         """
         Validate user account status.
         Raises appropriate errors if account is not in good standing.
         """
-        from core.errors import APIError, UserAccountError
 
         if not self.is_active:
             raise APIError(UserAccountError.USER_ACCOUNT_INACTIVE)
-
-        if not self.is_verified and not login:
-            raise APIError(UserAccountError.USER_NOT_VERIFIED)
 
         if self.is_blocked:
             raise APIError(UserAccountError.USER_ACCOUNT_BLOCKED)
@@ -222,12 +211,6 @@ class User(AbstractUser):
         self.is_active = True
         self.blocked_at = None
         self.save(update_fields=["is_blocked", "is_active", "blocked_at", "updated_at"])
-
-    def verify(self):
-        """Mark the user as verified."""
-        self.is_verified = True
-        self.verified_at = timezone.now()
-        self.save(update_fields=["is_verified", "verified_at", "updated_at"])
 
     def update_last_login_at(self):
         """update session last_activity_at"""

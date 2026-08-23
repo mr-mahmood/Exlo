@@ -1,3 +1,5 @@
+import stat
+
 from rest_framework import status
 from rest_framework.exceptions import APIException
 
@@ -65,7 +67,7 @@ class AuthSessionError(APIError):
 # OTP ERRORS
 # ============================================================================
 class AuthOTPError(APIError):
-    OTP_PHONE_REQUIRED = (
+    PHONE_REQUIRED = (
         "OTP-001",
         "Phone number is required",
         status.HTTP_400_BAD_REQUEST,
@@ -100,12 +102,6 @@ class UserValidationError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
-    PHONE_REQUIRED = (
-        "VAL-003",
-        "Phone number is required",
-        status.HTTP_400_BAD_REQUEST,
-    )
-
     FIRST_NAME_REQUIRED = (
         "VAL-004",
         "First name is required",
@@ -133,6 +129,30 @@ class SignUpError(APIError):
         "SIG-002",
         "An unexpected error happened. Please try again.",
         status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+    REFERRAL_CODE_NOT_VALID = (
+        "SIG-003",
+        "referral code is not valid",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_GENDER = (
+        "SIG-004",
+        "Gender is not valid",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    SIGN_UP_NOT_ALLOWED = (
+        "SIGN-005",
+        "sign up is not allowed before phone verification",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHONE_REQUIRED = (
+        "SIGN-006",
+        "Phone number is required",
+        status.HTTP_400_BAD_REQUEST,
     )
 
 
@@ -172,5 +192,17 @@ class UserAccountError(APIError):
     USER_NOT_VERIFIED = (
         "ACT-004",
         "User account is not verified",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHONE_ALREADY_EXISTS = (
+        "USER-005",
+        "This phone number is already in use",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    SAME_PHONE_AS_CURRENT = (
+        "USER-006",
+        "This is already your current phone number",
         status.HTTP_400_BAD_REQUEST,
     )

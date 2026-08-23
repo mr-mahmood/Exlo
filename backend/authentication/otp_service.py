@@ -11,11 +11,12 @@ OTP_EXPIRY_SECONDS = 120
 
 
 def generate_otp(phone_number: str):
-    """Generate and send OTP to phone number"""
 
     # Generate secure OTP
-    # otp_code = str(secrets.randbelow(900000) + 100000)
-    otp_code = "123456"
+    if settings.DEBUG:
+        otp_code = "123456"
+    else:
+        otp_code = str(secrets.randbelow(900000) + 100000)
 
     # Hash the OTP before storing
     hashed_otp = _hash_otp(otp_code)
@@ -25,16 +26,16 @@ def generate_otp(phone_number: str):
     cache.set(cache_key, hashed_otp, OTP_EXPIRY_SECONDS)
 
     # Send OTP via SMS
-    # send_sms_verification_task.delay(phone_number, otp_code)
+    if not settings.DEBUG:
+        send_sms_verification_task.delay(phone_number, otp_code)
 
-    # Delete plain OTP from memory
+    # Delete plain OTP text from memory
     del otp_code
 
     return True
 
 
-def verify_otp(phone_number: str, otp_code: str) -> bool:
-    """Verify OTP code and mark user as verified if successful"""
+def verify_otp(phone_number: str, otp_code: str):
 
     # Get hashed OTP from cache
     cache_key = f"{OTP_CACHE_PREFIX}_{phone_number}"
@@ -48,9 +49,8 @@ def verify_otp(phone_number: str, otp_code: str) -> bool:
 
     # Verify OTP using constant-time comparison (PREVENT Timing Attack)
     if hmac.compare_digest(hashed_input, stored_hash):
-        # Success - delete OTP
+        # Success
         cache.delete(cache_key)
-        return True
     else:
         raise APIError(AuthOTPError.OTP_INVALID)
 

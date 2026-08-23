@@ -2,8 +2,19 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny
+from django.core.cache import cache
+from django.db import IntegrityError, transaction
+from django.utils import timezone
 from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
+from user_referrals.models import Referral
+from user_sessions.models import Session
+from authentication.otp_service import generate_otp, verify_otp
+from authentication.token_services import create_tokens_for_user
+from authentication.utils import make_cookie
+from authentication.throttles import OTPPhoneThrottle, OTPIPThrottle
+from core.errors import APIError, AuthOTPError, SignUpError
+from users.validators import validate_phone
 from typing import cast
 
 
@@ -13,21 +24,218 @@ class UserSignupAPIView(APIView):
     serializer_class = UserSignupSerializer
 
     def post(self, request):
+        phone_number = request.data.get("phone_number")
+        if not phone_number:
+            raise APIError(AuthOTPError.PHONE_REQUIRED)
 
+        # Check if phone is verified
+        verified_key = f"signup_verified_{phone_number}"
+        verified_data = cache.get(verified_key)
+
+        if not verified_data:
+            raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
+
+        # Validate data
         serializer = self.serializer_class(
-            data=request.data, context={"request": request}
+            data=request.data,
+            context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
-        user = cast(User, serializer.save())
+
+        referral_code = request.data.get("referral")
+
+        try:
+            with transaction.atomic():
+                # Create user
+                user = cast(User, serializer.save())
+
+                # Create referral if provided
+                if referral_code:
+                    referrer = User.objects.get(referral_code=referral_code)
+                    Referral.objects.create(
+                        referrer=referrer,
+                        referred_user=user,
+                        referred_at=timezone.now(),
+                    )
+
+                # Create session and tokens
+                session = Session.create_session(user, request)
+                tokens = create_tokens_for_user(user, session)
+
+                # Prepare response
+                response = Response(
+                    {
+                        "user": self.serializer_class(
+                            user,
+                            context={"request": request},
+                        ).data,
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+
+                # Set cookies
+                make_cookie(
+                    response,
+                    {
+                        "access_token": tokens["access"],
+                        "refresh_token": tokens["refresh"],
+                    },
+                )
+
+                # Clean up cache
+                cache.delete(verified_key)
+                return response
+
+        except IntegrityError:
+            cache.delete(verified_key)  # Clean up on error
+            raise APIError(SignUpError.UNEXPECTED_ERROR)
+
+
+class PhoneChangeOldRequestAPIView(APIView):
+    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
+
+    def post(self, request):
+        user: User = request.user
+        user.validate_account_status()
+
+        # Generate OTP for current phone
+        result = generate_otp(user.phone_number)
+
+        # Set state: step 1
+        cache_key = f"phone_change_step_{user.id}"
+        cache.set(
+            cache_key,
+            {
+                "step": "old_otp_sent",
+                "user_id": user.id,
+            },
+            timeout=300,
+        )
+
+        if result:
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class PhoneChangeOldVerifyAPIView(APIView):
+    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
+
+    def post(self, request):
+        user: User = request.user
+        otp = request.data.get("otp")
+
+        if not otp:
+            raise APIError(AuthOTPError.PHONE_REQUIRED)
+
+        # Check state: must be at step 1
+        cache_key = f"phone_change_step_{user.id}"
+        state = cache.get(cache_key)
+
+        if not state or state.get("step") != "old_otp_sent":
+            raise APIError(AuthOTPError.OTP_INVALID)
+
+        # Verify OTP
+        verify_otp(user.phone_number, otp)
+
+        # no error raise by verify_otp so otp code is correct
+        # Update state: step 2
+        cache.set(
+            cache_key,
+            {
+                "step": "old_verified",
+                "user_id": user.id,
+            },
+            timeout=300,
+        )
+
+        return Response(
+            status=status.HTTP_200_OK,
+        )
+
+
+class PhoneChangeNewRequestAPIView(APIView):
+    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
+
+    def post(self, request):
+        user: User = request.user
+        new_phone = request.data.get("phone_number")
+
+        if not new_phone:
+            raise APIError(AuthOTPError.PHONE_REQUIRED)
+
+        # Check state: must have verified old phone (step 2)
+        cache_key = f"phone_change_step_{user.id}"
+        state = cache.get(cache_key)
+
+        if not state or state.get("step") != "old_verified":
+            raise APIError(AuthOTPError.OTP_INVALID)
+
+        validate_phone(new_phone, user)
+
+        # Generate OTP for new phone
+        result = generate_otp(new_phone)
+
+        # Update state: step 3 (store new phone)
+        cache.set(
+            cache_key,
+            {
+                "step": "new_otp_sent",
+                "user_id": user.id,
+                "new_phone": new_phone,
+            },
+            timeout=300,
+        )
+
+        if result:
+            return Response(status=status.HTTP_200_OK)
+        else:
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
+class PhoneChangeNewVerifyAPIView(APIView):
+    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
+
+    def post(self, request):
+        user: User = request.user
+        otp = request.data.get("otp")
+
+        if not otp:
+            raise APIError(AuthOTPError.PHONE_REQUIRED)
+
+        # Check state: must be at step 3
+        cache_key = f"phone_change_step_{user.id}"
+        state = cache.get(cache_key)
+
+        if not state or state.get("step") != "new_otp_sent":
+            raise APIError(AuthOTPError.OTP_INVALID)
+
+        new_phone = state.get("new_phone")
+
+        if not new_phone:
+            raise APIError(AuthOTPError.OTP_INVALID)
+
+        # Verify OTP from new phone
+        verify_otp(new_phone, otp)
+
+        # no error raise by verify_otp so otp code is correct
+        # Update user's phone number
+        user.phone_number = new_phone
+        user.save(update_fields=["phone_number", "updated_at"])
+
+        # Clear state
+        cache.delete(cache_key)
 
         return Response(
             {
-                "user": self.serializer_class(
+                "user": UserProfileSerializer(
                     user,
-                    context={"request": request},
+                    context={
+                        "request": request,
+                    },
                 ).data,
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_200_OK,
         )
 
 
@@ -68,13 +276,13 @@ class UserProfilePIView(APIView):
         )
 
 
-class AdminUserPIView(APIView):
-    pass
-
-
 class CoachStudentPIView(APIView):
     pass
 
 
 class GymMemberPIView(APIView):
+    pass
+
+
+class AdminUserPIView(APIView):
     pass

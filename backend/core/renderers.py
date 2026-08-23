@@ -1,16 +1,8 @@
-from flask import request
 from rest_framework.renderers import JSONRenderer
+from django.conf import settings
 
 
 class GlobalJSONRenderer(JSONRenderer):
-    """
-    Standardizes API response format across the application.
-
-    Output format:
-        Success: {"success": true, "data": {...}, "error": null}
-        Error:   {"success": false, "data": null, "error": "ERROR_CODE"}
-    """
-
     def render(self, data, accepted_media_type=None, renderer_context=None):
         response = renderer_context.get("response") if renderer_context else None
 
@@ -18,25 +10,29 @@ class GlobalJSONRenderer(JSONRenderer):
         if response is None:
             return super().render(data, accepted_media_type, renderer_context)
 
+        # Determine if response is successful
         is_success = 200 <= response.status_code < 300
-        response_data = data or {}
-
-        # Extract error code if present
-        error_code = response_data.get("error_code")
 
         # Build the standardized payload
         if is_success:
             payload = {
                 "success": True,
-                "data": response_data,
+                "data": data if data is not None else None,
                 "error": None,
             }
         else:
-            print(response_data)
+            # Extract error information
+            error_code = data.get("error", "ERROR")
+            error_message = data.get("error_message") if settings.DEBUG else None
+
             payload = {
                 "success": False,
                 "data": None,
                 "error": error_code,
             }
+
+            # Only include error_message in development
+            if settings.DEBUG and error_message:
+                payload["error_message"] = error_message
 
         return super().render(payload, accepted_media_type, renderer_context)

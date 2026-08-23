@@ -4,7 +4,7 @@ from users.models import User
 from django.utils import timezone
 
 
-class UserSession(models.Model):
+class Session(models.Model):
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -23,10 +23,6 @@ class UserSession(models.Model):
         editable=False,
     )
 
-    is_active = models.BooleanField(
-        default=True,
-    )
-
     # Device Information
     ip_address = models.CharField(max_length=45)
     user_agent = models.CharField(max_length=255)
@@ -41,11 +37,7 @@ class UserSession(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["session_id"], name="session_id_idx"),
-            models.Index(
-                fields=["session_id", "user", "is_active"],
-                name="user_active_session_idx",
-            ),
-            models.Index(fields=["user", "is_active"], name="active_user_idx"),
+            models.Index(fields=["session_id", "user"], name="user_active_session_idx"),
         ]
 
     def __str__(self):
@@ -78,12 +70,7 @@ class UserSession(models.Model):
             last_activity_at=timezone.now(),
         )
 
-    def deactivate(self):
-        """Deactivate this session"""
-        self.is_active = False
-        self.save(update_fields=["is_active", "updated_at"])
-
-    def update_activity(self):
+    def update_last_activity_at(self):
         """update session last_activity_at"""
         self.last_activity_at = timezone.now()
         self.save(update_fields=["last_activity_at", "updated_at"])

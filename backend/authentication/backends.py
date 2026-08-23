@@ -2,7 +2,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from core.errors import APIError, AuthSessionError, UserAccountError
-from sessions.models import UserSession
+from user_sessions.models import Session
 from users.models import User
 
 
@@ -37,12 +37,11 @@ class AccessTokenAuthentication(JWTAuthentication):
             raise APIError(AuthSessionError.SESSION_NOT_FOUND)
 
         try:
-            session = UserSession.objects.get(
+            session: Session = Session.objects.get(
                 session_id=session_id,
                 user=user,
-                is_active=True,
             )
-        except UserSession.DoesNotExist:
+        except Session.DoesNotExist:
             raise APIError(AuthSessionError.SESSION_INACTIVE)
 
         return (user, validated_token)
@@ -79,17 +78,17 @@ class RefreshTokenAuthentication(JWTAuthentication):
             raise APIError(AuthSessionError.SESSION_NOT_FOUND)
 
         try:
-            session: UserSession = UserSession.objects.get(
+            session: Session = Session.objects.get(
                 session_id=session_id,
                 user=user,
-                is_active=True,
             )
-        except UserSession.DoesNotExist:
+        except Session.DoesNotExist:
             raise APIError(AuthSessionError.SESSION_INACTIVE)
 
-        # 5. update the last activity time of session
+        # 5. update session and user fildes
         # only update when new access token is requested
-        session.update_activity()
+        session.update_last_activity_at()
+        user.update_last_login_at()
 
         # 6. Return user with new access token
         access_token = refresh.access_token
