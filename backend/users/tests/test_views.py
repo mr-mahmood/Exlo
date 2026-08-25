@@ -12,6 +12,7 @@ from core.errors import SignUpError
 from users.models import User
 from user_sessions.models import Session
 from authentication.otp_service import OTP_CACHE_PREFIX
+from core.errors import AuthenticationError, SignUpError
 
 
 class UserSignupViewTest(TestCase):
@@ -106,7 +107,7 @@ class UserSignupViewTest(TestCase):
         cache.clear()
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "SIGN-005")  # type: ignore
+        self.assertEqual(response.data["error"], SignUpError.SIGN_UP_NOT_ALLOWED[0])  # type: ignore
 
     def test_signup_with_expired_phone_verification(self):
         """Test signup with expired phone verification"""
@@ -179,7 +180,7 @@ class UserSignupViewTest(TestCase):
         )
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "SIG-001")  # type: ignore
+        self.assertEqual(response.data["error"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
 
     # ========== REFERRAL TESTS ==========
     def test_signup_with_invalid_referral(self):
@@ -189,7 +190,7 @@ class UserSignupViewTest(TestCase):
 
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "SIG-003")  # type: ignore
+        self.assertEqual(response.data["error"], SignUpError.REFERRAL_CODE_NOT_VALID[0])  # type: ignore
 
     # ========== EDGE CASES ==========
     def test_signup_with_special_characters_in_name(self):
@@ -229,7 +230,7 @@ class UserSignupViewTest(TestCase):
 
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "SIG-001")  # type: ignore
+        self.assertEqual(response.data["error"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
 
     # ========== SELF-REFERRAL PREVENTION ==========
     def test_signup_self_referral_prevention(self):
@@ -423,7 +424,7 @@ class PhoneChangeFlowTest(TestCase):
             self.new_request_url, {"phone_number": "09123456788"}
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "SIG-001")  # type: ignore
+        self.assertEqual(response.data["error"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
 
     def test_new_otp_request_same_phone(self):
         """Test changing to the same phone number"""
@@ -514,6 +515,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = client.post(self.old_request_url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
 
     def test_phone_change_blocked_user(self):
         """Test phone change for blocked user"""
@@ -565,6 +567,7 @@ class UserProfileViewTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
 
     def test_get_profile_blocked_user(self):
         self.user.is_blocked = True
@@ -639,6 +642,7 @@ class UserProfileViewTest(TestCase):
         data = {"first_name": "Jane"}
         response = client.put(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
 
     # ========== PROFILE PICTURE UPDATE ==========
     def test_update_profile_picture(self):

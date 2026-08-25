@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from users.validators import validate_phone
-from core.errors import APIError, AuthSessionError, AuthOTPError, UserAccountError
+from core.errors import APIError, AuthenticationError, OTPError, SessionError
 from users.models import User
 from users.serializers import UserProfileSerializer
 from user_sessions.models import Session
@@ -28,7 +28,7 @@ class LoginRequestApiView(APIView):
         phone_number = validate_phone(phone_number, skip_duplicate_check=True)
 
         if not phone_number:
-            raise APIError(AuthOTPError.PHONE_REQUIRED)
+            raise APIError(OTPError.PHONE_REQUIRED)
 
         # Generate and send OTP
         result = generate_otp(phone_number)
@@ -50,7 +50,7 @@ class LoginVerifyApiView(APIView):
         otp_code = request.data.get("otp")
 
         if not phone_number or not otp_code:
-            raise APIError(AuthOTPError.PHONE_REQUIRED)
+            raise APIError(OTPError.PHONE_REQUIRED)
 
         # Verify OTP
         verify_otp(phone_number, otp_code)
@@ -106,12 +106,12 @@ class RefreshAPIView(APIView):
 
         refresh_token = request.COOKIES.get("refresh_token")
         if not refresh_token:
-            raise APIError(AuthSessionError.NO_REFRESH_TOKEN)
+            raise APIError(AuthenticationError.NO_REFRESH_TOKEN)
 
         try:
             new_access, new_refresh = refresh_tokens(refresh_token, request)
         except:
-            raise APIError(AuthSessionError.SESSION_EXPIRE)
+            raise APIError(SessionError.SESSION_EXPIRE)
 
         response = Response(status=status.HTTP_200_OK)
 

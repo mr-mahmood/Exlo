@@ -3,7 +3,7 @@ import hashlib
 import hmac
 from django.conf import settings
 from django.core.cache import cache
-from core.errors import APIError, AuthOTPError
+from core.errors import APIError, OTPError
 
 OTP_CACHE_PREFIX = "otp"
 OTP_EXPIRY_SECONDS = 120
@@ -43,7 +43,7 @@ def verify_otp(phone_number: str, otp_code: str):
     stored_hash = cache.get(cache_key)
 
     if not stored_hash:
-        raise APIError(AuthOTPError.OTP_NOT_FOUND)
+        raise APIError(OTPError.OTP_NOT_FOUND)
 
     # Hash the input OTP and compare with stored hash
     hashed_input = _hash_otp(otp_code)
@@ -54,7 +54,7 @@ def verify_otp(phone_number: str, otp_code: str):
         cache.delete(cache_key)
         return True
     else:
-        raise APIError(AuthOTPError.OTP_INVALID)
+        raise APIError(OTPError.OTP_INVALID)
 
 
 def _hash_otp(otp_code: str) -> str:

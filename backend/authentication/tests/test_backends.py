@@ -10,7 +10,7 @@ from authentication.backends import (
     AccessTokenAuthentication,
     RefreshTokenAuthentication,
 )
-from core.errors import APIError, AuthSessionError, UserAccountError
+from core.errors import APIError, AuthenticationError, UserAccountError, SessionError
 from django.conf import settings
 from datetime import timedelta
 
@@ -76,7 +76,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_NOT_FOUND[0]
+            context.exception.error_code, SessionError.SESSION_NOT_FOUND[0]
         )
 
     # ========== ERROR CASES ==========
@@ -91,7 +91,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.COOKIES_NOT_PROVIDE[0]
+            context.exception.error_code, AuthenticationError.COOKIES_NOT_PROVIDE[0]
         )
 
     def test_authenticate_empty_cookie(self):
@@ -104,7 +104,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.COOKIES_NOT_PROVIDE[0]
+            context.exception.error_code, AuthenticationError.COOKIES_NOT_PROVIDE[0]
         )
 
     def test_authenticate_invalid_access_token(self):
@@ -117,7 +117,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.INVALID_ACCESS_TOKEN[0]
+            context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
         )
 
     def test_authenticate_expired_token(self):
@@ -141,7 +141,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.INVALID_ACCESS_TOKEN[0]
+            context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
         )
 
     def test_authenticate_expired_session(self):
@@ -156,9 +156,7 @@ class AccessTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     def test_authenticate_blocked_user(self):
         """Test authentication for blocked user"""
@@ -220,7 +218,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.INVALID_ACCESS_TOKEN[0]
+            context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
         )
 
     def test_authenticate_session_mismatch(self):
@@ -280,7 +278,7 @@ class AccessTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.INVALID_ACCESS_TOKEN[0]
+            context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
         )
 
 
@@ -339,7 +337,7 @@ class RefreshTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_NOT_FOUND[0]
+            context.exception.error_code, SessionError.SESSION_NOT_FOUND[0]
         )
 
     # ========== ERROR CASES ==========
@@ -354,7 +352,7 @@ class RefreshTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.COOKIES_NOT_PROVIDE[0]
+            context.exception.error_code, AuthenticationError.COOKIES_NOT_PROVIDE[0]
         )
 
     def test_authenticate_empty_cookie(self):
@@ -367,7 +365,7 @@ class RefreshTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(
-            context.exception.error_code, AuthSessionError.COOKIES_NOT_PROVIDE[0]
+            context.exception.error_code, AuthenticationError.COOKIES_NOT_PROVIDE[0]
         )
 
     def test_authenticate_invalid_refresh_token(self):
@@ -379,9 +377,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     def test_authenticate_expired_refresh_token(self):
         """Test authentication with expired refresh token"""
@@ -397,9 +393,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     def test_authenticate_expired_session(self):
         """Test authentication with valid refresh token but deleted session"""
@@ -412,9 +406,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     def test_authenticate_blocked_user(self):
         """Test authentication for blocked user"""
@@ -475,9 +467,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     def test_authenticate_blacklisted_token(self):
         """Test authentication with blacklisted refresh token"""
@@ -491,9 +481,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     # ========== EDGE CASES ==========
 
@@ -523,9 +511,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         with self.assertRaises(APIError) as context:
             auth.authenticate(request)  # type: ignore
 
-        self.assertEqual(
-            context.exception.error_code, AuthSessionError.SESSION_EXPIRE[0]
-        )
+        self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
     def test_authenticate_session_mismatch(self):
         """Test refresh authentication when token's session doesn't match user"""

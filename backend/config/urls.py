@@ -7,6 +7,8 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/auth/", include("authentication.urls")),
     path("api/users/", include("users.urls")),
+    path("api/sessions/", include("user_sessions.urls")),
+    path("api/referrals/", include("user_referrals.urls")),
 ]
 
 if settings.DEBUG:

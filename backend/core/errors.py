@@ -17,41 +17,64 @@ class APIError(APIException):
 
 
 # ============================================================================
-# AUTHENTICATION & SESSION ERRORS
+# SESSION
 # ============================================================================
-class AuthSessionError(APIError):
+class SessionError(APIError):
     SESSION_EXPIRE = (
-        "SES-001",
+        "SESS_001",
+        "Session expired.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    SESSION_NOT_FOUND = (
+        "SESS_002",
+        "Session not found.",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    NO_EXISTING_SESSION = (
+        "SESS_003",
+        "No Seccion found for User",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+
+# ============================================================================
+# AUTHENTICATION
+# ============================================================================
+class AuthenticationError(APIError):
+    SESSION_EXPIRE = (
+        "AUTH_001",
         "Session expired. Please log in again",
         status.HTTP_400_BAD_REQUEST,
     )
 
     COOKIES_NOT_PROVIDE = (
-        "SES-002",
+        "AUTH_002",
         "No cookies found in request",
         status.HTTP_400_BAD_REQUEST,
     )
 
     INVALID_ACCESS_TOKEN = (
-        "SES-003",
+        "AUTH_003",
         "Invalid or malformed access token",
         status.HTTP_400_BAD_REQUEST,
     )
 
     INVALID_REFRESH_TOKEN = (
-        "SES-004",
+        "AUTH_004",
         "Invalid or malformed refresh token",
         status.HTTP_400_BAD_REQUEST,
     )
 
     SESSION_NOT_FOUND = (
-        "SES-005",
+        "AUTH_005",
         "Session not found. Please log in again",
         status.HTTP_404_NOT_FOUND,
     )
 
     NO_REFRESH_TOKEN = (
-        "SES-007",
+        "AUTH_006",
         "No refresh token found in request",
         status.HTTP_400_BAD_REQUEST,
     )
@@ -60,7 +83,7 @@ class AuthSessionError(APIError):
 # ============================================================================
 # OTP ERRORS
 # ============================================================================
-class AuthOTPError(APIError):
+class OTPError(APIError):
     PHONE_REQUIRED = (
         "OTP-001",
         "Phone number is required",
@@ -144,25 +167,25 @@ class UserValidationError(APIError):
 # ============================================================================
 class SignUpError(APIError):
     PHONE_NUMBER_REUSE = (
-        "SIG-001",
+        "SIGN-001",
         "This phone number already exists",
         status.HTTP_400_BAD_REQUEST,
     )
 
     UNEXPECTED_ERROR = (
-        "SIG-002",
+        "SIGN-002",
         "An unexpected error happened. Please try again.",
         status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
 
     REFERRAL_CODE_NOT_VALID = (
-        "SIG-003",
+        "SIGN-003",
         "referral code is not valid",
         status.HTTP_400_BAD_REQUEST,
     )
 
     INVALID_GENDER = (
-        "SIG-004",
+        "SIGN-004",
         "Gender is not valid",
         status.HTTP_400_BAD_REQUEST,
     )
@@ -181,40 +204,29 @@ class SignUpError(APIError):
 
 
 # ============================================================================
-# User Profile
-# ============================================================================
-class UserProfileError(APIError):
-    INVALID_DATE = (
-        "PRO-001",
-        "Date of birth cannot be in the future",
-        status.HTTP_400_BAD_REQUEST,
-    )
-
-
-# ============================================================================
 # User Account
 # ============================================================================
 class UserAccountError(APIError):
     USER_NOT_EXIST = (
-        "ACT-001",
+        "USER-001",
         "User does not exist",
         status.HTTP_404_NOT_FOUND,
     )
 
     USER_ACCOUNT_INACTIVE = (
-        "ACT-002",
+        "USER-002",
         "User account is inactive",
         status.HTTP_400_BAD_REQUEST,
     )
 
     USER_ACCOUNT_BLOCKED = (
-        "ACT-003",
+        "USER-003",
         "User account is blocked",
         status.HTTP_400_BAD_REQUEST,
     )
 
     USER_NOT_VERIFIED = (
-        "ACT-004",
+        "USER-004",
         "User account is not verified",
         status.HTTP_400_BAD_REQUEST,
     )
@@ -228,5 +240,29 @@ class UserAccountError(APIError):
     SAME_PHONE_AS_CURRENT = (
         "USER-006",
         "This is already your current phone number",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_DATE = (
+        "USER-007",
+        "Date of birth cannot be in the future",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# REFERRAL
+# ============================================================================
+class ReferralError(APIError):
+
+    NO_EXISTING_REFERRAL = (
+        "REFE_001",
+        "No referral found for User",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    SELF_REFERRAL_NOT_ALLOWED = (
+        "REFE_002",
+        "you cant referral your self",
         status.HTTP_400_BAD_REQUEST,
     )

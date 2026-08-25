@@ -1,6 +1,6 @@
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-from core.errors import APIError, AuthSessionError, UserAccountError
+from core.errors import APIError, AuthenticationError, UserAccountError
 from users.models import User
 
 
@@ -24,7 +24,7 @@ def refresh_tokens(refresh_token_str, request):
     try:
         old_refresh = RefreshToken(refresh_token_str)
     except TokenError:
-        raise APIError(AuthSessionError.INVALID_REFRESH_TOKEN)
+        raise APIError(AuthenticationError.INVALID_REFRESH_TOKEN)
 
     # Get user
     user: User = User.objects.get(id=old_refresh["key_1"])

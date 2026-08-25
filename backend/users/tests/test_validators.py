@@ -3,7 +3,7 @@ from django.test import TestCase
 from datetime import date, timedelta
 from users.validators import validate_phone, validate_name, validate_date_of_birth
 from users.models import User
-from core.errors import APIError, UserValidationError, UserProfileError, SignUpError
+from core.errors import APIError, UserValidationError, UserAccountError, SignUpError
 
 
 class PhoneValidatorTest(TestCase):
@@ -132,7 +132,7 @@ class DateOfBirthValidatorTest(TestCase):
 
         with self.assertRaises(APIError) as context:
             validate_date_of_birth(future_date)
-        self.assertEqual(context.exception.error_code, UserProfileError.INVALID_DATE[0])
+        self.assertEqual(context.exception.error_code, UserAccountError.INVALID_DATE[0])
 
     def test_very_old_date(self):
         """Test very old date is valid"""

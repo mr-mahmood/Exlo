@@ -9,9 +9,9 @@ from user_sessions.models import Session
 from django.conf import settings
 from core.errors import (
     UserValidationError,
-    AuthSessionError,
+    SessionError,
     UserAccountError,
-    AuthOTPError,
+    OTPError,
 )
 from unittest.mock import patch
 
@@ -236,7 +236,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], AuthOTPError.PHONE_REQUIRED[0])  # type: ignore
+        self.assertEqual(response.data["error"], OTPError.PHONE_REQUIRED[0])  # type: ignore
 
     def test_login_verify_missing_phone(self):
         """Test login verify with missing phone number"""
@@ -244,7 +244,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], AuthOTPError.PHONE_REQUIRED[0])  # type: ignore
+        self.assertEqual(response.data["error"], OTPError.PHONE_REQUIRED[0])  # type: ignore
 
     def test_login_verify_existing_user_sets_cookies(self):
         """Test that login verify sets proper cookies for existing user"""
@@ -298,7 +298,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], AuthSessionError.SESSION_EXPIRE[0])  # type: ignore
+        self.assertEqual(response.data["error"], SessionError.SESSION_EXPIRE[0])  # type: ignore
 
     def test_refresh_blocked_user(self):
         """Test refresh for blocked user"""

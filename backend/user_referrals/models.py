@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from core.errors import APIError, ReferralError
 from users.models import User
 from django.utils import timezone
 
@@ -14,16 +15,15 @@ class Referral(models.Model):
     referrer = models.ForeignKey(
         to=User,
         on_delete=models.CASCADE,
-        related_name="recruits",  # People I recruited
+        related_name="recruits",
     )
 
     referred_user = models.ForeignKey(
         to=User,
         on_delete=models.CASCADE,
-        related_name="sponsor",  # Who recruited me
+        related_name="sponsor",
     )
 
-    # Timestamps
     referred_at = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -39,6 +39,12 @@ class Referral(models.Model):
             ),
         ]
         unique_together = [["referrer", "referred_user"]]
+
+    def save(self, *args, **kwargs):
+        """Prevent self-referrals before saving"""
+        if self.referrer == self.referred_user:
+            raise APIError(ReferralError.SELF_REFERRAL_NOT_ALLOWED)
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.referred_user} referred by {self.referrer}"

@@ -1,6 +1,6 @@
 import re
 from datetime import date
-from core.errors import APIError, UserProfileError, SignUpError, UserValidationError
+from core.errors import APIError, UserAccountError, SignUpError, UserValidationError
 from users.models import User
 
 
@@ -24,6 +24,7 @@ def validate_phone(value, instance=None, skip_duplicate_check=False):
 
     return stripped_value
 
+
 def validate_name(value):
     if not value or not value.strip():
         raise APIError(UserValidationError.INVALID_NAME)
@@ -42,6 +43,6 @@ def validate_date_of_birth(value):
     today = date.today()
 
     if value > today:
-        raise APIError(UserProfileError.INVALID_DATE)
+        raise APIError(UserAccountError.INVALID_DATE)
 
     return value

@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
-from core.errors import APIError, UserValidationError, SignUpError, UserProfileError
+from core.errors import APIError, UserValidationError, SignUpError, UserAccountError
 
 
 class UserSignupSerializerTest(TestCase):
@@ -103,7 +103,7 @@ class UserSignupSerializerTest(TestCase):
         serializer = UserSignupSerializer(data=data)
         with self.assertRaises(APIError) as context:
             serializer.is_valid(raise_exception=True)
-        self.assertEqual(context.exception.error_code, UserProfileError.INVALID_DATE[0])
+        self.assertEqual(context.exception.error_code, UserAccountError.INVALID_DATE[0])
 
     def test_duplicate_phone(self):
         User.objects.create_user(
@@ -336,7 +336,7 @@ class UserProfileSerializerTest(TestCase):
         serializer = UserProfileSerializer(self.user, data=data, partial=True)
         with self.assertRaises(APIError) as context:
             serializer.is_valid(raise_exception=True)
-        self.assertEqual(context.exception.error_code, UserProfileError.INVALID_DATE[0])
+        self.assertEqual(context.exception.error_code, UserAccountError.INVALID_DATE[0])
 
     def test_partial_update_single_field(self):
         data = {"first_name": "Jane"}

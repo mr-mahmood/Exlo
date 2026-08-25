@@ -7,6 +7,7 @@ from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from django.db import transaction
+from core.errors import APIError, ReferralError
 
 
 class ReferralModelTest(TestCase):
@@ -57,12 +58,12 @@ class ReferralModelTest(TestCase):
 
     def test_cannot_refer_self(self):
         """Test a user cannot refer themselves"""
-        # This should be handled in business logic
-        # Just test the model allows it but business logic prevents
-        referral = Referral.objects.create(
-            referrer=self.referrer, referred_user=self.referrer
+        with self.assertRaises(APIError) as context:
+            Referral.objects.create(referrer=self.referrer, referred_user=self.referrer)
+
+        self.assertEqual(
+            context.exception.error_code, ReferralError.SELF_REFERRAL_NOT_ALLOWED[0]
         )
-        self.assertEqual(referral.referrer, referral.referred_user)
 
     def test_referral_relationships(self):
         """Test referral relationships"""
