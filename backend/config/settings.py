@@ -107,10 +107,18 @@ else:
                 f"{os.getenv('POSTGRES_PORT')}/"
                 f"{os.getenv('POSTGRES_DB')}"
             ),
-            conn_max_age=600,
+            conn_max_age=0,  # Disable Django's persistent connections when using pool
             conn_health_checks=True,
             ssl_require=False,
         )
+    }
+
+    # Add pooling configuration
+    DATABASES["default"]["POOL"] = {  # type: ignore
+        "min_size": 10,  # Minimum connections to keep in pool
+        "max_size": 50,  # Maximum connections in pool
+        "timeout": 30,  # Time to wait for connection (seconds)
+        "max_lifetime": 300,  # Connection max lifetime (seconds)
     }
 
     DATABASES["default"]["OPTIONS"] = {
@@ -119,7 +127,7 @@ else:
         "keepalives_idle": 60,
         "keepalives_interval": 30,
         "keepalives_count": 5,
-        "options": "-c statement_timeout=15s",
+        "options": "-c statement_timeout=10s",
         "client_encoding": "UTF8",
     }
 
@@ -272,22 +280,29 @@ else:
 # ============================================================================
 # Celery
 # ============================================================================
-CELERY_BROKER_URL = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/2"
-CELERY_RESULT_BACKEND = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/3"
+if DEBUG:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+    # Use memory broker for development
+    CELERY_BROKER_URL = "memory://"
+    CELERY_RESULT_BACKEND = "cache"
+else:
+    CELERY_BROKER_URL = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/2"
+    CELERY_RESULT_BACKEND = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/3"
 
-# Time limits
-CELERY_TASK_TIME_LIMIT = 300  # 5 minutes hard limit
-CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minutes soft limit
+    # Time limits
+    CELERY_TASK_TIME_LIMIT = 300  # 5 minutes hard limit
+    CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minutes soft limit
 
-# Worker settings
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 500  # Prevent memory leaks
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Fair distribution
-CELERY_TASK_ACKS_LATE = True  # Acknowledge after execution
+    # Worker settings
+    CELERY_WORKER_MAX_TASKS_PER_CHILD = 500  # Prevent memory leaks
+    CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Fair distribution
+    CELERY_TASK_ACKS_LATE = True  # Acknowledge after execution
 
-# Connection settings
-CELERY_BROKER_CONNECTION_TIMEOUT = 30
-CELERY_BROKER_HEARTBEAT = 30
-CELERY_BROKER_POOL_LIMIT = 10
+    # Connection settings
+    CELERY_BROKER_CONNECTION_TIMEOUT = 30
+    CELERY_BROKER_HEARTBEAT = 30
+    CELERY_BROKER_POOL_LIMIT = 10
 
 # ============================================================================
 # Cookies & CORS

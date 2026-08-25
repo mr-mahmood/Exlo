@@ -1,6 +1,6 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from core.errors import APIError, AuthSessionError, UserAccountError
 from user_sessions.models import Session
 from users.models import User
@@ -12,6 +12,16 @@ class AccessTokenAuthentication(JWTAuthentication):
     Validates both JWT and active session.
     """
 
+    def get_user(self, validated_token):
+        try:
+            user_id = validated_token.get("key_1")
+            if not user_id:
+                raise APIError(AuthSessionError.INVALID_ACCESS_TOKEN)
+            user = User.objects.get(id=user_id)
+            return user
+        except User.DoesNotExist:
+            raise APIError(UserAccountError.USER_NOT_EXIST)
+
     def authenticate(self, request):
         # 1. Extract access token from cookie
         access_token = request.COOKIES.get("access_token")
@@ -21,15 +31,12 @@ class AccessTokenAuthentication(JWTAuthentication):
         # 2. Validate JWT token
         try:
             validated_token = self.get_validated_token(access_token)
-        except:
+        except (TokenError, InvalidToken):
             raise APIError(AuthSessionError.INVALID_ACCESS_TOKEN)
 
         # 3. Get user from token
-        try:
-            user: User = self.get_user(validated_token)
-            user.validate_account_status()
-        except:
-            raise APIError(UserAccountError.USER_NOT_EXIST)
+        user: User = self.get_user(validated_token)
+        user.validate_account_status()
 
         # 4. Validate active session
         session_id = validated_token.get("key_2")
@@ -42,9 +49,9 @@ class AccessTokenAuthentication(JWTAuthentication):
                 user=user,
             )
         except Session.DoesNotExist:
-            raise APIError(AuthSessionError.SESSION_INACTIVE)
+            raise APIError(AuthSessionError.SESSION_EXPIRE)
 
-        return (user, validated_token)
+        return (user, access_token)
 
 
 class RefreshTokenAuthentication(JWTAuthentication):
@@ -52,6 +59,16 @@ class RefreshTokenAuthentication(JWTAuthentication):
     Authenticate using refresh token from cookies.
     Used exclusively for token refresh endpoint.
     """
+
+    def get_user(self, validated_token):
+        try:
+            user_id = validated_token.get("key_1")
+            if not user_id:
+                raise APIError(AuthSessionError.INVALID_ACCESS_TOKEN)
+            user = User.objects.get(id=user_id)
+            return user
+        except User.DoesNotExist:
+            raise APIError(UserAccountError.USER_NOT_EXIST)
 
     def authenticate(self, request):
         # 1. Extract refresh token from cookie
@@ -65,12 +82,9 @@ class RefreshTokenAuthentication(JWTAuthentication):
         except TokenError as e:
             raise APIError(AuthSessionError.SESSION_EXPIRE)
 
-        # 3. Get user from refresh token
-        try:
-            user: User = User.objects.get(id=refresh["key_1"])
-            user.validate_account_status()
-        except User.DoesNotExist:
-            raise APIError(UserAccountError.USER_NOT_EXIST)
+        # 3. Get user from token
+        user: User = self.get_user(refresh)
+        user.validate_account_status()
 
         # 4. Validate active session
         session_id = refresh.get("key_2")
@@ -83,7 +97,7 @@ class RefreshTokenAuthentication(JWTAuthentication):
                 user=user,
             )
         except Session.DoesNotExist:
-            raise APIError(AuthSessionError.SESSION_INACTIVE)
+            raise APIError(AuthSessionError.SESSION_EXPIRE)
 
         # 5. update session and user fildes
         # only update when new access token is requested
@@ -91,5 +105,5 @@ class RefreshTokenAuthentication(JWTAuthentication):
         user.update_last_login_at()
 
         # 6. Return user with new access token
-        access_token = refresh.access_token
+        access_token = str(refresh.access_token)
         return (user, access_token)

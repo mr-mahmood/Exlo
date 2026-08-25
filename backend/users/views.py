@@ -13,7 +13,7 @@ from authentication.otp_service import generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
 from authentication.utils import make_cookie
 from authentication.throttles import OTPPhoneThrottle, OTPIPThrottle
-from core.errors import APIError, AuthOTPError, SignUpError
+from core.errors import APIError, AuthOTPError, SignUpError, UserAccountError
 from users.validators import validate_phone
 from typing import cast
 
@@ -51,12 +51,15 @@ class UserSignupAPIView(APIView):
 
                 # Create referral if provided
                 if referral_code:
-                    referrer = User.objects.get(referral_code=referral_code)
-                    Referral.objects.create(
-                        referrer=referrer,
-                        referred_user=user,
-                        referred_at=timezone.now(),
-                    )
+                    if referral_code != user.referral_code:
+                        referrer = User.objects.get(referral_code=referral_code)
+                        Referral.objects.create(
+                            referrer=referrer,
+                            referred_user=user,
+                            referred_at=timezone.now(),
+                        )
+                    else:
+                        raise APIError(SignUpError.REFERRAL_CODE_NOT_VALID)
 
                 # Create session and tokens
                 session = Session.create_session(user, request)
@@ -87,7 +90,6 @@ class UserSignupAPIView(APIView):
                 return response
 
         except IntegrityError:
-            cache.delete(verified_key)  # Clean up on error
             raise APIError(SignUpError.UNEXPECTED_ERROR)
 
 
@@ -115,7 +117,7 @@ class PhoneChangeOldRequestAPIView(APIView):
         if result:
             return Response(status=status.HTTP_200_OK)
         else:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+            raise APIError(AuthOTPError.OLD_PHONE_OTP_FAILED)
 
 
 class PhoneChangeOldVerifyAPIView(APIView):
@@ -132,13 +134,15 @@ class PhoneChangeOldVerifyAPIView(APIView):
         cache_key = f"phone_change_step_{user.id}"
         state = cache.get(cache_key)
 
-        if not state or state.get("step") != "old_otp_sent":
-            raise APIError(AuthOTPError.OTP_INVALID)
+        if not state:
+            raise APIError(AuthOTPError.OTP_NOT_FOUND)
+
+        if state.get("step") != "old_otp_sent":
+            raise APIError(AuthOTPError.INVALID_STEP)
 
         # Verify OTP
         verify_otp(user.phone_number, otp)
 
-        # no error raise by verify_otp so otp code is correct
         # Update state: step 2
         cache.set(
             cache_key,
@@ -168,8 +172,14 @@ class PhoneChangeNewRequestAPIView(APIView):
         cache_key = f"phone_change_step_{user.id}"
         state = cache.get(cache_key)
 
-        if not state or state.get("step") != "old_verified":
-            raise APIError(AuthOTPError.OTP_INVALID)
+        if not state:
+            raise APIError(AuthOTPError.OTP_NOT_FOUND)
+
+        if state.get("step") != "old_verified":
+            raise APIError(AuthOTPError.OLD_PHONE_VERIFICATION_REQUIRED)
+
+        if user.phone_number == new_phone:
+            raise APIError(UserAccountError.SAME_PHONE_AS_CURRENT)
 
         validate_phone(new_phone, user)
 
@@ -190,7 +200,7 @@ class PhoneChangeNewRequestAPIView(APIView):
         if result:
             return Response(status=status.HTTP_200_OK)
         else:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
+            raise APIError(AuthOTPError.NEW_PHONE_OTP_FAILED)
 
 
 class PhoneChangeNewVerifyAPIView(APIView):
@@ -207,18 +217,20 @@ class PhoneChangeNewVerifyAPIView(APIView):
         cache_key = f"phone_change_step_{user.id}"
         state = cache.get(cache_key)
 
-        if not state or state.get("step") != "new_otp_sent":
-            raise APIError(AuthOTPError.OTP_INVALID)
+        if not state:
+            raise APIError(AuthOTPError.OTP_NOT_FOUND)
+
+        if state.get("step") != "new_otp_sent":
+            raise APIError(AuthOTPError.INVALID_STEP)
 
         new_phone = state.get("new_phone")
 
         if not new_phone:
-            raise APIError(AuthOTPError.OTP_INVALID)
+            raise APIError(AuthOTPError.NEW_PHONE_NOT_FOUND)
 
         # Verify OTP from new phone
         verify_otp(new_phone, otp)
 
-        # no error raise by verify_otp so otp code is correct
         # Update user's phone number
         user.phone_number = new_phone
         user.save(update_fields=["phone_number", "updated_at"])

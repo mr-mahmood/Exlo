@@ -1,8 +1,6 @@
-from django.db import IntegrityError, transaction
-from django.utils import timezone
+from django.db import IntegrityError
 from rest_framework import serializers
 from users.models import User
-from user_referrals.models import Referral
 from core.errors import APIError, SignUpError
 from users.validators import (
     validate_name,
@@ -14,10 +12,11 @@ from users.validators import (
 class UserSignupSerializer(serializers.ModelSerializer):
 
     # Core fields
-    phone_number = serializers.CharField()
-    first_name = serializers.CharField()
-    last_name = serializers.CharField()
-    gender = serializers.ChoiceField(choices=User.Gender.choices)
+    phone_number = serializers.CharField(required=True)
+    first_name = serializers.CharField(required=True)
+    last_name = serializers.CharField(required=True)
+    gender = serializers.ChoiceField(choices=User.Gender.choices, required=True)
+    date_of_birth = serializers.DateField(required=True)
     referral = serializers.CharField(
         required=False,
         write_only=True,
@@ -31,8 +30,16 @@ class UserSignupSerializer(serializers.ModelSerializer):
             "phone_number",
             "first_name",
             "last_name",
+            "date_of_birth",
             "gender",
-            "referral",
+            "referral",  # referral code of users that reffer this user
+            "profile_picture",
+            "referral_code",  # user its own referral code
+        ]
+
+        read_only_fields = [
+            "profile_picture",
+            "referral_code",
         ]
 
     def validate_phone_number(self, value):
@@ -44,14 +51,18 @@ class UserSignupSerializer(serializers.ModelSerializer):
     def validate_last_name(self, value):
         return validate_name(value)
 
-    def validate_referral(self, value):
-        if not value:
-            return value
+    def validate_date_of_birth(self, value):
+        return validate_date_of_birth(value)
 
+    def validate_referral(self, value):
+        #no referral)
+        if not value or value.strip() == "":
+            return None
+        
         # If referral code is provided, validate it exists
         if not User.objects.filter(referral_code=value).exists():
             raise APIError(SignUpError.REFERRAL_CODE_NOT_VALID)
-
+        
         return value
 
     def create(self, validated_data):
@@ -67,22 +78,28 @@ class UserSignupSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+
+    # Core fields
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    date_of_birth = serializers.DateField()
+    gender = serializers.ChoiceField(choices=User.Gender.choices)
+    profile_picture = serializers.ImageField()
+
     class Meta:
         model = User
 
         fields = [
-            "id",
             "phone_number",
             "first_name",
             "last_name",
-            "profile_picture_url",
             "date_of_birth",
             "gender",
             "referral_code",
+            "profile_picture",
         ]
 
         read_only_fields = [
-            "id",
             "phone_number",
             "referral_code",
         ]

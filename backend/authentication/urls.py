@@ -1,11 +1,11 @@
 from django.urls import path
-from authentication.views import RefreshAPIView, LogoutAPIView, RequestOTPApiView, VerifyOTPApiView
+from authentication.views import RefreshAPIView, LogoutAPIView, LoginRequestApiView, LoginVerifyApiView
 
 app_name = 'authentication'
 
 urlpatterns = [
-    path('request-otp/', RequestOTPApiView.as_view(), name='request_otp'),
-    path('verify-otp/', VerifyOTPApiView.as_view(), name='verify_otp'),
+    path('login/request/', LoginRequestApiView.as_view(), name='login-request'),
+    path('login/verify/', LoginVerifyApiView.as_view(), name='login-verify'),
     path("logout/", LogoutAPIView.as_view(), name="logout"),
     path("refresh/", RefreshAPIView.as_view(), name="refresh"),
 ]

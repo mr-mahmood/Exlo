@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from users.validators import validate_phone
 from core.errors import APIError, AuthSessionError, AuthOTPError, UserAccountError
 from users.models import User
 from users.serializers import UserProfileSerializer
@@ -17,13 +18,14 @@ from django.core.cache import cache
 from .throttles import OTPPhoneThrottle, OTPIPThrottle
 
 
-class RequestOTPApiView(APIView):
+class LoginRequestApiView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
     throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
+        phone_number = validate_phone(phone_number, skip_duplicate_check=True)
 
         if not phone_number:
             raise APIError(AuthOTPError.PHONE_REQUIRED)
@@ -37,7 +39,7 @@ class RequestOTPApiView(APIView):
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
 
-class VerifyOTPApiView(APIView):
+class LoginVerifyApiView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
     serializer_class = UserProfileSerializer

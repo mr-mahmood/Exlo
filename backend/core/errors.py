@@ -50,12 +50,6 @@ class AuthSessionError(APIError):
         status.HTTP_404_NOT_FOUND,
     )
 
-    SESSION_INACTIVE = (
-        "SES-006",
-        "Session is inactive. Please log in again",
-        status.HTTP_400_BAD_REQUEST,
-    )
-
     NO_REFRESH_TOKEN = (
         "SES-007",
         "No refresh token found in request",
@@ -85,6 +79,36 @@ class AuthOTPError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
+    INVALID_STEP = (
+        "OTP-004",
+        "Invalid flow step. Please start the phone change process again.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    OLD_PHONE_VERIFICATION_REQUIRED = (
+        "OTP-005",
+        "Current phone verification is required before changing to a new number.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    NEW_PHONE_NOT_FOUND = (
+        "OTP-006",
+        "New phone number not found in session. Please request OTP again.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    OLD_PHONE_OTP_FAILED = (
+        "OTP-007",
+        "Failed to send OTP to current phone number.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    NEW_PHONE_OTP_FAILED = (
+        "OTP-008",
+        "Failed to send OTP to new phone number.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
 
 # ============================================================================
 # Validation Errors
@@ -98,7 +122,7 @@ class UserValidationError(APIError):
 
     INVALID_NAME = (
         "VAL-002",
-        "First and last name must be at least 3 characters",
+        "First and last name must be at least 3 characters and lower than 255",
         status.HTTP_400_BAD_REQUEST,
     )
 

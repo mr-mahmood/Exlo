@@ -60,6 +60,11 @@ class UserManager(BaseUserManager):
             return user
 
 
+def user_profile_picture_path(instance, filename):
+    ext = filename.split(".")[-1] if "." in filename else "jpg"
+    return f"profile_pics/{uuid.uuid4().hex}.{ext}"
+
+
 class User(AbstractUser):
     email = None
     username = None
@@ -88,11 +93,20 @@ class User(AbstractUser):
     )
 
     # Personal Information
-    first_name = models.CharField(max_length=255)
-    last_name = models.CharField(max_length=255)
+    first_name = models.CharField(
+        max_length=255,
+        null=False,
+        blank=False,
+    )
 
-    profile_picture_url = models.ImageField(
-        upload_to="profile_pics/",
+    last_name = models.CharField(
+        max_length=255,
+        null=False,
+        blank=False,
+    )
+
+    profile_picture = models.ImageField(
+        upload_to=user_profile_picture_path,
         null=True,
         blank=True,
         default="profile_pics/default_profile_image.png",
@@ -118,6 +132,7 @@ class User(AbstractUser):
     referral_code = models.CharField(
         max_length=6,
         unique=True,
+        editable=False,
     )
 
     # Status Flags
@@ -188,13 +203,17 @@ class User(AbstractUser):
         """
         Validate user account status.
         Raises appropriate errors if account is not in good standing.
+
+        Priority:
+        1. Blocked status (most severe)
+        2. Inactive status
+        3. Active and not blocked - all good
         """
+        if self.is_blocked:
+            raise APIError(UserAccountError.USER_ACCOUNT_BLOCKED)
 
         if not self.is_active:
             raise APIError(UserAccountError.USER_ACCOUNT_INACTIVE)
-
-        if self.is_blocked:
-            raise APIError(UserAccountError.USER_ACCOUNT_BLOCKED)
 
         return self
 

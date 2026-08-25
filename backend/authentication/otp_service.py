@@ -3,7 +3,6 @@ import hashlib
 import hmac
 from django.conf import settings
 from django.core.cache import cache
-from core.sms_task import send_sms_verification_task
 from core.errors import APIError, AuthOTPError
 
 OTP_CACHE_PREFIX = "otp"
@@ -27,6 +26,8 @@ def generate_otp(phone_number: str):
 
     # Send OTP via SMS
     if not settings.DEBUG:
+        from core.sms_task import send_sms_verification_task
+
         send_sms_verification_task.delay(phone_number, otp_code)
 
     # Delete plain OTP text from memory
@@ -51,6 +52,7 @@ def verify_otp(phone_number: str, otp_code: str):
     if hmac.compare_digest(hashed_input, stored_hash):
         # Success
         cache.delete(cache_key)
+        return True
     else:
         raise APIError(AuthOTPError.OTP_INVALID)
 

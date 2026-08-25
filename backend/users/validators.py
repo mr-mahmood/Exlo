@@ -4,29 +4,38 @@ from core.errors import APIError, UserProfileError, SignUpError, UserValidationE
 from users.models import User
 
 
-def validate_phone(value, instance=None):
-    if not value:
-        return value
-
-    if not re.fullmatch(r"09\d{9}", value):
+def validate_phone(value, instance=None, skip_duplicate_check=False):
+    if value is None:
         raise APIError(UserValidationError.INVALID_PHONE_NUMBER)
 
-    qs = User.objects.filter(phone_number=value)
+    stripped_value = value.strip()
 
-    if instance is not None:
-        qs = qs.exclude(pk=instance.pk)
+    # Validate format
+    if not stripped_value or not re.fullmatch(r"09\d{9}", stripped_value):
+        raise APIError(UserValidationError.INVALID_PHONE_NUMBER)
 
-    if User.objects.filter(phone_number=value).exists():
-        raise APIError(SignUpError.PHONE_NUMBER_REUSE)
+    # Check for duplicates
+    if not skip_duplicate_check:
+        qs = User.objects.filter(phone_number=stripped_value)
+        if instance is not None:
+            qs = qs.exclude(pk=instance.pk)
+        if qs.exists():
+            raise APIError(SignUpError.PHONE_NUMBER_REUSE)
 
-    return value
-
+    return stripped_value
 
 def validate_name(value):
-    if not value or len(value.strip()) < 3:
+    if not value or not value.strip():
         raise APIError(UserValidationError.INVALID_NAME)
 
-    return value
+    # Normalize: strip leading/trailing spaces and collapse internal spaces
+    normalized_value = " ".join(value.strip().split())
+
+    # Check length after normalization
+    if len(normalized_value) < 3 or len(normalized_value) > 255:
+        raise APIError(UserValidationError.INVALID_NAME)
+
+    return normalized_value
 
 
 def validate_date_of_birth(value):
