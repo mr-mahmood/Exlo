@@ -255,18 +255,15 @@ class UserProfilePIView(APIView):
     serializer_class = UserProfileSerializer
 
     def get(self, request):
-        """Get current user's profile"""
         user: User = request.user
         serializer = self.serializer_class(user, context={"request": request})
+        
         return Response(
-            {
-                "user": serializer.data,
-            },
+            {"user": serializer.data},
             status=status.HTTP_200_OK,
         )
 
     def put(self, request):
-        """Update current user's profile"""
         user: User = request.user
         serializer = self.serializer_class(
             instance=user,

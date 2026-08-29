@@ -63,6 +63,10 @@ class UserSessionPIViewTest(TestCase):
         self.assertIn("sessions", response.data)  # type: ignore
         self.assertEqual(len(response.data["sessions"]), 2)  # type: ignore
 
+        # Verify pagination fields
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
+
         # Verify session data contains expected fields
         session_data = response.data["sessions"][0]  # type: ignore
         expected_fields = ["session_id", "ip_address", "user_agent", "last_activity_at"]
@@ -276,6 +280,10 @@ class UserSessionPIViewTest(TestCase):
         self.assertIn("sessions", response.data)  # type: ignore
         self.assertIsInstance(response.data["sessions"], list)  # type: ignore
 
+        # Check pagination fields
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
+
         if len(response.data["sessions"]) > 0:  # type: ignore
             session = response.data["sessions"][0]  # type: ignore
             self.assertIsInstance(session["session_id"], str)
@@ -291,3 +299,139 @@ class UserSessionPIViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, None)  # Empty response # type: ignore
+
+    # ========== PAGINATION TESTS ==========
+
+    def test_pagination_default_page_size(self):
+        """Test that pagination uses default page size of 50"""
+        # Create 55 sessions to test pagination
+        for i in range(55):
+            Session.objects.create(
+                user=self.user,
+                session_id=uuid.uuid4(),
+                ip_address=f"192.168.1.{i}",
+                user_agent=f"Test Agent {i}",
+                last_activity_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["sessions"]), 50)  # type: ignore
+        self.assertIsNotNone(response.data["next"])  # type: ignore
+        self.assertIsNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_custom_page_size(self):
+        """Test that pagination respects custom page_size parameter"""
+        # Create 30 sessions
+        for i in range(30):
+            Session.objects.create(
+                user=self.user,
+                session_id=uuid.uuid4(),
+                ip_address=f"192.168.1.{i}",
+                user_agent=f"Test Agent {i}",
+                last_activity_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["sessions"]), 10)  # type: ignore
+        self.assertIsNotNone(response.data["next"])  # type: ignore
+        self.assertIsNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_max_page_size(self):
+        """Test that pagination respects max_page_size limit of 100"""
+        # Create 150 sessions
+        for i in range(150):
+            Session.objects.create(
+                user=self.user,
+                session_id=uuid.uuid4(),
+                ip_address=f"192.168.1.{i}",
+                user_agent=f"Test Agent {i}",
+                last_activity_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page_size": 200})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should return max_page_size (100) instead of requested 200
+        self.assertEqual(len(response.data["sessions"]), 100)  # type: ignore
+
+    def test_pagination_second_page(self):
+        """Test that pagination works for second page"""
+        # Create 55 sessions
+        for i in range(55):
+            Session.objects.create(
+                user=self.user,
+                session_id=uuid.uuid4(),
+                ip_address=f"192.168.1.{i}",
+                user_agent=f"Test Agent {i}",
+                last_activity_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page": 2, "page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["sessions"]), 10)  # type: ignore
+        # Should have next and previous links
+        self.assertIsNotNone(response.data["next"])  # type: ignore
+        self.assertIsNotNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_invalid_page(self):
+        """Test that pagination handles invalid page number gracefully"""
+        # Create 10 sessions
+        for i in range(10):
+            Session.objects.create(
+                user=self.user,
+                session_id=uuid.uuid4(),
+                ip_address=f"192.168.1.{i}",
+                user_agent=f"Test Agent {i}",
+                last_activity_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page": 999})
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_pagination_with_sessions_less_than_page_size(self):
+        """Test pagination when total sessions are less than page size"""
+        # Create only 5 sessions
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["sessions"]), 2)  # type: ignore (from setUp)
+        self.assertIsNone(response.data["next"])  # type: ignore
+        self.assertIsNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_response_structure(self):
+        """Test that pagination response has all required fields"""
+        # Create 25 sessions
+        for i in range(25):
+            Session.objects.create(
+                user=self.user,
+                session_id=uuid.uuid4(),
+                ip_address=f"192.168.1.{i}",
+                user_agent=f"Test Agent {i}",
+                last_activity_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify response structure
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("sessions", response.data)  # type: ignore
+
+        # Verify sessions is a list
+        self.assertIsInstance(response.data["sessions"], list)  # type: ignore
+        self.assertEqual(len(response.data["sessions"]), 10)  # type: ignore
+
+        # Verify each session has required fields
+        for session in response.data["sessions"]:  # type: ignore
+            self.assertIn("session_id", session)
+            self.assertIn("ip_address", session)
+            self.assertIn("user_agent", session)
+            self.assertIn("last_activity_at", session)

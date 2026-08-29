@@ -266,3 +266,123 @@ class ReferralError(APIError):
         "you cant referral your self",
         status.HTTP_400_BAD_REQUEST,
     )
+
+
+# ============================================================================
+# MEASUREMENTS
+# ============================================================================
+class MeasurementsError(APIError):
+
+    NO_EXISTING_MEASUREMENTS = (
+        "MEAS_001",
+        "No measurement found for User",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    MEASUREMENT_NOT_FOUND = (
+        "MEAS_002",
+        "requested measurement not found for User",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    INVALID_HEIGHT = (
+        "MEAS_003",
+        "Height must be between 50 and 300 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_WEIGHT = (
+        "MEAS_004",
+        "Weight must be between 20 and 500 kg",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_CHEST = (
+        "MEAS_008",
+        "Chest circumference must be between 30 and 200 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_SHOULDERS = (
+        "MEAS_009",
+        "Shoulders circumference must be between 30 and 200 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_BICEPS = (
+        "MEAS_0010",
+        "Biceps circumference must be between 10 and 80 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_FOREARMS = (
+        "MEAS_011",
+        "Forearms circumference must be between 10 and 60 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_WAIST = (
+        "MEAS_012",
+        "Waist circumference must be between 40 and 200 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_ABDOMEN = (
+        "MEAS_013",
+        "Abdomen circumference must be between 40 and 200 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_HIPS = (
+        "MEAS_014",
+        "Hips circumference must be between 40 and 200 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_QUADRICEPS = (
+        "MEAS_015",
+        "Quadriceps circumference must be between 20 and 100 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_CALVES = (
+        "MEAS_016",
+        "Calves circumference must be between 15 and 70 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_GLUTES = (
+        "MEAS_017",
+        "Glutes circumference must be between 40 and 200 cm",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_MUSCLE_MASS_EXCEEDS_WEIGHT = (
+        "MEAS_018",
+        "Muscle mass cannot exceed total body weight",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_BODY_FAT_FOR_WEIGHT = (
+        "MEAS_019",
+        "Body fat percentage seems too low for this weight",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_BICEPS_SYMMETRY = (
+        "MEAS_020",
+        "Left and right biceps difference seems too large (max 5cm difference allowed)",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_MEASUREMENT_DATE = (
+        "MEAS_021",
+        "Measurement date cannot be in the future",
+        status.HTTP_400_BAD_REQUEST,
+    )
+    
+    MISSING_MEASUREMENT_DATA = (
+        "MEAS_022",
+        "At least one measurement field is required",
+        status.HTTP_400_BAD_REQUEST,
+    )

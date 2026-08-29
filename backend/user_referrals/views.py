@@ -6,10 +6,12 @@ from core.errors import ReferralError, APIError
 from users.models import User
 from .serializers import UserReferralSerializer
 from .models import Referral
+from core.pagination import CustomPagination
 
 
 class UserReferralPIView(APIView):
     serializer_class = UserReferralSerializer
+    pagination_class = CustomPagination
 
     def get(self, request):
         """Get all referrals made by the user with nested user details"""
@@ -21,18 +23,17 @@ class UserReferralPIView(APIView):
             "referred_user"
         )
 
+        #  Referral.DoesNotExist only work for get not filter
         if not referrals.exists():
             raise APIError(ReferralError.NO_EXISTING_REFERRAL)
 
+        paginator = self.pagination_class()
+        result_page = paginator.paginate_queryset(referrals, request, view=self)
+
         serializer = self.serializer_class(
-            referrals,
+            result_page,
             many=True,
             context={"request": request},
         )
 
-        return Response(
-            {
-                "referrals": serializer.data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return paginator.get_paginated_response(serializer.data, "referrals")

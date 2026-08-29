@@ -7,31 +7,32 @@ from users.models import User
 from .serializers import UserSessionSerializer
 from .models import Session
 from django.core.exceptions import ValidationError
+from core.pagination import CustomPagination
 
 
 class UserSessionPIView(APIView):
     serializer_class = UserSessionSerializer
+    pagination_class = CustomPagination
 
     def get(self, request):
-        """Get current user's sessions"""
-
         user: User = request.user
+
         sessions = Session.objects.filter(user=user)
+
+        #  Session.DoesNotExist only work for get not filter
         if not sessions.exists():
             raise APIError(SessionError.NO_EXISTING_SESSION)
 
+        paginator = self.pagination_class()
+        result_page = paginator.paginate_queryset(sessions, request, view=self)
+
         serializer = self.serializer_class(
-            sessions,
+            result_page,
             many=True,
             context={"request": request},
         )
 
-        return Response(
-            {
-                "sessions": serializer.data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return paginator.get_paginated_response(serializer.data, "sessions")
 
     def delete(self, request):
         """Delete User requested session"""

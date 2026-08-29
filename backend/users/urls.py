@@ -21,32 +21,24 @@ urlpatterns = [
         UserProfilePIView.as_view(),
         name="dashboard",
     ),
-    # Phone change flow (4 steps)
     path(
-        "phone-change/",
-        include(
-            [
-                path(
-                    "old/request/",
-                    PhoneChangeOldRequestAPIView.as_view(),
-                    name="phone-change-old-request",
-                ),
-                path(
-                    "old/verify/",
-                    PhoneChangeOldVerifyAPIView.as_view(),
-                    name="phone-change-old-verify",
-                ),
-                path(
-                    "new/request/",
-                    PhoneChangeNewRequestAPIView.as_view(),
-                    name="phone-change-new-request",
-                ),
-                path(
-                    "new/verify/",
-                    PhoneChangeNewVerifyAPIView.as_view(),
-                    name="phone-change-new-verify",
-                ),
-            ]
-        ),
+        "phone-change/old/request/",
+        PhoneChangeOldRequestAPIView.as_view(),
+        name="phone-change-old-request",
+    ),
+    path(
+        "phone-change/old/verify/",
+        PhoneChangeOldVerifyAPIView.as_view(),
+        name="phone-change-old-verify",
+    ),
+    path(
+        "phone-change/new/request/",
+        PhoneChangeNewRequestAPIView.as_view(),
+        name="phone-change-new-request",
+    ),
+    path(
+        "phone-change/new/verify/",
+        PhoneChangeNewVerifyAPIView.as_view(),
+        name="phone-change-new-verify",
     ),
 ]

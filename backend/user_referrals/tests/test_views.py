@@ -90,6 +90,10 @@ class UserReferralPIViewTest(TestCase):
         self.assertIn("referrals", response.data)  # type: ignore
         self.assertEqual(len(response.data["referrals"]), 2)  # type: ignore
 
+        # Verify pagination fields
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
+
         # Verify referral data contains expected fields
         referral_data = response.data["referrals"][0]  # type: ignore
         self.assertIn("referred_user", referral_data)
@@ -169,8 +173,10 @@ class UserReferralPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Count the number of queries
+        # With pagination, we expect: 1 for count + 1 for data = 2-3 queries
         query_count = len(queries)
-        self.assertLessEqual(query_count, 2, f"Expected 1-2 queries, got {query_count}")
+        # The pagination adds a count query, so we allow up to 3 queries
+        self.assertLessEqual(query_count, 3, f"Expected 2-3 queries, got {query_count}")
 
     # ========== RESPONSE FORMAT TESTS ==========
 
@@ -181,6 +187,10 @@ class UserReferralPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("referrals", response.data)  # type: ignore
         self.assertIsInstance(response.data["referrals"], list)  # type: ignore
+
+        # Check pagination fields
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
 
         if len(response.data["referrals"]) > 0:  # type: ignore
             referral = response.data["referrals"][0]  # type: ignore
@@ -299,7 +309,7 @@ class UserReferralPIViewTest(TestCase):
     # ========== PERFORMANCE TESTS ==========
 
     def test_get_referrals_query_count(self):
-        """Test that only 1-2 queries are executed (no N+1)"""
+        """Test that only 2-3 queries are executed (no N+1)"""
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
@@ -323,12 +333,13 @@ class UserReferralPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["referrals"]), 22)  # type: ignore
 
-        # Should be 1-2 queries (not N+1)
+        # With pagination, we expect: 1 for count + 1 for data = 2-3 queries
+        # The third query might be for pagination or session validation
         query_count = len(queries)
         self.assertLessEqual(
             query_count,
-            2,
-            f"Expected 1-2 queries, got {query_count}. N+1 problem detected!",
+            3,
+            f"Expected 2-3 queries, got {query_count}. N+1 problem detected!",
         )
 
     # ========== DATA CONSISTENCY TESTS ==========
@@ -380,6 +391,169 @@ class UserReferralPIViewTest(TestCase):
         expected_str = f"{new_user} referred by {self.user}"
         self.assertEqual(str(referral), expected_str)
 
+    # ========== PAGINATION TESTS ==========
+
+    def test_pagination_default_page_size(self):
+        """Test that pagination uses default page size of 50"""
+        # Create 55 referrals to test pagination
+        for i in range(55):
+            referred_user = User.objects.create_user(
+                phone_number=f"099999999{i:02d}",
+                first_name=f"User{i}",
+                last_name="Test",
+                gender=User.Gender.MALE,
+            )
+            Referral.objects.create(
+                referrer=self.user,
+                referred_user=referred_user,
+                referred_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["referrals"]), 50)  # type: ignore
+        self.assertIsNotNone(response.data["next"])  # type: ignore
+        self.assertIsNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_custom_page_size(self):
+        """Test that pagination respects custom page_size parameter"""
+        # Create 30 referrals
+        for i in range(30):
+            referred_user = User.objects.create_user(
+                phone_number=f"099999999{i:02d}",
+                first_name=f"User{i}",
+                last_name="Test",
+                gender=User.Gender.MALE,
+            )
+            Referral.objects.create(
+                referrer=self.user,
+                referred_user=referred_user,
+                referred_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["referrals"]), 10)  # type: ignore
+        self.assertIsNotNone(response.data["next"])  # type: ignore
+        self.assertIsNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_max_page_size(self):
+        """Test that pagination respects max_page_size limit of 100"""
+        # Create 150 referrals
+        for i in range(150):
+            referred_user = User.objects.create_user(
+                phone_number=f"099999999{i:02d}",
+                first_name=f"User{i}",
+                last_name="Test",
+                gender=User.Gender.MALE,
+            )
+            Referral.objects.create(
+                referrer=self.user,
+                referred_user=referred_user,
+                referred_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page_size": 200})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should return max_page_size (100) instead of requested 200
+        self.assertEqual(len(response.data["referrals"]), 100)  # type: ignore
+
+    def test_pagination_second_page(self):
+        """Test that pagination works for second page"""
+        # Create 55 referrals
+        for i in range(55):
+            referred_user = User.objects.create_user(
+                phone_number=f"099999999{i:02d}",
+                first_name=f"User{i}",
+                last_name="Test",
+                gender=User.Gender.MALE,
+            )
+            Referral.objects.create(
+                referrer=self.user,
+                referred_user=referred_user,
+                referred_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page": 2, "page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["referrals"]), 10)  # type: ignore
+        # Should have next and previous links
+        self.assertIsNotNone(response.data["next"])  # type: ignore
+        self.assertIsNotNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_invalid_page(self):
+        """Test that pagination handles invalid page number gracefully"""
+        # Create 10 referrals
+        for i in range(10):
+            referred_user = User.objects.create_user(
+                phone_number=f"099999999{i:02d}",
+                first_name=f"User{i}",
+                last_name="Test",
+                gender=User.Gender.MALE,
+            )
+            Referral.objects.create(
+                referrer=self.user,
+                referred_user=referred_user,
+                referred_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page": 999})
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_pagination_with_referrals_less_than_page_size(self):
+        """Test pagination when total referrals are less than page size"""
+        # Only 2 referrals from setUp
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["referrals"]), 2)  # type: ignore
+        self.assertIsNone(response.data["next"])  # type: ignore
+        self.assertIsNone(response.data["previous"])  # type: ignore
+
+    def test_pagination_response_structure(self):
+        """Test that pagination response has all required fields"""
+        # Create 25 referrals
+        for i in range(25):
+            referred_user = User.objects.create_user(
+                phone_number=f"099999999{i:02d}",
+                first_name=f"User{i}",
+                last_name="Test",
+                gender=User.Gender.MALE,
+            )
+            Referral.objects.create(
+                referrer=self.user,
+                referred_user=referred_user,
+                referred_at=timezone.now(),
+            )
+
+        response = self.client.get(self.url, {"page_size": 10})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify response structure
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("referrals", response.data)  # type: ignore
+
+        # Verify referrals is a list
+        self.assertIsInstance(response.data["referrals"], list)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 10)  # type: ignore
+
+        # Verify each referral has required fields
+        for referral in response.data["referrals"]:  # type: ignore
+            self.assertIn("referred_user", referral)
+            self.assertIn("referred_at", referral)
+            # Verify nested user has required fields
+            referred_user = referral["referred_user"]
+            self.assertIn("phone_number", referred_user)
+            self.assertIn("first_name", referred_user)
+            self.assertIn("last_name", referred_user)
+
 
 class UserReferralPIViewIntegrationTest(TestCase):
     """Integration tests for UserReferralPIView with actual URL routing"""
@@ -416,12 +590,13 @@ class UserReferralPIViewIntegrationTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Check the wrapped response structure
-        self.assertIn("data", response.json())
-        self.assertIn("referrals", response.json()["data"])
-        self.assertEqual(len(response.json()["data"]["referrals"]), 1)
+        # Check the paginated response structure
+        self.assertIn("next", response.data)  # type: ignore
+        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("referrals", response.data)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 1)  # type: ignore
 
-        referral = response.json()["data"]["referrals"][0]
+        referral = response.data["referrals"][0]  # type: ignore
         self.assertEqual(referral["referred_user"]["phone_number"], "09111111111")
         self.assertEqual(referral["referred_user"]["first_name"], "Alice")
         self.assertEqual(referral["referred_user"]["last_name"], "Johnson")
