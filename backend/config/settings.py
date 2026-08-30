@@ -203,16 +203,32 @@ REST_FRAMEWORK = {
 # ============================================================================
 # JWT Settings
 # ============================================================================
-SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=int(os.getenv("JWT_ACCESS_HOURS", 1))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", 15))),
-    "ROTATE_REFRESH_TOKENS": True,
-    "BLACKLIST_AFTER_ROTATION": True,
-    "AUTH_HEADER_TYPES": ("Bearer",),
-    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-    "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "key_1",
-}
+if DEBUG:
+    SIMPLE_JWT = {
+        "ACCESS_TOKEN_LIFETIME": timedelta(days=5),
+        "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+        "ROTATE_REFRESH_TOKENS": True,
+        "BLACKLIST_AFTER_ROTATION": True,
+        "AUTH_HEADER_TYPES": ("Bearer",),
+        "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+        "USER_ID_FIELD": "id",
+        "USER_ID_CLAIM": "key_1",
+    }
+else:
+    SIMPLE_JWT = {
+        "ACCESS_TOKEN_LIFETIME": timedelta(
+            hours=int(os.getenv("JWT_ACCESS_HOURS", 1)),
+        ),
+        "REFRESH_TOKEN_LIFETIME": timedelta(
+            days=int(os.getenv("JWT_REFRESH_DAYS", 15)),
+        ),
+        "ROTATE_REFRESH_TOKENS": True,
+        "BLACKLIST_AFTER_ROTATION": True,
+        "AUTH_HEADER_TYPES": ("Bearer",),
+        "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+        "USER_ID_FIELD": "id",
+        "USER_ID_CLAIM": "key_1",
+    }
 
 # ============================================================================
 # Channels
@@ -339,7 +355,7 @@ else:
     USE_X_FORWARDED_HOST = True
     USE_X_FORWARDED_PORT = True
 
-    # Production settings (domain.com)
+    # Production settings (example domain.com)
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SECURE = True  # HTTPS only
     SESSION_COOKIE_SAMESITE = "Lax"
@@ -372,7 +388,7 @@ else:
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
 
-# Allowed image types (for your app)
+# Allowed image types
 ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 

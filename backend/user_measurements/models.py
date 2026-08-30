@@ -157,3 +157,59 @@ class Measurements(models.Model):
             height_m = self.height_cm / 100
             return round(self.weight_kg / (height_m**2), 1)
         return None
+
+
+def user_profile_picture_path(instance, filename):
+    return f"measurement_photos/{uuid.uuid4().hex}.webp"
+
+
+class MeasurementPhotos(models.Model):
+    class PhotoType(models.TextChoices):
+        FRONT = "FRONT", "Front"
+        BACK = "BACK", "Back"
+        SIDE = "SIDE", "Side"
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+
+    measurements = models.ForeignKey(
+        to=Measurements,
+        on_delete=models.CASCADE,
+        related_name="photos",
+    )
+
+    type = models.CharField(
+        max_length=20,
+        choices=PhotoType.choices,
+    )
+
+    photo = models.ImageField(
+        upload_to=user_profile_picture_path,
+        null=True,
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "user_measurement_photos"
+        ordering = ["-created_at"]
+
+        unique_together = [["measurements", "type"]]
+
+        indexes = [
+            models.Index(
+                fields=["measurements"],
+                name="measurement_photos_meas_idx",
+            ),
+            models.Index(
+                fields=["measurements", "created_at"],
+                name="measurement_photos_create_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.measurements.user.get_full_name()} photo - {self.created_at}"

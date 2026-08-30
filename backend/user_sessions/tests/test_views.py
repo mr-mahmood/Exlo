@@ -101,7 +101,7 @@ class UserSessionPIViewTest(TestCase):
         response = client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_get_sessions_blocked_user(self):
         """Test retrieving sessions for blocked user"""
@@ -204,7 +204,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_delete_session_blocked_user(self):
         """Test deleting session for blocked user"""

@@ -11,10 +11,7 @@ def create_tokens_for_user(user, session):
     refresh = RefreshToken.for_user(user)
     refresh["key_2"] = str(session.session_id)
 
-    return {
-        "access": str(refresh.access_token),
-        "refresh": str(refresh),
-    }
+    return str(refresh.access_token), str(refresh)
 
 
 def refresh_tokens(refresh_token_str, request):
@@ -27,7 +24,16 @@ def refresh_tokens(refresh_token_str, request):
         raise APIError(AuthenticationError.INVALID_REFRESH_TOKEN)
 
     # Get user
-    user: User = User.objects.get(id=old_refresh["key_1"])
+    user_id = old_refresh.get("key_1")
+
+    if not user_id:
+        raise APIError(AuthenticationError.INVALID_REFRESH_TOKEN)
+
+    try:
+        user: User = User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        raise APIError(UserAccountError.USER_NOT_EXIST)
+
     user.validate_account_status()
 
     # Blacklist old refresh token

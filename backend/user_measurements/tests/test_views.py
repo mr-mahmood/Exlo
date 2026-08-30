@@ -9,6 +9,11 @@ from decimal import Decimal
 from user_measurements.models import Measurements
 from core.errors import MeasurementsError
 from users.models import User
+from user_measurements.models import MeasurementPhotos
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
+import io
+from django.core.files.storage import default_storage
 
 
 class UserMeasurementsListViewTest(TestCase):
@@ -333,7 +338,7 @@ class UserMeasurementDetailViewTest(TestCase):
         )
 
         self.url = reverse(
-            "user_measurements:detail", kwargs={"pk": self.measurement.id}
+            "user_measurements:detail", kwargs={"measurement_id": self.measurement.id}
         )
 
     def test_get_measurement_authenticated(self):
@@ -378,7 +383,7 @@ class UserMeasurementDetailViewTest(TestCase):
         self.client.force_authenticate(user=self.user)
         non_existent_url = reverse(
             "user_measurements:detail",
-            kwargs={"pk": "00000000-0000-0000-0000-000000000000"},
+            kwargs={"measurement_id": "00000000-0000-0000-0000-000000000000"},
         )
         response = self.client.get(non_existent_url)
 
@@ -525,7 +530,7 @@ class UserMeasurementDetailViewTest(TestCase):
         self.client.force_authenticate(user=self.user)
         non_existent_url = reverse(
             "user_measurements:detail",
-            kwargs={"pk": "00000000-0000-0000-0000-000000000000"},
+            kwargs={"measurement_id": "00000000-0000-0000-0000-000000000000"},
         )
         response = self.client.delete(non_existent_url)
 
@@ -562,7 +567,9 @@ class UserMeasurementDetailViewTest(TestCase):
     def test_get_measurements_after_delete(self):
         """Test getting measurements after deletion"""
         measurement = Measurements.objects.create(user=self.user)
-        url = reverse("user_measurements:detail", kwargs={"pk": measurement.id})
+        url = reverse(
+            "user_measurements:detail", kwargs={"measurement_id": measurement.id}
+        )
 
         # Delete the measurement
         self.client.force_authenticate(user=self.user)
@@ -671,7 +678,9 @@ class UserMeasurementsViewIntegrationTest(TestCase):
         )
 
         # 3. Get single measurement
-        detail_url = reverse("user_measurements:detail", kwargs={"pk": measurement_id})
+        detail_url = reverse(
+            "user_measurements:detail", kwargs={"measurement_id": measurement_id}
+        )
         response = self.client.get(detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -729,7 +738,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
 
         # Current user should not be able to access other user's measurement
         other_url = reverse(
-            "user_measurements:detail", kwargs={"pk": other_measurement.id}
+            "user_measurements:detail", kwargs={"measurement_id": other_measurement.id}
         )
         response = self.client.get(other_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -762,7 +771,9 @@ class UserMeasurementsViewIntegrationTest(TestCase):
 
         # Get single measurement
         measurement_id = Measurements.objects.filter(user=self.user).first().id
-        detail_url = reverse("user_measurements:detail", kwargs={"pk": measurement_id})
+        detail_url = reverse(
+            "user_measurements:detail", kwargs={"measurement_id": measurement_id}
+        )
         response = self.client.get(detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("measurements", response.data)
@@ -781,7 +792,9 @@ class UserMeasurementsViewIntegrationTest(TestCase):
         response = self.client.post(self.list_url, create_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         measurement_id = response.data["measurement"]["id"]
-        detail_url = reverse("user_measurements:detail", kwargs={"pk": measurement_id})
+        detail_url = reverse(
+            "user_measurements:detail", kwargs={"measurement_id": measurement_id}
+        )
 
         # Update multiple times
         for i in range(3):
@@ -807,7 +820,9 @@ class UserMeasurementsViewIntegrationTest(TestCase):
 
         response = self.client.post(self.list_url, create_data, format="json")
         measurement_id = response.data["measurement"]["id"]
-        detail_url = reverse("user_measurements:detail", kwargs={"pk": measurement_id})
+        detail_url = reverse(
+            "user_measurements:detail", kwargs={"measurement_id": measurement_id}
+        )
 
         # Update and delete in sequence
         update_data = {"height_cm": "180.0"}
@@ -820,3 +835,473 @@ class UserMeasurementsViewIntegrationTest(TestCase):
         # Try to update after delete
         response = self.client.put(detail_url, update_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class MeasurementPhotosViewTest(TestCase):
+    """Test suite for MeasurementPhotosView"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            phone_number="09024698787",
+            first_name="Test",
+            last_name="User",
+        )
+        self.other_user = User.objects.create_user(
+            phone_number="09876543210",
+            first_name="Other",
+            last_name="User",
+        )
+
+        self.measurement = Measurements.objects.create(
+            user=self.user,
+            height_cm=Decimal("175.5"),
+            weight_kg=Decimal("72.3"),
+            measurement_notes="Test measurement",
+        )
+
+        self.photos_url = reverse(
+            "user_measurements:photos-list",
+            kwargs={"measurement_id": self.measurement.id},
+        )
+
+        # Create test image
+        self.test_image = self.create_test_image()
+
+    def create_test_image(self, format="JPEG"):
+        """Create a test image"""
+        image = Image.new("RGB", (100, 100), color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format=format)
+        image_bytes.seek(0)
+
+        ext = "jpg" if format == "JPEG" else format.lower()
+        return SimpleUploadedFile(
+            f"test.{ext}", image_bytes.read(), content_type=f"image/{ext}"
+        )
+
+    def test_get_photos_authenticated(self):
+        """Test GET photos with authenticated user"""
+        # Create some photos
+        photo1 = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+        photo2 = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.BACK,
+            photo=self.create_test_image(),
+        )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.photos_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("photos", response.data)
+        self.assertEqual(len(response.data["photos"]), 2)
+
+        # Check that photos are ordered by created_at desc
+        self.assertEqual(response.data["photos"][0]["type"], "BACK")
+        self.assertEqual(response.data["photos"][1]["type"], "FRONT")
+
+    def test_get_photos_unauthenticated(self):
+        """Test GET photos without authentication"""
+        response = self.client.get(self.photos_url)
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED],
+        )
+
+    def test_get_photos_no_photos(self):
+        """Test GET photos when measurement has no photos"""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.photos_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(
+            response.data["error"], MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS[0]
+        )
+
+    def test_get_photos_not_owner(self):
+        """Test GET photos for measurement owned by another user"""
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(self.photos_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(
+            response.data["error"], MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS[0]
+        )
+
+    def test_post_photo_authenticated(self):
+        """Test POST photo with authenticated user"""
+        self.client.force_authenticate(user=self.user)
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.test_image,
+        }
+
+        response = self.client.post(self.photos_url, data, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("photo", response.data)
+        self.assertEqual(response.data["photo"]["type"], "FRONT")
+        self.assertTrue(response.data["photo"]["photo"].endswith(".webp"))
+
+        # Verify it was saved
+        self.assertEqual(
+            MeasurementPhotos.objects.filter(measurements=self.measurement).count(), 1
+        )
+
+    def test_post_photo_unauthenticated(self):
+        """Test POST photo without authentication"""
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.test_image,
+        }
+        response = self.client.post(self.photos_url, data, format="multipart")
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED],
+        )
+
+    def test_post_photo_not_owner(self):
+        """Test POST photo for measurement owned by another user"""
+        self.client.force_authenticate(user=self.other_user)
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.test_image,
+        }
+        response = self.client.post(self.photos_url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_post_duplicate_photo_type(self):
+        """Test POST photo with duplicate type"""
+        # Create first photo
+        MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+
+        self.client.force_authenticate(user=self.user)
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.create_test_image(),
+        }
+        response = self.client.post(self.photos_url, data, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("error", response.data)
+        self.assertEqual(
+            response.data["error"], MeasurementsError.MEASUREMENTS_PHOTO_TYPE_EXIST[0]
+        )
+
+    def test_post_photo_invalid_type(self):
+        """Test POST photo with invalid type"""
+        self.client.force_authenticate(user=self.user)
+        data = {
+            "type": "INVALID",
+            "photo": self.test_image,
+        }
+        response = self.client.post(self.photos_url, data, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("error", response.data)
+        self.assertEqual(
+            response.data["error"],
+            "VALIDATION_ERROR",
+        )
+
+
+class MeasurementPhotoDetailViewTest(TestCase):
+    """Test suite for MeasurementPhotoDetailView"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            phone_number="09024698787",
+            first_name="Test",
+            last_name="User",
+        )
+        self.other_user = User.objects.create_user(
+            phone_number="09876543210",
+            first_name="Other",
+            last_name="User",
+        )
+
+        self.measurement = Measurements.objects.create(
+            user=self.user,
+            height_cm=Decimal("175.5"),
+            weight_kg=Decimal("72.3"),
+            measurement_notes="Test measurement",
+        )
+
+        # Create test image
+        self.test_image = self.create_test_image()
+
+        # Create a photo
+        self.photo = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+
+        self.detail_url = reverse(
+            "user_measurements:photo-detail",
+            kwargs={"measurement_id": self.measurement.id, "photo_id": self.photo.id},
+        )
+
+    def create_test_image(self):
+        """Create a test image"""
+        image = Image.new("RGB", (100, 100), color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="JPEG")
+        image_bytes.seek(0)
+        return SimpleUploadedFile(
+            "test.jpg", image_bytes.read(), content_type="image/jpeg"
+        )
+
+    def test_get_photo_authenticated(self):
+        """Test GET photo with authenticated user"""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("photo", response.data)
+        self.assertEqual(response.data["photo"]["id"], str(self.photo.id))
+        self.assertEqual(response.data["photo"]["type"], "FRONT")
+
+    def test_get_photo_unauthenticated(self):
+        """Test GET photo without authentication"""
+        response = self.client.get(self.detail_url)
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED],
+        )
+
+    def test_get_photo_not_owner(self):
+        """Test GET photo owned by another user"""
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+
+    def test_get_photo_not_found(self):
+        """Test GET photo with non-existent ID"""
+        self.client.force_authenticate(user=self.user)
+        invalid_url = reverse(
+            "user_measurements:photo-detail",
+            kwargs={
+                "measurement_id": self.measurement.id,
+                "photo_id": "00000000-0000-0000-0000-000000000000",
+            },
+        )
+        response = self.client.get(invalid_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+
+    def test_delete_photo_authenticated(self):
+        """Test DELETE photo with authenticated user"""
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete(self.detail_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify it was deleted
+        with self.assertRaises(MeasurementPhotos.DoesNotExist):
+            MeasurementPhotos.objects.get(id=self.photo.id)
+
+    def test_delete_photo_unauthenticated(self):
+        """Test DELETE photo without authentication"""
+        response = self.client.delete(self.detail_url)
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED],
+        )
+
+    def test_delete_photo_not_owner(self):
+        """Test DELETE photo owned by another user"""
+        self.client.force_authenticate(user=self.other_user)
+        response = self.client.delete(self.detail_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+
+    def test_delete_photo_not_found(self):
+        """Test DELETE photo with non-existent ID"""
+        self.client.force_authenticate(user=self.user)
+        invalid_url = reverse(
+            "user_measurements:photo-detail",
+            kwargs={
+                "measurement_id": self.measurement.id,
+                "photo_id": "00000000-0000-0000-0000-000000000000",
+            },
+        )
+        response = self.client.delete(invalid_url)
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+
+    def test_delete_photo_file_cleanup(self):
+        """Test that photo file is deleted from storage"""
+        self.client.force_authenticate(user=self.user)
+
+        # Get the file path
+        file_path = self.photo.photo.path
+
+        # Verify file exists
+        self.assertTrue(default_storage.exists(file_path))
+
+        # Delete the photo
+        self.client.delete(self.detail_url)
+
+        # Verify file is deleted
+        self.assertFalse(default_storage.exists(file_path))
+
+    def test_get_photo_after_deletion(self):
+        """Test getting a photo after it's deleted"""
+        self.client.force_authenticate(user=self.user)
+
+        # Delete the photo
+        self.client.delete(self.detail_url)
+
+        # Try to get it again
+        response = self.client.get(self.detail_url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("error", response.data)
+        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+
+
+class MeasurementPhotosIntegrationTest(TestCase):
+    """Integration tests for measurement photos"""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            phone_number="09024698787",
+            first_name="Test",
+            last_name="User",
+        )
+        self.client.force_authenticate(user=self.user)
+
+        self.measurement = Measurements.objects.create(
+            user=self.user,
+            height_cm=Decimal("175.5"),
+            weight_kg=Decimal("72.3"),
+        )
+
+        self.photos_url = reverse(
+            "user_measurements:photos-list",
+            kwargs={"measurement_id": self.measurement.id},
+        )
+
+    def create_test_image(self, format="JPEG"):
+        """Create a test image"""
+        image = Image.new("RGB", (100, 100), color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format=format)
+        image_bytes.seek(0)
+
+        ext = "jpg" if format == "JPEG" else format.lower()
+        return SimpleUploadedFile(
+            f"test.{ext}", image_bytes.read(), content_type=f"image/{ext}"
+        )
+
+    def test_full_photo_crud_flow(self):
+        """Test complete CRUD flow for photos"""
+        # 1. Create photo
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.create_test_image(),
+        }
+        response = self.client.post(self.photos_url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        photo_id = response.data["photo"]["id"]
+
+        # 2. List photos
+        response = self.client.get(self.photos_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data["photos"]), 1)
+        self.assertEqual(response.data["photos"][0]["type"], "FRONT")
+
+        # 3. Get single photo
+        detail_url = reverse(
+            "user_measurements:photo-detail",
+            kwargs={"measurement_id": self.measurement.id, "photo_id": photo_id},
+        )
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["photo"]["id"], photo_id)
+
+        # 4. Delete photo
+        response = self.client.delete(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # 5. Verify deletion
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_multiple_photo_types(self):
+        """Test creating multiple photos with different types"""
+        # Create front photo
+        data1 = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.create_test_image(),
+        }
+        response = self.client.post(self.photos_url, data1, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Create back photo
+        data2 = {
+            "type": MeasurementPhotos.PhotoType.BACK,
+            "photo": self.create_test_image(),
+        }
+        response = self.client.post(self.photos_url, data2, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Create side photo
+        data3 = {
+            "type": MeasurementPhotos.PhotoType.SIDE,
+            "photo": self.create_test_image(),
+        }
+        response = self.client.post(self.photos_url, data3, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Verify all three exist
+        response = self.client.get(self.photos_url)
+        self.assertEqual(len(response.data["photos"]), 3)
+
+        types = [p["type"] for p in response.data["photos"]]
+        self.assertIn("FRONT", types)
+        self.assertIn("BACK", types)
+        self.assertIn("SIDE", types)
+
+    def test_delete_measurement_cascades_to_photos(self):
+        """Test that deleting measurement also deletes its photos"""
+        # Create a photo
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.create_test_image(),
+        }
+        response = self.client.post(self.photos_url, data, format="multipart")
+        photo_id = response.data["photo"]["id"]
+
+        # Delete the measurement
+        measurement_url = reverse(
+            "user_measurements:detail", kwargs={"measurement_id": self.measurement.id}
+        )
+        response = self.client.delete(measurement_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify photo is deleted
+        with self.assertRaises(MeasurementPhotos.DoesNotExist):
+            MeasurementPhotos.objects.get(id=photo_id)

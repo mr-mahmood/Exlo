@@ -1,11 +1,107 @@
 # user_measurements/serializers.py
 
 from rest_framework import serializers
-from .models import Measurements
+from django.conf import settings
+from .models import Measurements, MeasurementPhotos
 from core.errors import MeasurementsError, APIError
+import os
+import io
+from PIL import Image
+from django.core.files.uploadedfile import InMemoryUploadedFile
+
+
+class MeasurementPhotosSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeasurementPhotos
+        fields = [
+            "id",
+            "type",
+            "photo",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "created_at",
+        ]
+
+    def validate_type(self, value):
+        valid_types = [choice[0] for choice in MeasurementPhotos.PhotoType.choices]
+        if value not in valid_types:
+            raise APIError(MeasurementsError.INVALID_PHOTO_TYPE)
+        return value
+
+    def validate_photo(self, value):
+        # Check file size
+        if value.size > settings.MAX_IMAGE_SIZE:
+            raise APIError(MeasurementsError.PHOTO_FILE_TOO_LARGE)
+
+        # Check file extension
+        ext = os.path.splitext(value.name)[1].lower()
+        allowed_extensions = [".jpg", ".jpeg", ".png", ".webp"]
+        if ext not in allowed_extensions:
+            raise APIError(MeasurementsError.INVALID_PHOTO_EXTENSION)
+
+        # Validate it's a real image (PIL will raise error if not)
+        try:
+            img = Image.open(value)
+            img.verify()  # Verify it's a valid image
+            value.seek(0)  # Reset file pointer
+        except Exception:
+            raise APIError(MeasurementsError.INVALID_PHOTO_TYPE)
+
+        return value
+
+    def validate(self, data):
+        if "type" not in data or not data["type"]:
+            raise APIError(MeasurementsError.PHOTO_TYPE_REQUIRED)
+
+        if "photo" not in data or not data["photo"]:
+            raise APIError(MeasurementsError.PHOTO_FILE_REQUIRED)
+
+        return data
+
+    def create(self, validated_data):
+
+        photo = validated_data.pop("photo")
+        webp_file = self.convert_to_webp(photo)
+
+        # Create the instance with converted image
+        return MeasurementPhotos.objects.create(
+            **validated_data,
+            photo=webp_file,
+        )
+
+    def convert_to_webp(self, photo):
+        try:
+            # Open and convert image to WebP
+            img = Image.open(photo)
+
+            # Convert to RGB if needed (for jpg compatibility)
+            if img.mode not in ["RGB", "RGBA"]:
+                img = img.convert("RGB")
+
+            # Save to WebP
+            output = io.BytesIO()
+            img.save(output, format="WebP", quality=85, optimize=True)
+            output.seek(0)
+
+            # Create new file
+            name = os.path.splitext(photo.name)[0]
+            return InMemoryUploadedFile(
+                file=output,
+                field_name=photo.field_name,
+                name=f"{name}.webp",
+                content_type="image/webp",
+                size=output.getbuffer().nbytes,
+                charset=photo.charset,
+            )
+
+        except Exception:
+            raise APIError(MeasurementsError.IMAGE_CONVERSION_FAILED)
 
 
 class UserMeasurementSerializer(serializers.ModelSerializer):
+    photos = MeasurementPhotosSerializer(many=True, read_only=True)
 
     class Meta:
         model = Measurements
@@ -27,13 +123,14 @@ class UserMeasurementSerializer(serializers.ModelSerializer):
             "calves_left_cm",
             "calves_right_cm",
             "glutes_cm",
+            "photos",
             "measurement_notes",
             "created_at",
         ]
         read_only_fields = [
             "id",
+            "photos",
             "created_at",
-            "updated_at",
         ]
 
     def validate_height_cm(self, value):
@@ -133,8 +230,7 @@ class UserMeasurementSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, data):
-        """Validate that at least one measurement field is provided"""
-        # List of measurement fields (all fields except id, created_at, updated_at, measurement_notes)
+        # List of measurement fields (all fields except id, created_at, updated_at, measurement_notes, photos)
         measurement_fields = [
             "height_cm",
             "weight_kg",
@@ -155,9 +251,8 @@ class UserMeasurementSerializer(serializers.ModelSerializer):
         ]
 
         # Check if this is a create operation (no instance) or update (has instance)
-        is_create = not self.instance
-
         # For create operations, require at least one measurement field
+        is_create = not self.instance
         if is_create:
             has_measurement = any(
                 data.get(field) is not None for field in measurement_fields

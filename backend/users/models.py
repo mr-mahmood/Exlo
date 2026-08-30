@@ -61,8 +61,7 @@ class UserManager(BaseUserManager):
 
 
 def user_profile_picture_path(instance, filename):
-    ext = filename.split(".")[-1] if "." in filename else "jpg"
-    return f"profile_pics/{uuid.uuid4().hex}.{ext}"
+    return f"profile_pics/{uuid.uuid4().hex}.webp"
 
 
 class User(AbstractUser):

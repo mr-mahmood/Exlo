@@ -8,6 +8,12 @@ from user_measurements.models import Measurements
 from user_measurements.serializers import UserMeasurementSerializer
 from core.errors import MeasurementsError, APIError
 from users.models import User
+from user_measurements.serializers import MeasurementPhotosSerializer
+from user_measurements.models import MeasurementPhotos
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
+import io
+from django.conf import settings
 
 
 class UserMeasurementSerializerTest(TestCase):
@@ -107,6 +113,7 @@ class UserMeasurementSerializerTest(TestCase):
             "calves_left_cm",
             "calves_right_cm",
             "glutes_cm",
+            "photos",
             "measurement_notes",
             "created_at",
         ]
@@ -663,3 +670,182 @@ class UserMeasurementSerializerIntegrationTest(TestCase):
         self.assertTrue(serializer.is_valid())
         self.assertNotIn("extra_field", serializer.validated_data)  # type: ignore
         self.assertNotIn("another_extra", serializer.validated_data)  # type: ignore
+
+
+class MeasurementPhotosSerializerTest(TestCase):
+    """Test suite for MeasurementPhotosSerializer"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            phone_number="09024698787",
+            first_name="Test",
+            last_name="User",
+        )
+        self.measurement = Measurements.objects.create(
+            user=self.user,
+            height_cm=Decimal("175.5"),
+            weight_kg=Decimal("72.3"),
+        )
+
+        # Create test images
+        self.test_image = self.create_test_image()
+
+    def create_test_image(self, format="JPEG", size=(100, 100)):
+        """Create a test image"""
+        image = Image.new("RGB", size, color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format=format)
+        image_bytes.seek(0)
+
+        ext = "jpg" if format == "JPEG" else format.lower()
+        return SimpleUploadedFile(
+            f"test.{ext}", image_bytes.read(), content_type=f"image/{ext}"
+        )
+
+    def test_valid_photo_serializer(self):
+        """Test serializer with valid data"""
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.test_image,
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+        self.assertTrue(serializer.is_valid())
+
+        # Save the photo
+        photo = cast(MeasurementPhotos, serializer.save(measurements=self.measurement))
+        self.assertIsNotNone(photo.id)
+        self.assertEqual(photo.type, MeasurementPhotos.PhotoType.FRONT)
+
+    def test_invalid_photo_type(self):
+        """Test serializer with invalid photo type"""
+        data = {
+            "type": "INVALID",
+            "photo": self.test_image,
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+
+        # DRF will raise ValidationError for invalid choice
+        with self.assertRaises(Exception) as context:
+            serializer.is_valid(raise_exception=True)
+
+        # Check that the error is about invalid choice
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("type", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["type"][0]), '"INVALID" is not a valid choice.'  # type: ignore
+        )
+
+    def test_missing_photo_type(self):
+        data = {"photo": self.test_image}
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+
+        # DRF will raise a ValidationError because 'type' is a required field
+        # This is the expected behavior since 'type' is required in the model
+        with self.assertRaises(Exception) as context:
+            serializer.is_valid(raise_exception=True)
+
+        # Check that the error is about the missing type field
+        self.assertIn("type", serializer.errors)
+        self.assertEqual(str(serializer.errors["type"][0]), "This field is required.")  # type: ignore
+
+    def test_missing_photo_file(self):
+        """Test serializer with missing photo file"""
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+
+        with self.assertRaises(APIError) as context:
+            serializer.is_valid(raise_exception=True)
+        self.assertEqual(
+            context.exception.error_code, MeasurementsError.PHOTO_FILE_REQUIRED[0]
+        )
+
+    def test_large_photo_file(self):
+        """Test serializer with large photo file"""
+        # Create a large image (over the limit)
+        large_image = self.create_test_image(size=(1000, 1000))
+        # Make it larger by adding more data
+        large_image.size = settings.MAX_IMAGE_SIZE + 1
+
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": large_image,
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+
+        with self.assertRaises(APIError) as context:
+            serializer.is_valid(raise_exception=True)
+        self.assertEqual(
+            context.exception.error_code, MeasurementsError.PHOTO_FILE_TOO_LARGE[0]
+        )
+
+    def test_invalid_file_extension(self):
+        # Create a file with invalid extension
+        invalid_file = SimpleUploadedFile(
+            "test.txt", b"This is not an image", content_type="text/plain"
+        )
+
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": invalid_file,
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+
+        # Django's ImageField validation will catch this first
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("photo", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["photo"][0]),  # type: ignore
+            "Upload a valid image. The file you uploaded was either not an image or a corrupted image.",
+        )
+
+    def test_webp_conversion_on_create(self):
+        """Test that image is converted to WebP on create"""
+        data = {
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.test_image,
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+        self.assertTrue(serializer.is_valid())
+
+        photo = serializer.save(measurements=self.measurement)
+
+        # Check that the photo is saved as WebP
+        self.assertTrue(photo.photo.name.endswith(".webp"))  # type: ignore
+
+    def test_serializer_fields(self):
+        """Test serializer fields"""
+        photo = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+
+        serializer = MeasurementPhotosSerializer(photo)
+        expected_fields = ["id", "type", "photo", "created_at"]
+
+        self.assertEqual(set(serializer.data.keys()), set(expected_fields))  # type: ignore
+
+    def test_read_only_fields(self):
+        """Test that read_only fields cannot be written"""
+        data = {
+            "id": "123",
+            "type": MeasurementPhotos.PhotoType.FRONT,
+            "photo": self.test_image,
+            "created_at": "2024-01-01T00:00:00Z",
+        }
+
+        serializer = MeasurementPhotosSerializer(data=data, context={"request": None})
+        self.assertTrue(serializer.is_valid())
+
+        # id and created_at should be ignored
+        self.assertNotIn("id", serializer.validated_data)  # type: ignore
+        self.assertNotIn("created_at", serializer.validated_data)  # type: ignore

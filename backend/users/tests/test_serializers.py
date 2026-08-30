@@ -8,6 +8,10 @@ from rest_framework.exceptions import ValidationError as DRFValidationError
 from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
 from core.errors import APIError, UserValidationError, SignUpError, UserAccountError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
+import io
+import os
 
 
 class UserSignupSerializerTest(TestCase):
@@ -382,3 +386,120 @@ class UserProfileSerializerTest(TestCase):
         user = cast(User, serializer.save())
         self.assertEqual(user.first_name, "Jane")
         self.assertEqual(user.last_name, "Smith")
+
+
+class UserProfilePictureSerializerTest(TestCase):
+    """Test UserProfileSerializer with profile picture handling"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            phone_number="09123456789",
+            first_name="John",
+            last_name="Doe",
+            gender=User.Gender.MALE,
+            date_of_birth=date(1990, 1, 1),
+        )
+        self.test_image = self.create_test_image()
+
+    def create_test_image(self, format="JPEG", size=(100, 100)):
+        """Create a test image"""
+        image = Image.new("RGB", size, color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format=format)
+        image_bytes.seek(0)
+
+        ext = "jpg" if format == "JPEG" else format.lower()
+        return SimpleUploadedFile(
+            f"test.{ext}", image_bytes.read(), content_type=f"image/{ext}"
+        )
+
+    def test_update_profile_picture_converts_to_webp(self):
+        """Test that profile picture is converted to WebP on update"""
+        data = {
+            "profile_picture": self.test_image,
+        }
+
+        serializer = UserProfileSerializer(self.user, data=data, partial=True)
+        self.assertTrue(serializer.is_valid())
+        updated_user = cast(User, serializer.save())
+
+        # Check that the file is saved as WebP
+        self.assertTrue(updated_user.profile_picture.name.endswith(".webp"))  # type: ignore
+
+        # Verify it's a valid WebP image using PIL
+        img = Image.open(updated_user.profile_picture)
+        self.assertEqual(img.format, "WEBP")
+
+    def test_update_profile_picture_with_png_converts_to_webp(self):
+        """Test that PNG profile picture is converted to WebP"""
+        png_image = self.create_test_image(format="PNG")
+
+        data = {
+            "profile_picture": png_image,
+        }
+
+        serializer = UserProfileSerializer(self.user, data=data, partial=True)
+        self.assertTrue(serializer.is_valid())
+        updated_user = cast(User, serializer.save())
+
+        self.assertTrue(updated_user.profile_picture.name.endswith(".webp"))  # type: ignore
+
+        img = Image.open(updated_user.profile_picture)
+        self.assertEqual(img.format, "WEBP")
+
+    def test_update_profile_picture_invalid_extension(self):
+        """Test updating profile picture with invalid file extension"""
+        invalid_file = SimpleUploadedFile(
+            "test.txt", b"This is not an image", content_type="text/plain"
+        )
+
+        data = {
+            "profile_picture": invalid_file,
+        }
+
+        serializer = UserProfileSerializer(self.user, data=data, partial=True)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("profile_picture", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["profile_picture"][0]),  # type: ignore
+            "Upload a valid image. The file you uploaded was either not an image or a corrupted image.",
+        )
+
+    def test_update_profile_picture_too_large(self):
+        """Test updating profile picture with file too large"""
+        # Create a large file
+        large_image = self.create_test_image(size=(2000, 2000))
+        # Make it larger by setting size to exceed limit
+        large_image.size = settings.MAX_IMAGE_SIZE + 1
+
+        data = {
+            "profile_picture": large_image,
+        }
+
+        serializer = UserProfileSerializer(self.user, data=data, partial=True)
+
+        with self.assertRaises(APIError) as context:
+            serializer.is_valid(raise_exception=True)
+        self.assertEqual(
+            context.exception.error_code, UserAccountError.PROFILE_PICTURE_TOO_LARGE[0]
+        )
+
+    def test_update_profile_picture_corrupted_image(self):
+        """Test updating profile picture with corrupted image"""
+        corrupted_file = SimpleUploadedFile(
+            "corrupted.jpg",
+            b"This is not a valid image content",
+            content_type="image/jpeg",
+        )
+
+        data = {
+            "profile_picture": corrupted_file,
+        }
+
+        serializer = UserProfileSerializer(self.user, data=data, partial=True)
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("profile_picture", serializer.errors)
+        self.assertEqual(
+            str(serializer.errors["profile_picture"][0]),  # type: ignore
+            "Upload a valid image. The file you uploaded was either not an image or a corrupted image.",
+        )

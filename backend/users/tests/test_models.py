@@ -357,7 +357,7 @@ class UserModelTest(TestCase):
         filename = "test.jpg"
         path = user_profile_picture_path(None, filename)
         self.assertTrue(path.startswith("profile_pics/"))
-        self.assertTrue(path.endswith(".jpg"))
+        self.assertTrue(path.endswith(".webp"))
         # UUID is 32 characters
         self.assertEqual(len(path.split("/")[1].split(".")[0]), 32)
 

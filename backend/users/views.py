@@ -11,7 +11,7 @@ from user_referrals.models import Referral
 from user_sessions.models import Session
 from authentication.otp_service import generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
-from authentication.utils import make_cookie
+from authentication.utils import attach_auth_tokens
 from authentication.throttles import OTPPhoneThrottle, OTPIPThrottle
 from core.errors import APIError, OTPError, SignUpError, UserAccountError
 from users.validators import validate_phone
@@ -63,7 +63,7 @@ class UserSignupAPIView(APIView):
 
                 # Create session and tokens
                 session = Session.create_session(user, request)
-                tokens = create_tokens_for_user(user, session)
+                access, refresh = create_tokens_for_user(user, session)
 
                 # Prepare response
                 response = Response(
@@ -76,13 +76,11 @@ class UserSignupAPIView(APIView):
                     status=status.HTTP_201_CREATED,
                 )
 
-                # Set cookies
-                make_cookie(
+                attach_auth_tokens(
                     response,
-                    {
-                        "access_token": tokens["access"],
-                        "refresh_token": tokens["refresh"],
-                    },
+                    request,
+                    access,
+                    refresh,
                 )
 
                 # Clean up cache
@@ -257,7 +255,7 @@ class UserProfilePIView(APIView):
     def get(self, request):
         user: User = request.user
         serializer = self.serializer_class(user, context={"request": request})
-        
+
         return Response(
             {"user": serializer.data},
             status=status.HTTP_200_OK,

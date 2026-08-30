@@ -3,8 +3,12 @@
 from django.test import TestCase
 from users.models import User
 from decimal import Decimal
-from user_measurements.models import Measurements
 import uuid
+from user_measurements.models import Measurements, MeasurementPhotos
+from django.core.files.uploadedfile import SimpleUploadedFile
+import tempfile
+from PIL import Image
+import io
 
 
 class MeasurementsModelTest(TestCase):
@@ -295,3 +299,133 @@ class MeasurementsModelEdgeCasesTest(TestCase):
         measurement.refresh_from_db()
         self.assertEqual(measurement.height_cm, Decimal("-5.0"))
         self.assertEqual(measurement.weight_kg, Decimal("-10.0"))
+
+
+class MeasurementPhotosModelTest(TestCase):
+    """Test suite for MeasurementPhotos model"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            phone_number="09024698787",
+            first_name="Test",
+            last_name="User",
+        )
+        self.measurement = Measurements.objects.create(
+            user=self.user,
+            height_cm=Decimal("175.5"),
+            weight_kg=Decimal("72.3"),
+        )
+
+        # Create a test image
+        self.test_image = self.create_test_image()
+
+    def create_test_image(self):
+        """Create a simple test image"""
+        image = Image.new("RGB", (100, 100), color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="JPEG")
+        image_bytes.seek(0)
+        return SimpleUploadedFile(
+            "test.jpg", image_bytes.read(), content_type="image/jpeg"
+        )
+
+    def test_create_measurement_photo(self):
+        """Test creating a photo for a measurement"""
+        photo = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+
+        self.assertIsInstance(photo.id, uuid.UUID)
+        self.assertEqual(photo.measurements, self.measurement)
+        self.assertEqual(photo.type, MeasurementPhotos.PhotoType.FRONT)
+        self.assertIsNotNone(photo.photo)
+        self.assertIsNotNone(photo.created_at)
+
+    def test_photo_type_choices(self):
+        """Test the photo type choices"""
+        self.assertEqual(MeasurementPhotos.PhotoType.FRONT, "FRONT")
+        self.assertEqual(MeasurementPhotos.PhotoType.BACK, "BACK")
+        self.assertEqual(MeasurementPhotos.PhotoType.SIDE, "SIDE")
+
+        self.assertEqual(MeasurementPhotos.PhotoType.FRONT.label, "Front")
+        self.assertEqual(MeasurementPhotos.PhotoType.BACK.label, "Back")
+        self.assertEqual(MeasurementPhotos.PhotoType.SIDE.label, "Side")
+
+    def test_unique_measurement_type_constraint(self):
+        """Test that a measurement cannot have duplicate photo types"""
+        photo1 = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+
+        # Try to create another photo with same type and measurement
+        with self.assertRaises(Exception):  # IntegrityError
+            MeasurementPhotos.objects.create(
+                measurements=self.measurement,
+                type=MeasurementPhotos.PhotoType.FRONT,
+                photo=self.create_test_image(),
+            )
+
+    def test_measurement_photos_relationship(self):
+        """Test the reverse relationship from Measurements to Photos"""
+        photo1 = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+
+        photo2 = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.BACK,
+            photo=self.create_test_image(),
+        )
+
+        measurement_photos = self.measurement.photos.all()  # type: ignore
+
+        self.assertEqual(measurement_photos.count(), 2)
+        self.assertIn(photo1, measurement_photos)
+        self.assertIn(photo2, measurement_photos)
+
+    def test_cascade_delete_photos(self):
+        """Test that photos are deleted when measurement is deleted"""
+        photo = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+        photo_id = photo.id
+
+        self.measurement.delete()
+
+        with self.assertRaises(MeasurementPhotos.DoesNotExist):
+            MeasurementPhotos.objects.get(id=photo_id)
+
+    def test_db_table_name(self):
+        """Test the database table name"""
+        self.assertEqual(MeasurementPhotos._meta.db_table, "user_measurement_photos")
+
+    def test_str_method(self):
+        """Test the string representation"""
+        photo = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.test_image,
+        )
+        expected = f"{self.user.get_full_name()} photo - {photo.created_at}"
+        self.assertEqual(str(photo), expected)
+
+    def test_indexes(self):
+        """Test that indexes are created correctly"""
+        indexes = MeasurementPhotos._meta.indexes
+        index_names = [index.name for index in indexes]
+
+        self.assertIn("measurement_photos_meas_idx", index_names)
+        self.assertIn("measurement_photos_create_idx", index_names)
+
+    def test_unique_together(self):
+        """Test that unique_together is set correctly"""
+        unique_together = MeasurementPhotos._meta.unique_together
+        self.assertIn(("measurements", "type"), unique_together)

@@ -49,9 +49,9 @@ class AuthenticationError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
-    COOKIES_NOT_PROVIDE = (
+    TOKEN_NOT_PROVIDE = (
         "AUTH_002",
-        "No cookies found in request",
+        "No Token found in request",
         status.HTTP_400_BAD_REQUEST,
     )
 
@@ -249,6 +249,30 @@ class UserAccountError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
+    PROFILE_PICTURE_TOO_LARGE = (
+        "USER-008",
+        f"Profile picture is too large",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_PROFILE_PICTURE_EXTENSION = (
+        "USER-009",
+        "Invalid file format",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_PROFILE_PICTURE = (
+        "USER-010",
+        "Invalid image file. Please upload a valid image",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PROFILE_PICTURE_CONVERSION_FAILED = (
+        "USER-011",
+        "Failed to process profile picture. Please try with a different image",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
 
 # ============================================================================
 # REFERRAL
@@ -266,6 +290,9 @@ class ReferralError(APIError):
         "you cant referral your self",
         status.HTTP_400_BAD_REQUEST,
     )
+
+
+# core/errors.py
 
 
 # ============================================================================
@@ -310,7 +337,7 @@ class MeasurementsError(APIError):
     )
 
     INVALID_BICEPS = (
-        "MEAS_0010",
+        "MEAS_010",
         "Biceps circumference must be between 10 and 80 cm",
         status.HTTP_400_BAD_REQUEST,
     )
@@ -380,9 +407,63 @@ class MeasurementsError(APIError):
         "Measurement date cannot be in the future",
         status.HTTP_400_BAD_REQUEST,
     )
-    
+
     MISSING_MEASUREMENT_DATA = (
         "MEAS_022",
         "At least one measurement field is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    NO_EXISTING_MEASUREMENTS_PHOTOS = (
+        "MEAS_023",
+        "No measurement photos found for User and measurement",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    MEASUREMENTS_PHOTO_TYPE_EXIST = (
+        "MEAS_024",
+        "This photo type already exists for this measurement",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_NOT_FOUND = (
+        "MEAS_025",
+        "Photo not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    INVALID_PHOTO_TYPE = (
+        "MEAS_026",
+        "Invalid photo type",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_FILE_REQUIRED = (
+        "MEAS_027",
+        "Photo file is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_FILE_TOO_LARGE = (
+        "MEAS_028",
+        f"Photo file is too large",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_PHOTO_EXTENSION = (
+        "MEAS_029",
+        "Invalid file format",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_TYPE_REQUIRED = (
+        "MEAS_030",
+        "Photo type is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    IMAGE_CONVERSION_FAILED = (
+        "MEAS_031",
+        "Failed to process image. Please try with a different image",
         status.HTTP_400_BAD_REQUEST,
     )

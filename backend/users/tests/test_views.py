@@ -8,11 +8,14 @@ from rest_framework.test import APIClient
 from rest_framework import status
 from datetime import date, timedelta
 from unittest.mock import patch
-from core.errors import SignUpError
+from core.errors import SignUpError, UserAccountError
 from users.models import User
 from user_sessions.models import Session
 from authentication.otp_service import OTP_CACHE_PREFIX
 from core.errors import AuthenticationError, SignUpError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
+import io
 
 
 class UserSignupViewTest(TestCase):
@@ -515,7 +518,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = client.post(self.old_request_url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_phone_change_blocked_user(self):
         """Test phone change for blocked user"""
@@ -567,7 +570,7 @@ class UserProfileViewTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_get_profile_blocked_user(self):
         self.user.is_blocked = True
@@ -642,45 +645,7 @@ class UserProfileViewTest(TestCase):
         data = {"first_name": "Jane"}
         response = client.put(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.COOKIES_NOT_PROVIDE[0])  # type: ignore
-
-    # ========== PROFILE PICTURE UPDATE ==========
-    def test_update_profile_picture(self):
-        """Test updating profile picture with multipart form-data"""
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        import tempfile
-        import os
-        from PIL import Image
-
-        # Create a valid image file
-        temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-        image = Image.new("RGB", (100, 100), color="red")
-        image.save(temp_file, format="PNG")
-        temp_file.seek(0)
-
-        file_content = temp_file.read()
-        temp_file.close()
-        os.unlink(temp_file.name)
-
-        image_file = SimpleUploadedFile(
-            "profile.png", file_content, content_type="image/png"
-        )
-
-        data = {
-            "profile_picture": image_file,
-        }
-
-        response = self.client.put(self.url, data, format="multipart")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        # Verify the profile picture was updated
-        self.user.refresh_from_db()
-        self.assertIsNotNone(self.user.profile_picture)
-        self.assertTrue(self.user.profile_picture.name.startswith("profile_pics/"))
-        self.assertTrue(
-            self.user.profile_picture.name.endswith(".png")
-            or self.user.profile_picture.name.endswith(".PNG")
-        )
+        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_update_profile_picture_with_invalid_file_type(self):
         """Test updating profile picture with invalid file type"""
@@ -721,3 +686,86 @@ class UserProfileViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error"], "VALIDATION_ERROR")  # type: ignore
         self.assertIn("date_of_birth", response.data["error_message"])  # type: ignore
+
+    # ========== PROFILE PICTURE UPDATE ==========
+    def test_update_profile_picture(self):
+        # Create a valid image file
+        image = Image.new("RGB", (100, 100), color="red")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="JPEG")
+        image_bytes.seek(0)
+
+        image_file = SimpleUploadedFile(
+            "profile.jpg", image_bytes.read(), content_type="image/jpeg"
+        )
+
+        data = {
+            "profile_picture": image_file,
+        }
+
+        response = self.client.put(self.url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify the profile picture was updated
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.profile_picture)
+        # Should be saved as WebP
+        self.assertTrue(self.user.profile_picture.name.endswith(".webp"))
+
+        # Verify it's a valid WebP image
+        img = Image.open(self.user.profile_picture)
+        self.assertEqual(img.format, "WEBP")
+
+    def test_update_profile_picture_with_png(self):
+
+        # Create a PNG image
+        image = Image.new("RGB", (100, 100), color="blue")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="PNG")
+        image_bytes.seek(0)
+
+        image_file = SimpleUploadedFile(
+            "profile.png", image_bytes.read(), content_type="image/png"
+        )
+
+        data = {
+            "profile_picture": image_file,
+        }
+
+        response = self.client.put(self.url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Verify the profile picture was converted to WebP
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.profile_picture)
+        self.assertTrue(self.user.profile_picture.name.endswith(".webp"))
+
+        img = Image.open(self.user.profile_picture)
+        self.assertEqual(img.format, "WEBP")
+
+    def test_update_profile_picture_with_webp(self):
+
+        # Create a WEBP image
+        image = Image.new("RGB", (100, 100), color="green")
+        image_bytes = io.BytesIO()
+        image.save(image_bytes, format="WEBP")
+        image_bytes.seek(0)
+
+        image_file = SimpleUploadedFile(
+            "profile.webp", image_bytes.read(), content_type="image/webp"
+        )
+
+        data = {
+            "profile_picture": image_file,
+        }
+
+        response = self.client.put(self.url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # WebP should remain WebP
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.profile_picture)
+        self.assertTrue(self.user.profile_picture.name.endswith(".webp"))
+
+        img = Image.open(self.user.profile_picture)
+        self.assertEqual(img.format, "WEBP")

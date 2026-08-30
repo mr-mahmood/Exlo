@@ -10,7 +10,7 @@ from users.models import User
 from users.serializers import UserProfileSerializer
 from user_sessions.models import Session
 from .token_services import create_tokens_for_user, refresh_tokens
-from .utils import make_cookie
+from .utils import attach_auth_tokens, is_bearer_transport
 from .backends import RefreshTokenAuthentication
 from .otp_service import generate_otp, verify_otp
 from django.conf import settings
@@ -63,24 +63,24 @@ class LoginVerifyApiView(APIView):
             user.update_last_login_at()
 
             session = Session.create_session(user, request)
-            tokens = create_tokens_for_user(user, session)
+            access, refresh = create_tokens_for_user(user, session)
 
             response = Response(
                 {
                     "user": UserProfileSerializer(
-                        user, context={"request": request}
+                        user,
+                        context={"request": request},
                     ).data,
                     "new_user": False,
                 },
                 status=status.HTTP_200_OK,
             )
 
-            make_cookie(
+            attach_auth_tokens(
                 response,
-                {
-                    "access_token": tokens["access"],
-                    "refresh_token": tokens["refresh"],
-                },
+                request,
+                access,
+                refresh,
             )
 
             return response
@@ -104,9 +104,7 @@ class RefreshAPIView(APIView):
 
     def post(self, request):
 
-        refresh_token = request.COOKIES.get("refresh_token")
-        if not refresh_token:
-            raise APIError(AuthenticationError.NO_REFRESH_TOKEN)
+        refresh_token = request.auth
 
         try:
             new_access, new_refresh = refresh_tokens(refresh_token, request)
@@ -115,12 +113,11 @@ class RefreshAPIView(APIView):
 
         response = Response(status=status.HTTP_200_OK)
 
-        make_cookie(
+        attach_auth_tokens(
             response,
-            {
-                "access_token": new_access,
-                "refresh_token": str(new_refresh),
-            },
+            request,
+            new_access,
+            str(new_refresh),
         )
 
         return response
@@ -148,15 +145,16 @@ class LogoutAPIView(APIView):
         # Clear cookies
         response = Response(status=status.HTTP_200_OK)
 
-        response.delete_cookie(
-            "access_token",
-            path="/",
-            domain=settings.SESSION_COOKIE_DOMAIN,
-        )
-        response.delete_cookie(
-            "refresh_token",
-            path="/",
-            domain=settings.SESSION_COOKIE_DOMAIN,
-        )
+        if not is_bearer_transport(request):
+            response.delete_cookie(
+                "access_token",
+                path="/",
+                domain=settings.SESSION_COOKIE_DOMAIN,
+            )
+            response.delete_cookie(
+                "refresh_token",
+                path="/",
+                domain=settings.SESSION_COOKIE_DOMAIN,
+            )
 
         return response

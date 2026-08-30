@@ -1,4 +1,5 @@
 # authentication/tests/test_views.py
+# type: ignore
 from django.test import TestCase
 from django.urls import reverse
 from django.core.cache import cache
@@ -12,6 +13,7 @@ from core.errors import (
     SessionError,
     UserAccountError,
     OTPError,
+    AuthenticationError,
 )
 from unittest.mock import patch
 
@@ -524,3 +526,385 @@ class AuthenticationViewsTest(TestCase):
 
         self.user.refresh_from_db()
         self.assertIsNotNone(self.user.last_login_at)
+
+
+# ========== AUTH TRANSPORT HEADER VIEW TESTS ==========
+class AuthenticationViewsWithBearerTransportTest(TestCase):
+    """Test authentication views with X-Auth-Transport: bearer header"""
+
+    def setUp(self):
+        settings.DEBUG = True
+        self.client = APIClient()
+        cache.clear()
+
+        self.sms_patcher = patch("core.sms_task.send_sms_verification_task.delay")
+        self.mock_sms = self.sms_patcher.start()
+        self.mock_sms.return_value = None
+
+        self.user = User.objects.create_user(
+            phone_number="09123456789",
+            first_name="John",
+            last_name="Doe",
+            gender=User.Gender.MALE,
+        )
+
+        self.login_request_url = reverse("authentication:login-request")
+        self.login_verify_url = reverse("authentication:login-verify")
+        self.logout_url = reverse("authentication:logout")
+        self.refresh_url = reverse("authentication:refresh")
+
+    def tearDown(self):
+        self.sms_patcher.stop()
+        cache.clear()
+
+    # ========== LOGIN VERIFY TESTS ==========
+
+    def test_login_verify_with_bearer_transport_returns_tokens_in_body(self):
+        """Test login verify with X-Auth-Transport: bearer returns access/refresh in response body instead of cookies"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["new_user"], False)
+        self.assertEqual(response.data["user"]["phone_number"], "09123456789")
+
+        # Check tokens are in response body
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+
+        # Cookies should NOT be set
+        self.assertNotIn("access_token", response.cookies)
+        self.assertNotIn("refresh_token", response.cookies)
+
+    def test_login_verify_with_bearer_transport_new_user(self):
+        """Test login verify with X-Auth-Transport: bearer for new user - no tokens returned"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456788"})
+
+        data = {"phone_number": "09123456788", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["new_user"], True)
+        self.assertIsNone(response.data["user"])
+
+        # No tokens for new user
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        self.assertNotIn("access_token", response.cookies)
+        self.assertNotIn("refresh_token", response.cookies)
+
+    def test_login_verify_with_bearer_transport_case_insensitive(self):
+        """Test X-Auth-Transport header is case insensitive in views"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="BEARER"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_login_verify_with_bearer_transport_mixed_case(self):
+        """Test X-Auth-Transport header with mixed case in views"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="BeArEr"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_login_verify_with_bearer_transport_blocked_user(self):
+        """Test login verify with X-Auth-Transport: bearer for blocked user"""
+        self.user.block()
+
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
+        )
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_login_verify_with_bearer_transport_inactive_user(self):
+        """Test login verify with X-Auth-Transport: bearer for inactive user"""
+        self.user.is_active = False
+        self.user.save()
+
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
+        )
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_login_verify_with_bearer_transport_wrong_otp(self):
+        """Test login verify with X-Auth-Transport: bearer and wrong OTP"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "999999"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    # ========== REFRESH TESTS ==========
+
+    def test_refresh_with_bearer_transport_returns_tokens_in_body(self):
+        """Test refresh with X-Auth-Transport: bearer returns new tokens in response body"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+
+        old_access = verify_response.cookies["access_token"].value
+        old_refresh = verify_response.cookies["refresh_token"].value
+
+        # When using bearer transport, send refresh token in Authorization header
+        response = self.client.post(
+            self.refresh_url,
+            HTTP_AUTHORIZATION=f"Bearer {old_refresh}",
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertNotEqual(response.data["access"], old_access)
+        self.assertNotEqual(response.data["refresh"], old_refresh)
+        self.assertNotIn("access_token", response.cookies)
+        self.assertNotIn("refresh_token", response.cookies)
+
+    def test_refresh_with_bearer_transport_and_auth_header(self):
+        """Test refresh with X-Auth-Transport: bearer using Authorization header instead of cookie"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+
+        refresh_token = verify_response.cookies["refresh_token"].value
+
+        response = self.client.post(
+            self.refresh_url,
+            HTTP_AUTHORIZATION=f"Bearer {refresh_token}",
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertNotIn("access_token", response.cookies)
+        self.assertNotIn("refresh_token", response.cookies)
+
+    def test_refresh_with_bearer_transport_invalid_token(self):
+        """Test refresh with X-Auth-Transport: bearer and invalid refresh token"""
+        # Send invalid token in Authorization header
+        response = self.client.post(
+            self.refresh_url,
+            HTTP_AUTHORIZATION="Bearer invalid_token",
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error"], SessionError.SESSION_EXPIRE[0])
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_refresh_with_bearer_transport_blocked_user(self):
+        """Test refresh with X-Auth-Transport: bearer for blocked user"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+
+        refresh_token = verify_response.cookies["refresh_token"].value
+        self.user.block()
+
+        response = self.client.post(
+            self.refresh_url,
+            HTTP_AUTHORIZATION=f"Bearer {refresh_token}",
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
+        )
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_refresh_with_bearer_transport_inactive_user(self):
+        """Test refresh with X-Auth-Transport: bearer for inactive user"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+
+        refresh_token = verify_response.cookies["refresh_token"].value
+
+        self.user.is_active = False
+        self.user.save()
+
+        response = self.client.post(
+            self.refresh_url,
+            HTTP_AUTHORIZATION=f"Bearer {refresh_token}",
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
+        )
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    # ========== LOGOUT TESTS ==========
+
+    def test_logout_with_bearer_transport_no_cookies_to_clear(self):
+        """Test logout with X-Auth-Transport: bearer - no cookies to clear"""
+        # Login with bearer transport
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url,
+            {"phone_number": "09123456789", "otp": "123456"},
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        # Get tokens from body
+        access_token = verify_response.data.get("access")
+        refresh_token = verify_response.data.get("refresh")
+
+        # Logout with bearer transport
+        response = self.client.post(self.logout_url, HTTP_X_AUTH_TRANSPORT="bearer")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("access_token", response.cookies)
+        self.assertNotIn("refresh_token", response.cookies)
+
+    def test_logout_with_bearer_transport_and_cookies(self):
+        """Test logout with X-Auth-Transport: bearer but cookies exist"""
+        # Login normally to get cookies
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+        self.client.cookies = verify_response.cookies
+
+        # Logout with bearer transport
+        response = self.client.post(self.logout_url, HTTP_X_AUTH_TRANSPORT="bearer")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data)
+
+    # ========== DEFAULT BEHAVIOR TESTS ==========
+
+    def test_login_verify_without_bearer_transport_returns_cookies(self):
+        """Test login verify without X-Auth-Transport header returns tokens in cookies (default)"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(self.login_verify_url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access_token", response.cookies)
+        self.assertIn("refresh_token", response.cookies)
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+
+    def test_refresh_without_bearer_transport_returns_cookies(self):
+        """Test refresh without X-Auth-Transport header returns tokens in cookies (default)"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+        self.client.cookies = verify_response.cookies
+
+        response = self.client.post(self.refresh_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access_token", response.cookies)
+        self.assertIn("refresh_token", response.cookies)
+        self.assertIsNone(response.data)
+
+    def test_login_verify_with_bearer_transport_creates_session(self):
+        """Test that session is created with X-Auth-Transport: bearer"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(Session.objects.filter(user=self.user).exists())
+        session = Session.objects.get(user=self.user)
+        self.assertEqual(session.ip_address, "127.0.0.1")
+        self.assertIsNotNone(session.session_id)
+
+    def test_login_verify_with_bearer_transport_updates_last_login(self):
+        """Test that last_login_at is updated with X-Auth-Transport: bearer"""
+        self.assertIsNone(self.user.last_login_at)
+
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        data = {"phone_number": "09123456789", "otp": "123456"}
+        response = self.client.post(
+            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertIsNotNone(self.user.last_login_at)
+
+    def test_refresh_with_bearer_transport_updates_session_activity(self):
+        """Test that refresh updates session activity with X-Auth-Transport: bearer"""
+        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+        verify_response = self.client.post(
+            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
+        )
+
+        refresh_token = verify_response.cookies["refresh_token"].value
+
+        session = Session.objects.get(user=self.user)
+        old_activity = session.last_activity_at
+
+        response = self.client.post(
+            self.refresh_url,
+            HTTP_AUTHORIZATION=f"Bearer {refresh_token}",
+            HTTP_X_AUTH_TRANSPORT="bearer",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        session.refresh_from_db()
+        self.assertIsNotNone(session.last_activity_at)
+        # last_activity should be updated
+        if old_activity:
+            self.assertNotEqual(session.last_activity_at, old_activity)

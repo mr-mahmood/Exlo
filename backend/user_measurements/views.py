@@ -5,8 +5,12 @@ from rest_framework.views import APIView
 from rest_framework import status
 from core.errors import MeasurementsError, APIError
 from users.models import User
-from .serializers import UserMeasurementSerializer
-from .models import Measurements
+from .serializers import (
+    UserMeasurementSerializer,
+    MeasurementPhotosSerializer,
+    MeasurementPhotosSerializer,
+)
+from .models import Measurements, MeasurementPhotos
 from core.pagination import CustomPagination
 
 
@@ -51,22 +55,22 @@ class UserMeasurementsListView(APIView):
 class UserMeasurementDetailView(APIView):
     serializer_class = UserMeasurementSerializer
 
-    def get(self, request, pk):
+    def get(self, request, measurement_id):
         user: User = request.user
 
         try:
-            measurement = Measurements.objects.get(id=pk, user=user)
+            measurement = Measurements.objects.get(id=measurement_id, user=user)
         except Measurements.DoesNotExist:
             raise APIError(MeasurementsError.MEASUREMENT_NOT_FOUND)
 
         serializer = self.serializer_class(measurement, context={"request": request})
         return Response({"measurements": serializer.data}, status=status.HTTP_200_OK)
 
-    def put(self, request, pk):
+    def put(self, request, measurement_id):
         user: User = request.user
 
         try:
-            measurement = Measurements.objects.get(id=pk, user=user)
+            measurement = Measurements.objects.get(id=measurement_id, user=user)
         except Measurements.DoesNotExist:
             raise APIError(MeasurementsError.MEASUREMENT_NOT_FOUND)
 
@@ -82,13 +86,119 @@ class UserMeasurementDetailView(APIView):
 
         return Response({"measurement": serializer.data}, status=status.HTTP_200_OK)
 
-    def delete(self, request, pk):
+    def delete(self, request, measurement_id):
         user: User = request.user
 
         try:
-            measurement = Measurements.objects.get(id=pk, user=user)
+            measurement = Measurements.objects.get(id=measurement_id, user=user)
         except Measurements.DoesNotExist:
             raise APIError(MeasurementsError.MEASUREMENT_NOT_FOUND)
 
         measurement.delete()
         return Response(status=status.HTTP_200_OK)
+
+
+class MeasurementPhotosView(APIView):
+    serializer_class = MeasurementPhotosSerializer
+    pagination_class = CustomPagination
+
+    def get(self, request, measurement_id):
+        user: User = request.user
+
+        photos = MeasurementPhotos.objects.filter(
+            measurements__id=measurement_id,
+            measurements__user=user,
+        ).select_related("measurements__user")
+
+        if not photos.exists():
+            raise APIError(MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS)
+
+        paginator = self.pagination_class()
+        result_page = paginator.paginate_queryset(photos, request, view=self)
+
+        serializer = self.serializer_class(
+            result_page,
+            many=True,
+            context={"request": request},
+        )
+
+        return paginator.get_paginated_response(serializer.data, "photos")
+
+    def post(self, request, measurement_id):
+        user: User = request.user
+
+        measurement = Measurements.objects.filter(
+            id=measurement_id,
+            user=user,
+        )
+
+        if not measurement.exists():
+            raise APIError(MeasurementsError.MEASUREMENT_NOT_FOUND)
+
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        photo_type = serializer.validated_data["type"]  # type: ignore
+
+        if MeasurementPhotos.objects.filter(
+            measurements__id=measurement_id,
+            type=photo_type,
+        ).exists():
+            raise APIError(MeasurementsError.MEASUREMENTS_PHOTO_TYPE_EXIST)
+
+        photo = MeasurementPhotos.objects.create(
+            measurements_id=measurement_id,
+            type=photo_type,
+            photo=serializer.validated_data["photo"],  # type: ignore
+        )
+
+        response_serializer = self.serializer_class(photo)
+        return Response(
+            {"photo": response_serializer.data},
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MeasurementPhotoDetailView(APIView):
+    serializer_class = MeasurementPhotosSerializer
+
+    def get(self, request, measurement_id, photo_id):
+        user: User = request.user
+
+        try:
+            photo = MeasurementPhotos.objects.select_related("measurements__user").get(
+                id=photo_id,
+                measurements__id=measurement_id,
+                measurements__user=user,
+            )
+        except MeasurementPhotos.DoesNotExist:
+            raise APIError(MeasurementsError.PHOTO_NOT_FOUND)
+
+        serializer = self.serializer_class(photo)
+        return Response(
+            {"photo": serializer.data},
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, measurement_id, photo_id):
+        user: User = request.user
+
+        try:
+            photo = MeasurementPhotos.objects.select_related("measurements__user").get(
+                id=photo_id,
+                measurements__id=measurement_id,
+                measurements__user=user,
+            )
+        except MeasurementPhotos.DoesNotExist:
+            raise APIError(MeasurementsError.PHOTO_NOT_FOUND)
+
+        # Delete the physical file
+        if photo.photo:
+            photo.photo.delete(save=False)
+
+        # Delete the database record
+        photo.delete()
+
+        return Response(
+            status=status.HTTP_200_OK,
+        )
