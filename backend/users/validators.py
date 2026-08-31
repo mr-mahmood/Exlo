@@ -19,7 +19,7 @@ def validate_phone(value, instance=None, skip_duplicate_check=False):
         qs = User.objects.filter(phone_number=stripped_value)
         if instance is not None:
             qs = qs.exclude(pk=instance.pk)
-        if qs.exists():
+        if qs:
             raise APIError(SignUpError.PHONE_NUMBER_REUSE)
 
     return stripped_value

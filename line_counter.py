@@ -35,7 +35,7 @@ def main():
 
     subdirs = [
         "backend",
-        "frontend/src",
+        "frontend",
     ]
 
     all_lines = 0

@@ -24,7 +24,7 @@ class UserReferralPIView(APIView):
         )
 
         #  Referral.DoesNotExist only work for get not filter
-        if not referrals.exists():
+        if not referrals:
             raise APIError(ReferralError.NO_EXISTING_REFERRAL)
 
         paginator = self.pagination_class()

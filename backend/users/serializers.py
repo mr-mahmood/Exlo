@@ -7,6 +7,15 @@ from users.validators import (
     validate_date_of_birth,
     validate_phone,
 )
+from rest_framework import serializers
+from django.conf import settings
+from .models import User
+from .validators import validate_name, validate_date_of_birth
+from core.errors import UserAccountError, APIError
+import os
+import io
+from PIL import Image
+from django.core.files.uploadedfile import InMemoryUploadedFile
 
 
 class UserSignupSerializer(serializers.ModelSerializer):
@@ -60,7 +69,7 @@ class UserSignupSerializer(serializers.ModelSerializer):
             return None
 
         # If referral code is provided, validate it exists
-        if not User.objects.filter(referral_code=value).exists():
+        if not User.objects.filter(referral_code=value):
             raise APIError(SignUpError.REFERRAL_CODE_NOT_VALID)
 
         return value
@@ -75,19 +84,6 @@ class UserSignupSerializer(serializers.ModelSerializer):
             # IntegrityError only happend for referral code becuase
             # other fildes checked before with custome validation
             raise APIError(SignUpError.UNEXPECTED_ERROR)
-
-
-# users/serializers.py
-
-from rest_framework import serializers
-from django.conf import settings
-from .models import User
-from .validators import validate_name, validate_date_of_birth
-from core.errors import UserAccountError, APIError
-import os
-import io
-from PIL import Image
-from django.core.files.uploadedfile import InMemoryUploadedFile
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

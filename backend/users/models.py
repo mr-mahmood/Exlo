@@ -21,7 +21,7 @@ class UserManager(BaseUserManager):
 
             code = "".join(secrets.choice(CHARACTERS) for _ in range(LENGTH))
 
-            if not self.model.objects.filter(referral_code=code).exists():
+            if not self.model.objects.filter(referral_code=code):
                 return code
 
     def create_user(self, phone_number, **extra_fields):

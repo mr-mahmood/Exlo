@@ -189,7 +189,14 @@ REST_FRAMEWORK = {
         "rest_framework.parsers.JSONParser",
         "rest_framework.parsers.MultiPartParser",
     ],
+    # Throttling
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",  # For unauthenticated users
+        "rest_framework.throttling.UserRateThrottle",  # For authenticated users
+    ],
     "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/min",      # Rate limit for unauthenticated users
+        "user": "100/min",      # Rate limit for authenticated users
         "otp_phone": "5/day",
         "otp_ip": "10/day",
     },

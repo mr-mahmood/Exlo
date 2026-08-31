@@ -8,7 +8,6 @@ from users.models import User
 from .serializers import (
     UserMeasurementSerializer,
     MeasurementPhotosSerializer,
-    MeasurementPhotosSerializer,
 )
 from .models import Measurements, MeasurementPhotos
 from core.pagination import CustomPagination
@@ -20,9 +19,13 @@ class UserMeasurementsListView(APIView):
 
     def get(self, request):
         user: User = request.user
-        measurements = Measurements.objects.filter(user=user)
 
-        if not measurements.exists():
+        measurements = (
+            Measurements.objects.filter(user=user)
+            .prefetch_related("photos")
+            .order_by("-created_at")
+        )
+        if not measurements:
             raise APIError(MeasurementsError.NO_EXISTING_MEASUREMENTS)
 
         paginator = self.pagination_class()
@@ -59,7 +62,10 @@ class UserMeasurementDetailView(APIView):
         user: User = request.user
 
         try:
-            measurement = Measurements.objects.get(id=measurement_id, user=user)
+            measurement = Measurements.objects.prefetch_related("photos").get(
+                id=measurement_id,
+                user=user,
+            )
         except Measurements.DoesNotExist:
             raise APIError(MeasurementsError.MEASUREMENT_NOT_FOUND)
 
@@ -110,19 +116,16 @@ class MeasurementPhotosView(APIView):
             measurements__user=user,
         ).select_related("measurements__user")
 
-        if not photos.exists():
+        if not photos:
             raise APIError(MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS)
 
-        paginator = self.pagination_class()
-        result_page = paginator.paginate_queryset(photos, request, view=self)
-
         serializer = self.serializer_class(
-            result_page,
+            photos,
             many=True,
             context={"request": request},
         )
 
-        return paginator.get_paginated_response(serializer.data, "photos")
+        return Response({"photos": serializer.data}, status=status.HTTP_200_OK)
 
     def post(self, request, measurement_id):
         user: User = request.user
@@ -132,7 +135,7 @@ class MeasurementPhotosView(APIView):
             user=user,
         )
 
-        if not measurement.exists():
+        if not measurement:
             raise APIError(MeasurementsError.MEASUREMENT_NOT_FOUND)
 
         serializer = self.serializer_class(data=request.data)
@@ -140,19 +143,20 @@ class MeasurementPhotosView(APIView):
 
         photo_type = serializer.validated_data["type"]  # type: ignore
 
-        if MeasurementPhotos.objects.filter(
+        old_photo = MeasurementPhotos.objects.filter(
             measurements__id=measurement_id,
             type=photo_type,
-        ).exists():
+        )
+        if old_photo:
             raise APIError(MeasurementsError.MEASUREMENTS_PHOTO_TYPE_EXIST)
 
-        photo = MeasurementPhotos.objects.create(
-            measurements_id=measurement_id,
-            type=photo_type,
-            photo=serializer.validated_data["photo"],  # type: ignore
+        photo = serializer.save(measurements_id=measurement_id)
+
+        response_serializer = self.serializer_class(
+            photo,
+            context={"request": request},
         )
 
-        response_serializer = self.serializer_class(photo)
         return Response(
             {"photo": response_serializer.data},
             status=status.HTTP_201_CREATED,
@@ -174,7 +178,10 @@ class MeasurementPhotoDetailView(APIView):
         except MeasurementPhotos.DoesNotExist:
             raise APIError(MeasurementsError.PHOTO_NOT_FOUND)
 
-        serializer = self.serializer_class(photo)
+        serializer = self.serializer_class(
+            photo,
+            context={"request": request},
+        )
         return Response(
             {"photo": serializer.data},
             status=status.HTTP_200_OK,

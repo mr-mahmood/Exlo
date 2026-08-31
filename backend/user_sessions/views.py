@@ -20,7 +20,7 @@ class UserSessionPIView(APIView):
         sessions = Session.objects.filter(user=user)
 
         #  Session.DoesNotExist only work for get not filter
-        if not sessions.exists():
+        if not sessions:
             raise APIError(SessionError.NO_EXISTING_SESSION)
 
         paginator = self.pagination_class()
