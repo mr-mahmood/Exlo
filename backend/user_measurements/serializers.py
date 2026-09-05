@@ -251,7 +251,6 @@ class UserMeasurementSerializer(serializers.ModelSerializer):
         ]
 
         # Check if this is a create operation (no instance) or update (has instance)
-        # For create operations, require at least one measurement field
         is_create = not self.instance
         if is_create:
             has_measurement = any(

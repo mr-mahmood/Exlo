@@ -9,6 +9,7 @@ from django.db import IntegrityError, transaction
 from users.models import User
 from user_referrals.models import Referral
 from core.errors import ReferralError, APIError, UserAccountError, AuthenticationError
+from django.conf import settings
 
 
 class UserReferralPIViewTest(TestCase):
@@ -559,6 +560,7 @@ class UserReferralPIViewIntegrationTest(TestCase):
     """Integration tests for UserReferralPIView with actual URL routing"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.client = APIClient()
 
         self.user = User.objects.create_user(

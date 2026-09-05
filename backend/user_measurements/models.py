@@ -144,8 +144,18 @@ class Measurements(models.Model):
         ordering = ["-created_at"]
 
         indexes = [
-            models.Index(fields=["user"], name="user_idx"),
-            models.Index(fields=["user", "created_at"], name="user_create_idx"),
+            models.Index(
+                fields=["user"],
+                name="user_idx",
+            ),
+            models.Index(
+                fields=["user", "created_at"],
+                name="user_create_idx",
+            ),
+            models.Index(
+                fields=["created_at"],
+                name="measurements_created_at_idx",
+            ),
         ]
 
     def __str__(self):
@@ -208,6 +218,10 @@ class MeasurementPhotos(models.Model):
             models.Index(
                 fields=["measurements", "created_at"],
                 name="measurement_photos_create_idx",
+            ),
+            models.Index(
+                fields=["created_at"],
+                name="meas_photo_created_idx",
             ),
         ]
 

@@ -21,7 +21,7 @@ class UserManager(BaseUserManager):
 
             code = "".join(secrets.choice(CHARACTERS) for _ in range(LENGTH))
 
-            if not self.model.objects.filter(referral_code=code):
+            if not User.objects.filter(referral_code=code):
                 return code
 
     def create_user(self, phone_number, **extra_fields):
@@ -31,7 +31,7 @@ class UserManager(BaseUserManager):
 
         with transaction.atomic():
 
-            user = self.model(
+            user = User(
                 phone_number=phone_number,
                 referral_code=self._generate_unique_referral_code(),
                 **extra_fields,
@@ -48,7 +48,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", True)
 
         with transaction.atomic():
-            user = self.model(
+            user = User(
                 phone_number=phone_number,
                 referral_code=self._generate_unique_referral_code(),
                 **extra_fields,
@@ -173,16 +173,29 @@ class User(AbstractUser):
         ordering = ["-created_at"]
         indexes = [
             models.Index(
-                fields=[
-                    "is_active",
-                    "is_blocked",
-                ],
+                fields=["is_active", "is_blocked"],
                 name="users_status_idx",
             ),
-            models.Index(fields=["role"], name="users_role_idx"),
-            models.Index(fields=["created_at"], name="users_created_idx"),
-            models.Index(fields=["last_login_at"], name="users_login_idx"),
-            models.Index(fields=["referral_code"], name="referral_code_idx"),
+            models.Index(
+                fields=["role"],
+                name="users_role_idx",
+            ),
+            models.Index(
+                fields=["created_at"],
+                name="users_created_idx",
+            ),
+            models.Index(
+                fields=["last_login_at"],
+                name="users_login_idx",
+            ),
+            models.Index(
+                fields=["referral_code"],
+                name="referral_code_idx",
+            ),
+            models.Index(
+                fields=["created_at"],
+                name="user_created_at_idx",
+            ),
         ]
 
     def __str__(self):

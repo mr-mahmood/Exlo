@@ -1039,6 +1039,7 @@ class AuthTransportUtilsTest(TestCase):
     """Test auth transport utility functions"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.factory = RequestFactory()
 
     def test_is_bearer_transport_with_bearer_header(self):

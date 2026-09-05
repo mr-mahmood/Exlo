@@ -1,4 +1,5 @@
 from rest_framework.permissions import BasePermission
+from users.models import User
 
 
 class IsUserActive(BasePermission):
@@ -18,37 +19,5 @@ class IsAdmin(BasePermission):
             and request.user.is_user_active
             and request.user.is_staff
             and request.user.is_superuser
+            and request.user.role == User.Role.ADMIN
         )
-
-
-# class IsCoach(BasePermission):
-#     def has_permission(self, request, view):
-#         user = request.user
-
-#         if not user or not user.is_authenticated:
-#             return False
-
-#         if not user.is_user_active:
-#             return False
-
-#         return CoachProfile.objects.filter(
-#             user=user,
-#             # status=CoachProfile.Status.ACTIVE,
-#         ).exists()
-
-
-# class IsGymOwner(BasePermission):
-#     def has_permission(self, request, view):
-#         user = request.user
-
-#         if not user or not user.is_authenticated:
-#             return False
-
-#         if not user.is_user_active:
-#             return False
-
-#         return UserGymRole.objects.filter(
-#             user=user,
-#             role=UserGymRole.Role.OWNER,
-#             deleted_at__isnull=True,
-#         ).exists()

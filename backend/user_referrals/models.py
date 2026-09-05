@@ -32,10 +32,21 @@ class Referral(models.Model):
         db_table = "user_referrals"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["referred_user"], name="referral_referred_user_idx"),
-            models.Index(fields=["referrer"], name="referral_referrer_idx"),
             models.Index(
-                fields=["referred_user", "referrer"], name="referral_unique_idx"
+                fields=["referred_user"],
+                name="referral_referred_user_idx",
+            ),
+            models.Index(
+                fields=["referrer"],
+                name="referral_referrer_idx",
+            ),
+            models.Index(
+                fields=["referred_user", "referrer"],
+                name="referral_unique_idx",
+            ),
+            models.Index(
+                fields=["created_at"],
+                name="referrals_created_at_idx",
             ),
         ]
         unique_together = [["referrer", "referred_user"]]

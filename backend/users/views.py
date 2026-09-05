@@ -19,8 +19,8 @@ from typing import cast
 
 
 class UserSignupAPIView(APIView):
-    permission_classes = [AllowAny]
     authentication_classes = []
+    permission_classes = [AllowAny]
     serializer_class = UserSignupSerializer
 
     def post(self, request):
@@ -270,14 +270,11 @@ class UserProfilePIView(APIView):
             partial=True,
         )
         serializer.is_valid(raise_exception=True)
-        updated_user = serializer.save()
+        serializer.save()
 
         return Response(
             {
-                "user": self.serializer_class(
-                    updated_user,
-                    context={"request": request},
-                ).data,
+                "user": serializer.data,
             },
             status=status.HTTP_200_OK,
         )

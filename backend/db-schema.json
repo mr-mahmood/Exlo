@@ -3813,7 +3813,7 @@
         },
         {
           "id": "FwuG62CBp5TotxCK97vJQ",
-          "name": "gym_id",
+          "name": "gym",
           "type": "UUID",
           "default": "",
           "check": "",
@@ -3825,7 +3825,7 @@
         },
         {
           "id": "nWZTIiYJpyF1qAMr3_q_y",
-          "name": "photo_url",
+          "name": "photo",
           "type": "VARCHAR",
           "default": "",
           "check": "",
@@ -3838,18 +3838,6 @@
         {
           "id": "M17G9xbFPyFIVUpkA1QyX",
           "name": "created_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "CF9k--lRFU-5VIPZq4rAb",
-          "name": "updated_at",
           "type": "TIMESTAMP",
           "default": "",
           "check": "",
@@ -4205,18 +4193,6 @@
           "comment": ""
         },
         {
-          "id": "_B-w--E7wyM0yte9gUiIp",
-          "name": "description",
-          "type": "TEXT",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
           "id": "PWoLpJgNEvQ5d8K9JPpm_",
           "name": "province",
           "type": "VARCHAR",
@@ -4278,15 +4254,17 @@
         },
         {
           "id": "NFkW0N-UW8gaaSmHnnGQP",
-          "name": "status",
-          "type": "VARCHAR",
+          "name": "is_active",
+          "type": "BOOLEAN",
           "default": "",
           "check": "",
           "primary": false,
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": ""
+          "comment": "",
+          "size": "",
+          "values": []
         },
         {
           "id": "AA8ulD-0de0kf7JUcqClG",
@@ -4303,18 +4281,6 @@
         {
           "id": "fq6tVyNsQpvsUWpiknyXs",
           "name": "updated_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "q6BGSlQbQMHKQoZZizou0",
-          "name": "deleted_at",
           "type": "TIMESTAMP",
           "default": "",
           "check": "",
@@ -4388,44 +4354,8 @@
           "comment": "OWNER\nSTAFF\nCOACH\nATHLETE"
         },
         {
-          "id": "1DK1ppxvlgUIzAq5Ch8PC",
-          "name": "assigned_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
           "id": "BOlaiDhfz2KDvOx09ewQK",
           "name": "created_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "4OuI58DgceG3QxHf80yyY",
-          "name": "updated_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "fRKen6o0VBMdN4uApAi_j",
-          "name": "deleted_at",
           "type": "TIMESTAMP",
           "default": "",
           "check": "",
@@ -4878,30 +4808,6 @@
           "comment": ""
         },
         {
-          "id": "34FOYIs06881aae1YrMp6",
-          "name": "body_fat_percentage",
-          "type": "NUMERIC",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "q1YHD8X7zMCXUTqqQeJu2",
-          "name": "muscle_mass_kg",
-          "type": "NUMERIC",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
           "id": "9P4AsuixALd8QeQEsDWw6",
           "name": "chest_cm",
           "type": "NUMERIC",
@@ -5000,18 +4906,6 @@
         {
           "id": "c2SegB9sx26TmRciQm8gg",
           "name": "hips_cm",
-          "type": "NUMERIC",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "OI-XIZ7uNzNOdlpuIeoW8",
-          "name": "neck_cm",
           "type": "NUMERIC",
           "default": "",
           "check": "",
@@ -8016,7 +7910,7 @@
     {
       "id": 0,
       "name": "user",
-      "x": 0,
+      "x": 2.9549108875780803,
       "y": 0,
       "width": 2450,
       "height": 2800,

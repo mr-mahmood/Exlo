@@ -37,14 +37,18 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "import_export",
-    # Project apps
+    # Auth apps
+    "authentication",
+    # User apps
     "users",
     "user_sessions",
     "user_referrals",
     "user_measurements",
     "user_notifications",
     "user_pwa",
-    "authentication",
+    # Gym apps
+    "gym",
+    "gym_auth",
 ]
 
 MIDDLEWARE = [
@@ -195,8 +199,8 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",  # For authenticated users
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "100/min",      # Rate limit for unauthenticated users
-        "user": "100/min",      # Rate limit for authenticated users
+        "anon": "100/min",  # Rate limit for unauthenticated users
+        "user": "100/min",  # Rate limit for authenticated users
         "otp_phone": "5/day",
         "otp_ip": "10/day",
     },

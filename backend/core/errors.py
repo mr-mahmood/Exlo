@@ -292,9 +292,6 @@ class ReferralError(APIError):
     )
 
 
-# core/errors.py
-
-
 # ============================================================================
 # MEASUREMENTS
 # ============================================================================
@@ -465,5 +462,76 @@ class MeasurementsError(APIError):
     IMAGE_CONVERSION_FAILED = (
         "MEAS_031",
         "Failed to process image. Please try with a different image",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# GYM
+# ============================================================================
+class GymError(APIError):
+    GYM_NOT_FOUND = (
+        "GYM_001",
+        "gym not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    GYM_HAS_ACTIVE_MEMBERSHIPS = (
+        "GYM_002",
+        "gym have active members in it still",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_NOT_FOUND = (
+        "GYM_003",
+        "photo not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    PHOTO_FILE_TOO_LARGE = (
+        "GYM_004",
+        "photo file is too large",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_PHOTO_EXTENSION = (
+        "GYM_005",
+        "invalid photo extension",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_PHOTO_FILE = (
+        "GYM_006",
+        "invalid photo file",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_FILE_REQUIRED = (
+        "GYM_007",
+        "photo file is required",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    IMAGE_CONVERSION_FAILED = (
+        "GYM_008",
+        "failed to convert image to WebP format",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_UPLOAD_FAILED = (
+        "GYM_009",
+        "failed to upoad the images for gym",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    MISSING_GYM_DATA = (
+        "GYM_010",
+        "Some fields are required for gym create",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    PHOTO_FILE_EMPTY = (
+        "GYM_011",
+        "photo is empty",
         status.HTTP_400_BAD_REQUEST,
     )
