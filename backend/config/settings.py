@@ -48,7 +48,12 @@ INSTALLED_APPS = [
     "user_pwa",
     # Gym apps
     "gym",
+    "gym_photos",
+    "gym_announcements",
     "gym_auth",
+    "gym_plans",
+    "gym_subscriptions",
+    "gym_visits",
 ]
 
 MIDDLEWARE = [

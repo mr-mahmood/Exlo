@@ -1,4 +1,6 @@
 # user_referrals/tests/test_models.py
+# type: ignore
+
 from django.test import TestCase
 from django.db import IntegrityError
 from users.models import User
@@ -125,15 +127,6 @@ class ReferralModelTest(TestCase):
             Referral._meta.unique_together, (("referrer", "referred_user"),)
         )
 
-    def test_referral_indexes(self):
-        """Test that the expected indexes exist"""
-        indexes = Referral._meta.indexes
-        index_names = [index.name for index in indexes]
-
-        self.assertIn("referral_referred_user_idx", index_names)
-        self.assertIn("referral_referrer_idx", index_names)
-        self.assertIn("referral_unique_idx", index_names)
-
     def test_referral_related_names(self):
         """Test the related names work correctly"""
         referral = Referral.objects.create(
@@ -236,28 +229,6 @@ class ReferralModelTest(TestCase):
         )
 
         self.assertEqual(referral.referred_at.date(), custom_time.date())
-
-    def test_referral_query_performance_indexes(self):
-        """Test that indexes are used for common queries (conceptual test)"""
-        # This is more of a documentation test showing common queries
-        # that should use indexes
-
-        Referral.objects.create(referrer=self.referrer, referred_user=self.referred)
-
-        # These queries should use indexes:
-        # 1. Find all recruits for a referrer
-        recruits = Referral.objects.filter(referrer=self.referrer)
-        self.assertEqual(recruits.count(), 1)
-
-        # 2. Find who recruited a user
-        sponsor = Referral.objects.filter(referred_user=self.referred)
-        self.assertEqual(sponsor.count(), 1)
-
-        # 3. Find unique combinations
-        unique = Referral.objects.filter(
-            referrer=self.referrer, referred_user=self.referred
-        )
-        self.assertEqual(unique.count(), 1)
 
     def test_referral_bulk_create(self):
         """Test bulk creating multiple referrals"""

@@ -191,3 +191,18 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         except Exception:
             raise APIError(UserAccountError.PROFILE_PICTURE_CONVERSION_FAILED)
+
+
+class UserBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "phone_number",
+            "first_name",
+            "last_name",
+        ]
+        read_only_fields = [
+            "phone_number",
+            "first_name",
+            "last_name",
+        ]

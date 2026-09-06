@@ -36,18 +36,9 @@ class Session(models.Model):
         db_table = "user_sessions"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(
-                fields=["session_id"],
-                name="session_id_idx",
-            ),
-            models.Index(
-                fields=["session_id", "user"],
-                name="user_active_session_idx",
-            ),
-            models.Index(
-                fields=["created_at"],
-                name="sessions_created_at_idx",
-            ),
+            models.Index(fields=["session_id"]),
+            models.Index(fields=["session_id", "user"]),
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):

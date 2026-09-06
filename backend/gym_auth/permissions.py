@@ -47,6 +47,28 @@ class IsGymStaff(BasePermission):
         ).exists()
 
 
+class IsGymCoach(BasePermission):
+    """Check if user is a coach at the gym"""
+    def has_permission(self, request, view):
+        user = request.user
+
+        # Must have gym_id in URL
+        gym_id = view.kwargs.get("gym_id")
+        if not gym_id:
+            return False
+
+        # User must be active and authenticated
+        if not IsUserActive().has_permission(request, view):
+            return False
+
+        # Check if user is coach of this gym
+        return UserGymRole.objects.filter(
+            user=user,
+            gym_id=gym_id,
+            role=UserGymRole.Role.COACH,
+        ).exists()
+
+
 class IsGymAthlete(BasePermission):
     def has_permission(self, request, view):
         user = request.user
@@ -65,6 +87,26 @@ class IsGymAthlete(BasePermission):
             user=user,
             gym_id=gym_id,
             role=UserGymRole.Role.ATHLETE,
+        ).exists()
+
+
+class IsGymMember(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+
+        # Must have gym_id in URL
+        gym_id = view.kwargs.get("gym_id")
+        if not gym_id:
+            return False
+
+        # User must be active and authenticated
+        if not IsUserActive().has_permission(request, view):
+            return False
+
+        # Check if user has ANY role in this gym
+        return UserGymRole.objects.filter(
+            user=user,
+            gym_id=gym_id,
         ).exists()
 
 

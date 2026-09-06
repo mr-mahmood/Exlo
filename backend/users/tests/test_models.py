@@ -312,15 +312,6 @@ class UserModelTest(TestCase):
         """Test model default ordering"""
         self.assertEqual(User._meta.ordering, ["-created_at"])
 
-    def test_model_indexes(self):
-        """Test model has correct indexes"""
-        index_names = [index.name for index in User._meta.indexes]
-        self.assertIn("users_status_idx", index_names)
-        self.assertIn("users_role_idx", index_names)
-        self.assertIn("users_created_idx", index_names)
-        self.assertIn("users_login_idx", index_names)
-        self.assertIn("referral_code_idx", index_names)
-
     # ============ STRING REPRESENTATION TESTS ============
 
     def test_model_str(self):

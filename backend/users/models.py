@@ -172,30 +172,11 @@ class User(AbstractUser):
         db_table = "users"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(
-                fields=["is_active", "is_blocked"],
-                name="users_status_idx",
-            ),
-            models.Index(
-                fields=["role"],
-                name="users_role_idx",
-            ),
-            models.Index(
-                fields=["created_at"],
-                name="users_created_idx",
-            ),
-            models.Index(
-                fields=["last_login_at"],
-                name="users_login_idx",
-            ),
-            models.Index(
-                fields=["referral_code"],
-                name="referral_code_idx",
-            ),
-            models.Index(
-                fields=["created_at"],
-                name="user_created_at_idx",
-            ),
+            models.Index(fields=["is_active", "is_blocked"]),
+            models.Index(fields=["role"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["last_login_at"]),
+            models.Index(fields=["referral_code"]),
         ]
 
     def __str__(self):

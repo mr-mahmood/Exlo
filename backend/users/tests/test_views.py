@@ -1,4 +1,6 @@
 # users/tests/test_views.py
+# type: ignore
+
 from django.conf import settings
 from django.db import IntegrityError
 from django.test import TestCase

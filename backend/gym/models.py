@@ -63,18 +63,9 @@ class Gym(models.Model):
         ordering = ["-created_at"]
 
         indexes = [
-            models.Index(
-                fields=["name"],
-                name="name_idx",
-            ),
-            models.Index(
-                fields=["gym_code"],
-                name="gym_code_idx",
-            ),
-            models.Index(
-                fields=["created_at"],
-                name="gym_created_at_idx",
-            ),
+            models.Index(fields=["name"]),
+            models.Index(fields=["gym_code"]),
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):
@@ -107,44 +98,3 @@ class Gym(models.Model):
     # TODO: add the logic once the memebership tables and other part added to app
     def has_active_memberships(self):
         return False
-
-
-def gym_picture_path(instance, filename):
-    return f"gym_photos/{uuid.uuid4().hex}.webp"
-
-
-class GymPhotos(models.Model):
-
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid4,
-        editable=False,
-    )
-
-    gym = models.ForeignKey(
-        to=Gym,
-        on_delete=models.CASCADE,
-        related_name="photos",
-    )
-
-    photo = models.ImageField(
-        upload_to=gym_picture_path,
-        null=True,
-        blank=True,
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "gym_photos"
-        ordering = ["-created_at"]
-
-        indexes = [
-            models.Index(
-                fields=["created_at"],
-                name="gym_photo_created_at_idx",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.gym.name} photo - {self.created_at}"

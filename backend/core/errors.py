@@ -535,3 +535,20 @@ class GymError(APIError):
         "photo is empty",
         status.HTTP_400_BAD_REQUEST,
     )
+
+
+# ============================================================================
+# GYM
+# ============================================================================
+class GymAnnouncementError(APIError):
+    ANNOUNCEMENT_NOT_FOUND = (
+        "ANNOU_001",
+        "announcement not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    GYM_REQUIRED = (
+        "ANNOU_002",
+        "gym is requierd for makign annoncement",
+        status.HTTP_400_BAD_REQUEST,
+    )

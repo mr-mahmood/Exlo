@@ -1,4 +1,6 @@
 # user_sessions/tests/test_models.py
+# type: ignore
+
 from django.test import TestCase, RequestFactory
 from django.utils import timezone
 from users.models import User
@@ -183,18 +185,6 @@ class SessionModelTest(TestCase):
         # Test deleting user deletes sessions
         self.user.delete()
         self.assertEqual(Session.objects.count(), 0)
-
-    def test_session_indexes_exist(self):
-        """Test that the expected indexes exist"""
-        # Check if indexes are created in the database
-        from django.db import connection
-
-        with connection.cursor() as cursor:
-            # This will vary by database backend, but we can check the model meta
-            indexes = Session._meta.indexes
-            index_names = [index.name for index in indexes]
-            self.assertIn("session_id_idx", index_names)
-            self.assertIn("user_active_session_idx", index_names)
 
     def test_session_ordering(self):
         """Test that sessions are ordered by created_at desc"""

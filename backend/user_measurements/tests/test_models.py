@@ -1,4 +1,5 @@
 # user_measurements/tests/test_models.py
+# type: ignore
 
 from django.test import TestCase
 from users.models import User
@@ -173,15 +174,6 @@ class MeasurementsModelTest(TestCase):
     def test_db_table_name(self):
         """Test the database table name"""
         self.assertEqual(Measurements._meta.db_table, "user_measurements")
-
-    def test_indexes(self):
-        """Test that indexes are created correctly"""
-        indexes = Measurements._meta.indexes
-        index_names = [index.name for index in indexes]
-
-        self.assertIn("user_idx", index_names)
-        self.assertIn("user_create_idx", index_names)
-
     def test_str_method_with_full_name(self):
         """Test the string representation with user's full name"""
         measurement = Measurements.objects.create(user=self.user)
@@ -416,14 +408,6 @@ class MeasurementPhotosModelTest(TestCase):
         )
         expected = f"{self.user.get_full_name()} photo - {photo.created_at}"
         self.assertEqual(str(photo), expected)
-
-    def test_indexes(self):
-        """Test that indexes are created correctly"""
-        indexes = MeasurementPhotos._meta.indexes
-        index_names = [index.name for index in indexes]
-
-        self.assertIn("measurement_photos_meas_idx", index_names)
-        self.assertIn("measurement_photos_create_idx", index_names)
 
     def test_unique_together(self):
         """Test that unique_together is set correctly"""

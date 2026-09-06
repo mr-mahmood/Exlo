@@ -1,17 +1,16 @@
 # gym/views.py
 
-from django.db import transaction
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from authentication.permissions import IsAdmin
 from gym_auth.permissions import IsAdminOrGymOwner
-from gym.models import Gym, GymPhotos
+from gym.models import Gym
+from gym.serializers import GymSerializer
 from core.pagination import CustomPagination
 from core.errors import APIError, GymError
 from typing import cast
-from gym.serializers import GymSerializer, GymPhotoSerializer
 
 
 class GymListAPIView(APIView):
@@ -42,7 +41,15 @@ class GymDetailAPIView(APIView):
 
     def get(self, request, gym_id):
         try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
+            gym = (
+                Gym.objects.filter(id=gym_id, is_active=True)
+                .prefetch_related("photos")
+                .first()
+            )
+
+            if not gym:
+                raise APIError(GymError.GYM_NOT_FOUND)
+
         except Gym.DoesNotExist:
             raise APIError(GymError.GYM_NOT_FOUND)
 
@@ -119,95 +126,5 @@ class GymDeleteAPIView(APIView):
             raise APIError(GymError.GYM_HAS_ACTIVE_MEMBERSHIPS)
 
         gym.delete()
-
-        return Response(status=status.HTTP_200_OK)
-
-
-# ============================================================================
-# PHOTO ENDPOINTS
-# ============================================================================
-class GymPhotosAPIView(APIView):
-    authentication_classes = []
-    permission_classes = [AllowAny]
-    serializer_class = GymPhotoSerializer
-
-    def get(self, request, gym_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
-
-        photos = gym.photos.all()  # type: ignore
-
-        serializer = self.serializer_class(
-            photos,
-            many=True,
-            context={"request": request},
-        )
-
-        return Response(
-            {
-                "gym_photos": serializer.data,
-            },
-            status=status.HTTP_200_OK,
-        )
-
-
-class GymPhotoCreateAPIView(APIView):
-    permission_classes = [IsAdminOrGymOwner]
-    serializer_class = GymPhotoSerializer
-
-    def post(self, request, gym_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
-
-        files = request.FILES.getlist("photos")
-
-        if not files:
-            raise APIError(GymError.PHOTO_FILE_REQUIRED)
-
-        with transaction.atomic():
-            for file in files:
-                data = {"photo": file}
-                serializer = self.serializer_class(
-                    data=data,
-                    context={
-                        "request": request,
-                        "gym": gym,
-                    },
-                )
-
-                if not serializer.is_valid():
-                    raise APIError(GymError.PHOTO_UPLOAD_FAILED)
-
-                serializer.save()
-
-        return Response(status=status.HTTP_201_CREATED)
-
-
-class GymPhotoDeleteAPIView(APIView):
-    permission_classes = [IsAdminOrGymOwner]
-    serializer_class = GymPhotoSerializer
-
-    def delete(self, request, gym_id, photo_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
-
-        try:
-            queryset = GymPhotos.objects.select_related("gym")
-            if gym:
-                queryset = queryset.filter(gym=gym)
-            photo = queryset.get(id=photo_id)
-        except GymPhotos.DoesNotExist:
-            raise APIError(GymError.PHOTO_NOT_FOUND)
-
-        if photo.photo:
-            photo.photo.delete(save=False)
-
-        photo.delete()
 
         return Response(status=status.HTTP_200_OK)

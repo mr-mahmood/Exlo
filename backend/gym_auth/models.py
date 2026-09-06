@@ -48,22 +48,10 @@ class UserGymRole(models.Model):
         unique_together = [["user", "gym", "role"]]
 
         indexes = [
-            models.Index(
-                fields=["user", "role"],
-                name="user_role_idx",
-            ),
-            models.Index(
-                fields=["gym", "role"],
-                name="gym_role_idx",
-            ),
-            models.Index(
-                fields=["user", "gym", "role"],
-                name="user_gym_role_idx",
-            ),
-            models.Index(
-                fields=["created_at"],
-                name="user_gym_role_created_at_idx",
-            ),
+            models.Index(fields=["user", "role"]),
+            models.Index(fields=["gym", "role"]),
+            models.Index(fields=["user", "gym", "role"]),
+            models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):
