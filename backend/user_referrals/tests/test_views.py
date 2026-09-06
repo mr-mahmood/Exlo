@@ -1,4 +1,6 @@
 # user_referrals/tests/test_views.py
+# type: ignore
+
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -107,7 +109,7 @@ class UserReferralPIViewTest(TestCase):
             self.assertIn(field, referred_user_data)
 
         # Verify all referrals belong to the user
-        for referral in response.data["referrals"]:  # type: ignore
+        for referral in response.data["referrals"]:
             phone = referral["referred_user"]["phone_number"]
             self.assertIn(phone, ["09111111111", "09222222222"])
 
@@ -121,11 +123,13 @@ class UserReferralPIViewTest(TestCase):
             gender=User.Gender.MALE,
         )
 
-        self.client.force_authenticate(user=new_user)  # type: ignore
+        self.client.force_authenticate(user=new_user)
         response = self.client.get(self.url)
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], ReferralError.NO_EXISTING_REFERRAL[0])  # type: ignore
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["referrals"], [])
+        self.assertIsNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_get_referrals_unauthenticated(self):
         """Test retrieving referrals without authentication"""

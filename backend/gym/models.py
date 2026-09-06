@@ -5,6 +5,22 @@ import secrets
 from django.db import models
 
 
+class GymManager(models.Manager):
+
+    def get_gym(self, gym_id, active_only=True) -> "Gym":
+        try:
+            queryset = self.filter(id=gym_id)
+
+            if active_only:
+                queryset = queryset.filter(is_active=True)
+
+            return queryset.get()
+        except Gym.DoesNotExist:
+            from core.errors import APIError, GymError
+
+            raise APIError(GymError.GYM_NOT_FOUND)
+
+
 class Gym(models.Model):
     id = models.UUIDField(
         primary_key=True,
@@ -58,6 +74,9 @@ class Gym(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Custom manager
+    objects: GymManager = GymManager()
+
     class Meta:
         db_table = "gym"
         ordering = ["-created_at"]
@@ -94,7 +113,3 @@ class Gym(models.Model):
     def deactivate(self):
         self.is_active = False
         self.save(update_fields=["is_active", "updated_at"])
-
-    # TODO: add the logic once the memebership tables and other part added to app
-    def has_active_memberships(self):
-        return False

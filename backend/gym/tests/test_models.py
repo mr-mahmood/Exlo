@@ -85,12 +85,6 @@ class GymModelTest(TestCase):
         gym.refresh_from_db()
         self.assertFalse(gym.is_active)
 
-    def test_gym_has_active_memberships(self):
-        """Test has_active_memberships method."""
-        gym = Gym.objects.create(name="Test Gym")
-        # TODO: Update when membership tables are added
-        self.assertTrue(gym.has_active_memberships())
-
     def test_gym_ordering(self):
         """Test that gyms are ordered by created_at descending."""
         gym1 = Gym.objects.create(name="Gym 1")

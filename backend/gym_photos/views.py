@@ -18,10 +18,7 @@ class GymPhotosAPIView(APIView):
     serializer_class = GymPhotoSerializer
 
     def get(self, request, gym_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id, active_only=True)
 
         photos = gym.photos.all()  # type: ignore
 
@@ -44,10 +41,7 @@ class GymPhotoCreateAPIView(APIView):
     serializer_class = GymPhotoSerializer
 
     def post(self, request, gym_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id, active_only=True)
 
         files = request.FILES.getlist("photos")
 
@@ -78,10 +72,7 @@ class GymPhotoDeleteAPIView(APIView):
     serializer_class = GymPhotoSerializer
 
     def delete(self, request, gym_id, photo_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id, active_only=True)
 
         try:
             queryset = GymPhotos.objects.select_related("gym")

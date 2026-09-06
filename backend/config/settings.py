@@ -54,6 +54,12 @@ INSTALLED_APPS = [
     "gym_plans",
     "gym_subscriptions",
     "gym_visits",
+    # Commerce apps
+    "commerce_products",
+    "commerce_orders",
+    "commerce_payments",
+    "commerce_refunds",
+    "commerce_commissions",
 ]
 
 MIDDLEWARE = [

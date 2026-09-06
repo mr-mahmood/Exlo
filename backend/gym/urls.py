@@ -17,4 +17,5 @@ urlpatterns = [
     path("<uuid:gym_id>/", GymDetailAPIView.as_view(), name="detail"),
     path("<uuid:gym_id>/update/", GymUpdateAPIView.as_view(), name="update"),
     path("<uuid:gym_id>/delete/", GymDeleteAPIView.as_view(), name="delete"),
+    path("<uuid:gym_id>/restore/", GymDeleteAPIView.as_view(), name="restore"),
 ]

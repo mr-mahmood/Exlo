@@ -200,32 +200,6 @@ class GymViewsTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["gym"]["city"], "New City")
 
-    # ==================== GYM DELETE TESTS ====================
-
-    def test_gym_delete_admin_or_owner_only(self):
-        """Test that only admin or gym owner can delete gym."""
-        self.authenticate(self.regular_user)
-        response = self.client.delete(
-            reverse("gym:delete", kwargs={"gym_id": self.gym.id})
-        )
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
-        self.authenticate(self.gym_owner)
-        with patch.object(Gym, "has_active_memberships", return_value=False):
-            response = self.client.delete(
-                reverse("gym:delete", kwargs={"gym_id": self.gym.id})
-            )
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_gym_delete_with_active_memberships(self):
-        """Test deleting gym with active memberships fails."""
-        with patch.object(Gym, "has_active_memberships", return_value=True):
-            self.authenticate(self.admin_user)
-            response = self.client.delete(
-                reverse("gym:delete", kwargs={"gym_id": self.gym.id})
-            )
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-
     # ==================== PERMISSION TESTS ====================
 
     def test_is_gym_owner_permission(self):

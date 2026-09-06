@@ -49,6 +49,7 @@ class IsGymStaff(BasePermission):
 
 class IsGymCoach(BasePermission):
     """Check if user is a coach at the gym"""
+
     def has_permission(self, request, view):
         user = request.user
 
@@ -123,4 +124,12 @@ class IsAdminOrGymStaff(BasePermission):
         return bool(
             IsAdmin().has_permission(request, view)
             or IsGymStaff().has_permission(request, view)
+        )
+
+
+class IsAdminOrGymMember(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            IsAdmin().has_permission(request, view)
+            or IsGymMember().has_permission(request, view)
         )

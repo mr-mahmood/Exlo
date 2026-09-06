@@ -18,6 +18,7 @@ urlpatterns = [
     path("api/gym/", include("gym.urls")),
     path("api/gym/", include("gym_photos.urls")),
     path("api/gym/", include("gym_announcements.urls")),
+    path("api/gym/", include("gym_plans.urls")),
 ]
 
 if settings.DEBUG:

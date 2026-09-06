@@ -538,7 +538,7 @@ class GymError(APIError):
 
 
 # ============================================================================
-# GYM
+# GYM ANNOUNCEMENT
 # ============================================================================
 class GymAnnouncementError(APIError):
     ANNOUNCEMENT_NOT_FOUND = (
@@ -550,5 +550,31 @@ class GymAnnouncementError(APIError):
     GYM_REQUIRED = (
         "ANNOU_002",
         "gym is requierd for makign annoncement",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# GYM PLANS
+# ============================================================================
+class GymPlansError(APIError):
+    PLAN_NOT_FOUND = (
+        "PLAN_001",
+        "Plan not found.",
+        status.HTTP_404_NOT_FOUND,
+    )
+    INVALID_DURATION = (
+        "PLAN_002",
+        "Duration cannot be negative.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+    INVALID_VISIT_LIMIT = (
+        "PLAN_003",
+        "Visit limit cannot be negative.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+    INVALID_PRICE = (
+        "PLAN_004",
+        "Price cannot be negative.",
         status.HTTP_400_BAD_REQUEST,
     )

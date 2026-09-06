@@ -1,4 +1,6 @@
 # user_sessions/tests/test_views.py
+# type: ignore
+
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -89,11 +91,13 @@ class UserSessionPIViewTest(TestCase):
         )
 
         # Use self.client (not a new client) and authenticate with new_user
-        self.client.force_authenticate(user=new_user)  # type: ignore
+        self.client.force_authenticate(user=new_user)
         response = self.client.get(self.url)
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], SessionError.NO_EXISTING_SESSION[0])  # type: ignore
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["sessions"], [])
+        self.assertIsNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_get_sessions_unauthenticated(self):
         """Test retrieving sessions without authentication"""

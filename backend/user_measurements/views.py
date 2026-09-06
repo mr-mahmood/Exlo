@@ -25,8 +25,6 @@ class UserMeasurementsListView(APIView):
             .prefetch_related("photos")
             .order_by("-created_at")
         )
-        if not measurements:
-            raise APIError(MeasurementsError.NO_EXISTING_MEASUREMENTS)
 
         paginator = self.pagination_class()
         result_page = paginator.paginate_queryset(measurements, request, view=self)

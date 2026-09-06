@@ -7,6 +7,22 @@ from users.models import User
 from gym.models import Gym
 
 
+class GymAnnouncementManager(models.Manager):
+
+    def get_announcement(self, announcement_id, gym=None) -> "GymAnnouncement":
+        try:
+            queryset = self.filter(id=announcement_id)
+
+            if gym:
+                queryset = queryset.filter(gym=gym)
+
+            return queryset.get()
+        except GymAnnouncement.DoesNotExist:
+            from core.errors import APIError, GymAnnouncementError
+
+            raise APIError(GymAnnouncementError.ANNOUNCEMENT_NOT_FOUND)
+
+
 class GymAnnouncement(models.Model):
     class Status(models.TextChoices):
         DRAFT = "DRAFT", "Draft"
@@ -52,6 +68,9 @@ class GymAnnouncement(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Custom manager
+    objects: GymAnnouncementManager = GymAnnouncementManager()
 
     class Meta:
         db_table = "gym_announcement"

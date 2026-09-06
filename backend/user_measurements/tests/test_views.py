@@ -16,6 +16,7 @@ import io
 from django.core.files.storage import default_storage
 from django.conf import settings
 
+
 class UserMeasurementsListViewTest(TestCase):
     """Test suite for UserMeasurementsListView"""
 
@@ -83,13 +84,8 @@ class UserMeasurementsListViewTest(TestCase):
         self.client.force_authenticate(user=new_user)
         response = self.client.get(self.url)
 
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        # Check that the error response contains the expected error
-        self.assertIn("error", response.data)
-        self.assertEqual(
-            response.data["error"],
-            MeasurementsError.NO_EXISTING_MEASUREMENTS[0],
-        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["measurements"], [])
 
     def test_get_measurements_pagination(self):
         """Test GET measurements with pagination"""
@@ -730,14 +726,10 @@ class UserMeasurementsViewIntegrationTest(TestCase):
             measurement_notes="Other user measurement",
         )
 
-        # Current user should not see other user's measurement in list
+        # Current user should see empty list (paginated response)
         response = self.client.get(self.list_url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
-        self.assertEqual(
-            response.data["error"],
-            MeasurementsError.NO_EXISTING_MEASUREMENTS[0],
-        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["measurements"], [])
 
         # Current user should not be able to access other user's measurement
         other_url = reverse(

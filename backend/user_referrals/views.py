@@ -14,18 +14,12 @@ class UserReferralPIView(APIView):
     pagination_class = CustomPagination
 
     def get(self, request):
-        """Get all referrals made by the user with nested user details"""
-
         user: User = request.user
 
         # prevent n+1 query problem
         referrals = Referral.objects.filter(referrer=user).select_related(
             "referred_user"
         )
-
-        #  Referral.DoesNotExist only work for get not filter
-        if not referrals:
-            raise APIError(ReferralError.NO_EXISTING_REFERRAL)
 
         paginator = self.pagination_class()
         result_page = paginator.paginate_queryset(referrals, request, view=self)

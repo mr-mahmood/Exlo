@@ -6,7 +6,6 @@ from rest_framework import status
 from gym_auth.permissions import IsAdminOrGymOwner, IsGymMember
 from gym.models import Gym
 from core.pagination import CustomPagination
-from core.errors import APIError, GymAnnouncementError, GymError
 from .models import GymAnnouncement
 from .serializers import GymAnnouncementSerializer
 
@@ -17,10 +16,7 @@ class GymAnnouncementAPIView(APIView):
     pagination_class = CustomPagination
 
     def get(self, request, gym_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
 
         announcements = GymAnnouncement.objects.filter(
             gym=gym,
@@ -44,10 +40,7 @@ class GymAnnouncementCreateAPIView(APIView):
     serializer_class = GymAnnouncementSerializer
 
     def post(self, request, gym_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
 
         serializer = self.serializer_class(
             data=request.data,
@@ -73,18 +66,12 @@ class GymAnnouncementUpdateAPIView(APIView):
     serializer_class = GymAnnouncementSerializer
 
     def put(self, request, gym_id, announcement_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id, active_only=True)
 
-        try:
-            announcement = GymAnnouncement.objects.get(
-                id=announcement_id,
-                gym=gym,
-            )
-        except GymAnnouncement.DoesNotExist:
-            raise APIError(GymAnnouncementError.ANNOUNCEMENT_NOT_FOUND)
+        announcement = GymAnnouncement.objects.get_announcement(
+            announcement_id=announcement_id,
+            gym=gym,
+        )
 
         serializer = self.serializer_class(
             announcement,
@@ -107,18 +94,12 @@ class GymAnnouncementDeleteAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def delete(self, request, gym_id, announcement_id):
-        try:
-            gym = Gym.objects.get(id=gym_id, is_active=True)
-        except Gym.DoesNotExist:
-            raise APIError(GymError.GYM_NOT_FOUND)
+        gym = Gym.objects.get_gym(gym_id, active_only=True)
 
-        try:
-            announcement = GymAnnouncement.objects.get(
-                id=announcement_id,
-                gym=gym,
-            )
-        except GymAnnouncement.DoesNotExist:
-            raise APIError(GymAnnouncementError.ANNOUNCEMENT_NOT_FOUND)
+        announcement = GymAnnouncement.objects.get_announcement(
+            announcement_id=announcement_id,
+            gym=gym,
+        )
 
         announcement.delete()
 
