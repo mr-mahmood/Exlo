@@ -11,9 +11,9 @@ urlpatterns = [
     path("api/auth/", include("authentication.urls")),
     # User apps
     path("api/users/", include("users.urls")),
-    path("api/sessions/", include("user_sessions.urls")),
-    path("api/referrals/", include("user_referrals.urls")),
-    path("api/measurements/", include("user_measurements.urls")),
+    path("api/sessions/", include("users_sessions.urls")),
+    path("api/referrals/", include("users_referrals.urls")),
+    path("api/measurements/", include("users_measurements.urls")),
     # Gym apps
     path("api/gym/", include("gym.urls")),
     path("api/gym/", include("gym_photos.urls")),

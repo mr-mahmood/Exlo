@@ -6,7 +6,7 @@ from django.core.cache import cache
 from rest_framework.test import APIClient
 from rest_framework import status
 from users.models import User
-from user_sessions.models import Session
+from users_sessions.models import Session
 from django.conf import settings
 from core.errors import (
     UserValidationError,

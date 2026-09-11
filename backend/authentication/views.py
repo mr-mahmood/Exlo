@@ -8,7 +8,7 @@ from users.validators import validate_phone
 from core.errors import APIError, AuthenticationError, OTPError, SessionError
 from users.models import User
 from users.serializers import UserProfileSerializer
-from user_sessions.models import Session
+from users_sessions.models import Session
 from .token_services import create_tokens_for_user, refresh_tokens
 from .utils import attach_auth_tokens, is_bearer_transport
 from .backends import RefreshTokenAuthentication

@@ -12,7 +12,7 @@ from datetime import date, timedelta
 from unittest.mock import patch
 from core.errors import SignUpError, UserAccountError
 from users.models import User
-from user_sessions.models import Session
+from users_sessions.models import Session
 from authentication.otp_service import OTP_CACHE_PREFIX
 from core.errors import AuthenticationError, SignUpError
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -98,7 +98,7 @@ class UserSignupViewTest(TestCase):
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        from user_referrals.models import Referral
+        from users_referrals.models import Referral
 
         user = User.objects.get(phone_number=self.valid_data["phone_number"])
         referral = Referral.objects.get(referred_user=user)
@@ -264,7 +264,7 @@ class UserSignupViewTest(TestCase):
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
             self.assertEqual(response.data["error"], SignUpError.REFERRAL_CODE_NOT_VALID[0])  # type: ignore
 
-            from user_referrals.models import Referral
+            from users_referrals.models import Referral
 
             self.assertFalse(
                 Referral.objects.filter(referred_user=created_user).exists()

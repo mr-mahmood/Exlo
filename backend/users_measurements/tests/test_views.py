@@ -6,10 +6,10 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from decimal import Decimal
-from user_measurements.models import Measurements
+from users_measurements.models import Measurements
 from core.errors import MeasurementsError
 from users.models import User
-from user_measurements.models import MeasurementPhotos
+from users_measurements.models import MeasurementPhotos
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 import io

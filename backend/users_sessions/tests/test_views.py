@@ -9,7 +9,7 @@ import uuid
 from django.utils import timezone
 from django.conf import settings
 from users.models import User
-from user_sessions.models import Session
+from users_sessions.models import Session
 from core.errors import SessionError, AuthenticationError
 
 

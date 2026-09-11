@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from users.models import User
-from user_referrals.models import Referral
+from users_referrals.models import Referral
 from core.errors import ReferralError, APIError, UserAccountError, AuthenticationError
 from django.conf import settings
 

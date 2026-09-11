@@ -3,7 +3,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from .utils import is_bearer_transport
 from core.errors import APIError, AuthenticationError, UserAccountError, SessionError
-from user_sessions.models import Session
+from users_sessions.models import Session
 from users.models import User
 
 

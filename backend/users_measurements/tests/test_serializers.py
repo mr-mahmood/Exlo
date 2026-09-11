@@ -4,12 +4,12 @@ from typing import cast
 
 from django.test import TestCase
 from decimal import Decimal
-from user_measurements.models import Measurements
-from user_measurements.serializers import UserMeasurementSerializer
+from users_measurements.models import Measurements
+from users_measurements.serializers import UserMeasurementSerializer
 from core.errors import MeasurementsError, APIError
 from users.models import User
-from user_measurements.serializers import MeasurementPhotosSerializer
-from user_measurements.models import MeasurementPhotos
+from users_measurements.serializers import MeasurementPhotosSerializer
+from users_measurements.models import MeasurementPhotos
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 import io

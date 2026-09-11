@@ -9,9 +9,7 @@ load_dotenv()
 # Base
 # ============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 DEBUG = os.getenv("DEBUG", "False").lower() == "true"
-
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 if DEBUG:
@@ -41,11 +39,11 @@ INSTALLED_APPS = [
     "authentication",
     # User apps
     "users",
-    "user_sessions",
-    "user_referrals",
-    "user_measurements",
-    "user_notifications",
-    "user_pwa",
+    "users_sessions",
+    "users_referrals",
+    "users_measurements",
+    "users_notifications",
+    "users_pwa",
     # Gym apps
     "gym",
     "gym_photos",

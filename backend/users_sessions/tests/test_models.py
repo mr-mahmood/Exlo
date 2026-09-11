@@ -4,7 +4,7 @@
 from django.test import TestCase, RequestFactory
 from django.utils import timezone
 from users.models import User
-from user_sessions.models import Session
+from users_sessions.models import Session
 from django.conf import settings
 
 

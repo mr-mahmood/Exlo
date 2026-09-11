@@ -5,7 +5,7 @@ from django.test import TestCase
 from users.models import User
 from decimal import Decimal
 import uuid
-from user_measurements.models import Measurements, MeasurementPhotos
+from users_measurements.models import Measurements, MeasurementPhotos
 from django.core.files.uploadedfile import SimpleUploadedFile
 import tempfile
 from PIL import Image

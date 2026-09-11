@@ -6,7 +6,7 @@ from django.test.client import RequestFactory
 from rest_framework_simplejwt.tokens import RefreshToken
 from authentication.token_services import create_tokens_for_user
 from users.models import User
-from user_sessions.models import Session
+from users_sessions.models import Session
 from authentication.backends import (
     AccessTokenAuthentication,
     RefreshTokenAuthentication,

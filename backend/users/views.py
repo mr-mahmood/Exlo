@@ -7,8 +7,8 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
-from user_referrals.models import Referral
-from user_sessions.models import Session
+from users_referrals.models import Referral
+from users_sessions.models import Session
 from authentication.otp_service import generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
 from authentication.utils import attach_auth_tokens
