@@ -321,6 +321,9 @@ if DEBUG:
     # Use memory broker for development
     CELERY_BROKER_URL = "memory://"
     CELERY_RESULT_BACKEND = "cache"
+
+    CELERY_TIMEZONE = TIME_ZONE
+    CELERY_ENABLE_UTC = True
 else:
     CELERY_BROKER_URL = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/2"
     CELERY_RESULT_BACKEND = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/3"
@@ -338,6 +341,21 @@ else:
     CELERY_BROKER_CONNECTION_TIMEOUT = 30
     CELERY_BROKER_HEARTBEAT = 30
     CELERY_BROKER_POOL_LIMIT = 10
+
+    CELERY_TIMEZONE = TIME_ZONE
+    CELERY_ENABLE_UTC = True
+
+# ============================================
+# CELERY BEAT
+# ============================================
+from celery.schedules import crontab
+
+CELERY_BEAT_SCHEDULE = {
+    "sweep-gym-subscriptions": {
+        "task": "gym_subscriptions.tasks.sweep_gym_subscriptions",
+        "schedule": crontab(hour=3, minute=0),
+    },
+}
 
 # ============================================================================
 # Cookies & CORS

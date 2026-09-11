@@ -72,7 +72,7 @@ class GymMembershipPlan(models.Model):
     is_active = models.BooleanField(default=True)
 
     price = models.DecimalField(
-        max_digits=10,
+        max_digits=15,
         decimal_places=2,
     )
 

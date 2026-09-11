@@ -578,3 +578,26 @@ class GymPlansError(APIError):
         "Price cannot be negative.",
         status.HTTP_400_BAD_REQUEST,
     )
+
+
+# ============================================================================
+# GYM SUBSCRIPTIONs
+# ============================================================================
+class GymSubscriptionError(APIError):
+    ACTIVE_SUBSCRIPTION_EXISTS = (
+        "SUBS_001",
+        "This user already has an active gym subscription",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    NO_ACTIVE_SUBSCRIPTION = (
+        "SUBS_002",
+        "This user has no active subscription",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    WRONG_GYM = (
+        "SUBS_003",
+        "This user has active subscription in a different gym",
+        status.HTTP_400_BAD_REQUEST,
+    )
