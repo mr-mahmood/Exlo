@@ -584,20 +584,32 @@ class GymPlansError(APIError):
 # GYM SUBSCRIPTIONs
 # ============================================================================
 class GymSubscriptionError(APIError):
-    ACTIVE_SUBSCRIPTION_EXISTS = (
+    SUBSCRIPTION_NOT_FOUND = (
         "SUBS_001",
+        "subscription not found.",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    ACTIVE_SUBSCRIPTION_EXISTS = (
+        "SUBS_002",
         "This user already has an active gym subscription",
         status.HTTP_400_BAD_REQUEST,
     )
 
     NO_ACTIVE_SUBSCRIPTION = (
-        "SUBS_002",
+        "SUBS_003",
         "This user has no active subscription",
         status.HTTP_400_BAD_REQUEST,
     )
 
     WRONG_GYM = (
-        "SUBS_003",
+        "SUBS_004",
         "This user has active subscription in a different gym",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_ORDER_ITEM = (
+        "SUBS_005",
+        "This order item have no gym plan",
         status.HTTP_400_BAD_REQUEST,
     )
