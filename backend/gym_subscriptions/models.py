@@ -4,6 +4,7 @@ import uuid
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
+from commerce_products.models import CommerceProduct
 from users.models import User
 from gym_plans.models import GymMembershipPlan
 from commerce_orders.models import OrderItem
@@ -11,6 +12,18 @@ from core.errors import APIError, GymSubscriptionError
 
 
 class GymSubscriptionsManager(models.Manager):
+
+    def get_subscription(self, subscription_id, subscriber):
+        try:
+            return self.select_related(
+                "plan",
+                "plan__gym",
+            ).get(
+                pk=subscription_id,
+                subscriber=subscriber,
+            )
+        except GymSubscription.DoesNotExist:
+            raise APIError(GymSubscriptionError.SUBSCRIPTION_NOT_FOUND)
 
     def check_in(self, subscriber, gym):
         error = None
@@ -30,7 +43,6 @@ class GymSubscriptionsManager(models.Manager):
 
             if subscription is None:
                 error = APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
-
             elif subscription.is_expired:
                 subscription.expire(reason=subscription.expire_reason)
 
@@ -61,7 +73,13 @@ class GymSubscriptionsManager(models.Manager):
 
         return subscription
 
-    def create_subscription(self, *, subscriber, plan, order_item):
+    # This function caller must prefetch the product chain, before calling this function
+    def create_subscription(self, subscriber, order_item: OrderItem):
+        if order_item.item_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
+            raise APIError(GymSubscriptionError.INVALID_ORDER_ITEM)
+
+        plan = order_item.commerce_product.gym_membership_plan
+
         with transaction.atomic():
             subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
 
@@ -174,10 +192,10 @@ class GymSubscription(models.Model):
         related_name="subscriptions",
     )
 
-    order_item = models.ForeignKey(
+    order_item = models.OneToOneField(
         OrderItem,
         on_delete=models.PROTECT,
-        related_name="gym_subscriptions",
+        related_name="gym_subscription",
     )
 
     status = models.CharField(

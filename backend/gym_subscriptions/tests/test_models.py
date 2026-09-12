@@ -108,7 +108,6 @@ class GymSubscriptionTestBase(TestCase):
 
         return GymSubscription.objects.create_subscription(
             subscriber=user,
-            plan=plan,
             order_item=order_item,
         )
 
