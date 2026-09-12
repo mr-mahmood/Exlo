@@ -33,4 +33,4 @@ def sweep_gym_subscriptions():
 
             subscription.expire(reason=subscription.expire_reason)
 
-            GymSubscription.objects.promote_next(subscription.subscriber)
+            GymSubscription.objects._promote_next(subscription.subscriber)

@@ -7,12 +7,15 @@ from django.utils import timezone
 from gym.models import Gym
 from gym_announcements.models import GymAnnouncement
 from users.models import User
+from django.conf import settings
 
 
 class GymAnnouncementModelTest(TestCase):
     """Test cases for GymAnnouncement model."""
 
     def setUp(self):
+        settings.DEBUG = True
+
         # Create a user (author)
         self.author = User.objects.create_user(
             phone_number="09121234567",

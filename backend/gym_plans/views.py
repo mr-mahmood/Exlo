@@ -36,16 +36,12 @@ class GymPlansCreateAPIView(APIView):
     def post(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
 
-        # Add gym to the data
-        data = request.data.copy()
-
         serializer = self.serializer_class(
-            data=data,
+            data=request.data,
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
 
-        # Create the plan using the manager
         plan = GymMembershipPlan.objects.create_plan(
             gym=gym,
             **serializer.validated_data,  # type: ignore

@@ -8,12 +8,14 @@ from core.errors import APIError, GymAnnouncementError
 from users.models import User
 from gym_announcements.serializers import GymAnnouncementSerializer
 from gym_announcements.models import GymAnnouncement
+from django.conf import settings
 
 
 class GymAnnouncementSerializerTest(TestCase):
     """Test cases for GymAnnouncementSerializer."""
 
     def setUp(self):
+        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09121234567",
             first_name="Test",

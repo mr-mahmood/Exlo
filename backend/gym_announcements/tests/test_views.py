@@ -11,12 +11,14 @@ from users.models import User
 from gym.models import Gym
 from gym_announcements.models import GymAnnouncement
 from gym_auth.models import UserGymRole
+from django.conf import settings
 
 
 class GymAnnouncementViewsTest(TestCase):
     """Test cases for GymAnnouncement views."""
 
     def setUp(self):
+        settings.DEBUG = True
         self.client = APIClient()
 
         # Create users

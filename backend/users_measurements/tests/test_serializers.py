@@ -20,7 +20,8 @@ class UserMeasurementSerializerTest(TestCase):
     """Test suite for UserMeasurementSerializer"""
 
     def setUp(self):
-        """Set up test data"""
+        settings.DEBUG = True
+
         self.user = User.objects.create_user(
             phone_number="09024698787",
             first_name="Test",
@@ -599,6 +600,7 @@ class UserMeasurementSerializerIntegrationTest(TestCase):
     """Integration tests for UserMeasurementSerializer with database"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09024698788",
             first_name="Integration",
@@ -676,6 +678,7 @@ class MeasurementPhotosSerializerTest(TestCase):
     """Test suite for MeasurementPhotosSerializer"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09024698787",
             first_name="Test",

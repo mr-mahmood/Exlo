@@ -6,12 +6,14 @@ from django.test import TestCase
 from django.core.files.uploadedfile import SimpleUploadedFile
 from gym.models import Gym
 from gym.serializers import GymSerializer
+from django.conf import settings
 
 
 class GymSerializerTest(TestCase):
     """Test cases for GymSerializer."""
 
     def setUp(self):
+        settings.DEBUG = True
         self.gym_data = {
             "name": "Test Gym",
             "province": "Test Province",

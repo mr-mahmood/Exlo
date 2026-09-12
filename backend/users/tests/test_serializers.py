@@ -392,6 +392,7 @@ class UserProfilePictureSerializerTest(TestCase):
     """Test UserProfileSerializer with profile picture handling"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09123456789",
             first_name="John",

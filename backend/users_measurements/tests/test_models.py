@@ -10,13 +10,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 import tempfile
 from PIL import Image
 import io
+from django.conf import settings
 
 
 class MeasurementsModelTest(TestCase):
     """Test suite for the Measurements model"""
 
     def setUp(self):
-        """Set up test data"""
+        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09024698787",
             first_name="Test",
@@ -174,6 +175,7 @@ class MeasurementsModelTest(TestCase):
     def test_db_table_name(self):
         """Test the database table name"""
         self.assertEqual(Measurements._meta.db_table, "user_measurements")
+
     def test_str_method_with_full_name(self):
         """Test the string representation with user's full name"""
         measurement = Measurements.objects.create(user=self.user)
@@ -235,6 +237,7 @@ class MeasurementsModelEdgeCasesTest(TestCase):
     """Test edge cases for the Measurements model"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.user: User = User.objects.create_user(
             phone_number="09456326565",
             first_name="Test3",
@@ -297,6 +300,7 @@ class MeasurementPhotosModelTest(TestCase):
     """Test suite for MeasurementPhotos model"""
 
     def setUp(self):
+        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09024698787",
             first_name="Test",

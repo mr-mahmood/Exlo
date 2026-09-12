@@ -3,22 +3,28 @@
 from rest_framework import serializers
 from .models import GymMembershipPlan
 from core.errors import APIError, GymPlansError
+from gym.serializers import GymBasicSerializer
 
 
 class GymMembershipPlanSerializer(serializers.ModelSerializer):
+    gym = GymBasicSerializer(read_only=True)
 
     class Meta:
         model = GymMembershipPlan
         fields = [
             "id",
             "name",
+            "gym",
             "description",
             "duration_month",
             "visit_limit",
             "is_active",
             "price",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = [
+            "id",
+            "gym",
+        ]
 
     def validate_duration_month(self, value):
         if value < 0:

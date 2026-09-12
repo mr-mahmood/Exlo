@@ -12,12 +12,14 @@ from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
 from gym_auth.models import UserGymRole
 from commerce_products.models import CommerceProduct
+from django.conf import settings
 
 
 class GymPlansViewsTest(TestCase):
     """Test cases for GymPlans views."""
 
     def setUp(self):
+        settings.DEBUG = True
         self.client = APIClient()
 
         # Create users
@@ -555,3 +557,110 @@ class GymPlansViewsTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["plans"]), 1)
         self.assertEqual(response.data["plans"][0]["name"], "Other Gym Plan")
+
+    def test_list_plans_includes_gym(self):
+        """Test that each plan in the list includes its gym."""
+        response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        for plan in response.data["plans"]:
+            self.assertIn("gym", plan)
+
+            self.assertEqual(plan["gym"]["id"], str(self.gym.id))
+            self.assertEqual(plan["gym"]["name"], "Test Gym")
+            self.assertEqual(plan["gym"]["province"], "Test Province")
+            self.assertEqual(plan["gym"]["city"], "Test City")
+            self.assertEqual(plan["gym"]["address"], "123 Test St")
+            self.assertTrue(plan["gym"]["is_active"])
+
+    def test_create_plan_includes_gym(self):
+        """Test that the created plan response includes its gym."""
+        self.authenticate(self.admin_user)
+
+        data = {
+            "name": "New Plan",
+            "description": "Brand new plan",
+            "duration_month": 3,
+            "visit_limit": 20,
+            "price": "99.99",
+            "is_active": True,
+        }
+
+        response = self.client.post(self.create_url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        plan_data = response.data["plan"]
+
+        self.assertIn("gym", plan_data)
+        self.assertEqual(plan_data["gym"]["id"], str(self.gym.id))
+        self.assertEqual(plan_data["gym"]["name"], "Test Gym")
+        self.assertEqual(plan_data["gym"]["province"], "Test Province")
+        self.assertEqual(plan_data["gym"]["city"], "Test City")
+        self.assertEqual(plan_data["gym"]["address"], "123 Test St")
+        self.assertTrue(plan_data["gym"]["is_active"])
+
+    def test_update_plan_includes_gym(self):
+        """Test that the updated plan response includes its gym."""
+        self.authenticate(self.admin_user)
+
+        url = reverse(
+            "gym_plans:update",
+            kwargs={
+                "gym_id": self.gym.id,
+                "plan_id": self.plan1.id.id,
+            },
+        )
+
+        response = self.client.put(
+            url,
+            {
+                "name": "Updated Plan",
+                "price": "39.99",
+            },
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        plan_data = response.data["plan"]
+
+        self.assertIn("gym", plan_data)
+        self.assertEqual(plan_data["gym"]["id"], str(self.gym.id))
+        self.assertEqual(plan_data["gym"]["name"], "Test Gym")
+
+    def test_create_plan_cannot_set_gym_through_request(self):
+        """Test that request gym data cannot override the URL gym."""
+        self.authenticate(self.admin_user)
+
+        other_gym = Gym.objects.create(
+            name="Other Gym",
+            province="Other Province",
+            city="Other City",
+            address="456 Other St",
+            is_active=True,
+        )
+
+        data = {
+            "gym": str(other_gym.id),
+            "name": "Test Plan",
+            "description": "Test Description",
+            "duration_month": 1,
+            "visit_limit": 10,
+            "price": "29.99",
+            "is_active": True,
+        }
+
+        response = self.client.post(self.create_url, data)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        plan = GymMembershipPlan.objects.get(name="Test Plan")
+
+        self.assertEqual(plan.gym_id, self.gym.id)
+        self.assertNotEqual(plan.gym_id, other_gym.id)
+
+        self.assertEqual(
+            response.data["plan"]["gym"]["id"],
+            str(self.gym.id),
+        )

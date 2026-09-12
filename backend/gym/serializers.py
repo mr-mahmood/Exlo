@@ -41,3 +41,24 @@ class GymSerializer(serializers.ModelSerializer):
                     raise APIError(GymError.MISSING_GYM_DATA)
 
         return data
+
+
+class GymBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Gym
+        fields = [
+            "id",
+            "name",
+            "province",
+            "city",
+            "address",
+            "is_active",
+        ]
+        read_only_fields = [
+            "id",
+            "name",
+            "province",
+            "city",
+            "address",
+            "is_active",
+        ]

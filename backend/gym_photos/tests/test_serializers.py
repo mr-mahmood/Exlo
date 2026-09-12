@@ -10,12 +10,14 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from gym.models import Gym
 from gym_photos.serializers import GymPhotoSerializer
 from core.errors import APIError, GymError
+from django.conf import settings
 
 
 class GymPhotoSerializerTest(TestCase):
     """Test cases for GymPhotoSerializer."""
 
     def setUp(self):
+        settings.DEBUG = True
         self.gym = Gym.objects.create(
             name="Test Gym",
             province="Test Province",
