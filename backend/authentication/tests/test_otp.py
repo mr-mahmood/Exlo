@@ -57,8 +57,10 @@ class OTPServiceTest(TestCase):
         self.assertNotEqual(stored, "123456")
         self.assertNotEqual(stored, "")
 
-        # Should look like a hash (SHA256 = 64 hex chars)
-        self.assertTrue(len(stored) == 64)
+        # Should be scheme-tagged: "hmac_sha256$<64 hex chars>"
         import re
 
-        self.assertTrue(re.match(r"^[a-f0-9]{64}$", stored))
+        self.assertTrue(stored.startswith("hmac_sha256$"))
+        hex_part = stored.split("$", 1)[1]
+        self.assertEqual(len(hex_part), 64)
+        self.assertTrue(re.fullmatch(r"[a-f0-9]{64}", hex_part))

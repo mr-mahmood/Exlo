@@ -4,14 +4,12 @@
 import uuid
 from datetime import timedelta
 from decimal import Decimal
-
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from core.errors import GymSubscriptionError
 from gym.models import Gym
@@ -349,11 +347,30 @@ class SubscriptionListTests(SubscriptionViewTestBase):
         self.assertEqual(sub["plan"]["gym"]["id"], str(self.gym.pk))
         self.assertEqual(sub["plan"]["name"], "Monthly Plan")
 
+    def test_serializes_top_level_gym(self):
+        self.make_subscription(
+            self.user,
+            self.plan,
+            status=GymSubscription.Status.ACTIVE,
+            remaining_visits=10,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+
+        self.authenticate(self.user)
+        response = self.client.get(self.list_url)
+
+        sub = response.data["subscriptions"][0]
+        self.assertIn("gym", sub)
+        self.assertIsInstance(sub["gym"], dict)
+        self.assertEqual(sub["gym"]["id"], str(self.gym.pk))
+        self.assertEqual(sub["gym"]["name"], "Test Gym")
+        # top-level gym should match nested plan gym
+        self.assertEqual(sub["gym"], sub["plan"]["gym"])
+
     def test_pagination_shape(self):
         self.authenticate(self.user)
         response = self.client.get(self.list_url)
 
-        # Match your CustomPagination output shape.
         self.assertIn("next", response.data)
         self.assertIn("previous", response.data)
         self.assertIn("subscriptions", response.data)
@@ -428,6 +445,25 @@ class SubscriptionDetailTests(SubscriptionViewTestBase):
         self.assertEqual(payload["plan"]["gym"]["id"], str(self.gym.pk))
         self.assertEqual(payload["plan"]["name"], "Monthly Plan")
         self.assertEqual(payload["plan"]["price"], "10000.00")
+
+    def test_serializes_top_level_gym(self):
+        sub = self.make_subscription(
+            self.user,
+            self.plan,
+            status=GymSubscription.Status.ACTIVE,
+            remaining_visits=10,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+
+        self.authenticate(self.user)
+        response = self.client.get(self.detail_url(sub.id))
+
+        payload = response.data["subscription"]
+        self.assertIn("gym", payload)
+        self.assertIsInstance(payload["gym"], dict)
+        self.assertEqual(payload["gym"]["id"], str(self.gym.pk))
+        self.assertEqual(payload["gym"]["name"], "Test Gym")
+        self.assertEqual(payload["gym"], payload["plan"]["gym"])
 
     def test_serializes_remaining_visits_and_expires_at(self):
         expires = timezone.now() + timedelta(days=15)
@@ -602,6 +638,7 @@ class SubscriptionQueryCountTests(SubscriptionViewTestBase):
 
         self.authenticate(self.user)
 
+        # 1 count query + 1 fetch (with select_related plan + plan__gym)
         with self.assertNumQueries(2):
             self.client.get(self.list_url)
 
@@ -616,5 +653,6 @@ class SubscriptionQueryCountTests(SubscriptionViewTestBase):
 
         self.authenticate(self.user)
 
+        # 1 fetch (with select_related plan + plan__gym)
         with self.assertNumQueries(1):
             self.client.get(self.detail_url(sub.id))

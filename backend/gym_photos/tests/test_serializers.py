@@ -62,7 +62,7 @@ class GymPhotoSerializerTest(TestCase):
         # Serializer validation should fail
         with self.assertRaises(APIError) as context:
             serializer.is_valid(raise_exception=True)
-        self.assertEqual(context.exception.args[0], GymError.PHOTO_FILE_REQUIRED)
+        self.assertEqual(context.exception.error_code, GymError.PHOTO_FILE_REQUIRED[0])
 
     def test_serializer_invalid_extension(self):
         """Test serializer with invalid file extension."""

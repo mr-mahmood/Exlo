@@ -613,3 +613,78 @@ class GymSubscriptionError(APIError):
         "This order item have no gym plan",
         status.HTTP_400_BAD_REQUEST,
     )
+
+
+# ============================================================================
+# GYM VISITS
+# ============================================================================
+class GymVisitsError(APIError):
+    VISIT_NOT_FOUND = (
+        "VISIT_001",
+        "Gym visit not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    ALREADY_CHECKED_IN = (
+        "VISIT_002",
+        "You are already checked in. Please check out first",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    ALREADY_CHECKED_OUT = (
+        "VISIT_003",
+        "You are already checked out",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_CHECKOUT_TIME = (
+        "VISIT_004",
+        "Check-out time cannot be before check-in time",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_METHOD = (
+        "VISIT_005",
+        "Invalid check method",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# GYM DEVICE
+# ============================================================================
+class GymDeviceError(APIError):
+    DEVICE_NOT_FOUND = (
+        "DEVICE_001",
+        "device not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    INVALID_DEVICE_CREDENTIAL = (
+        "DEVICE_002",
+        "device is not authenticated",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# USER NFC CARD
+# ============================================================================
+class UserNfcCardError(APIError):
+    CARD_NOT_FOUND = (
+        "CARD_001",
+        "card not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    CARD_ALREADY_ASSIGNED = (
+        "CARD_002",
+        "This card is already assigned to another user.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_UID = (
+        "CARD_003",
+        "This card uid is not correct",
+        status.HTTP_400_BAD_REQUEST,
+    )

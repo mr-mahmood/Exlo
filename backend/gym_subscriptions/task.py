@@ -1,23 +1,22 @@
-# gym_subscriptions/tasks.py
-
-from celery import shared_task
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from .models import GymSubscription
+from celery import shared_task
+
+from gym_subscriptions.models import GymSubscription
 
 
 @shared_task
 def sweep_gym_subscriptions():
     now = timezone.now()
 
-    stale_ids = (
+    stale_ids = list(
         GymSubscription.objects.filter(status=GymSubscription.Status.ACTIVE)
         .filter(Q(expires_at__lte=now) | Q(remaining_visits__lte=0))
         .values_list("id", flat=True)
     )
 
-    for subscription_id in stale_ids.iterator():
+    for subscription_id in stale_ids:
         with transaction.atomic():
             subscription: GymSubscription = (
                 GymSubscription.objects.select_for_update()
@@ -31,6 +30,6 @@ def sweep_gym_subscriptions():
             if subscription is None or not subscription.is_expired:
                 continue
 
-            subscription.expire(reason=subscription.expire_reason)
-
-            GymSubscription.objects._promote_next(subscription.subscriber)
+            reason = subscription.expire_reason
+            subscription.expire(reason=reason)
+            GymSubscription.objects._promote_next_any(subscription.subscriber)

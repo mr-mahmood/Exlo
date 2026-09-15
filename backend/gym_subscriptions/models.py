@@ -13,6 +13,16 @@ from core.errors import APIError, GymSubscriptionError
 
 class GymSubscriptionsManager(models.Manager):
 
+    def truly_active(self):
+        return self.filter(
+            models.Q(
+                status=GymSubscription.Status.ACTIVE,
+                expires_at__gt=timezone.now(),
+                remaining_visits__gt=0,
+            )
+            | models.Q(status=GymSubscription.Status.PENDING)
+        )
+
     def get_subscription(self, subscription_id, subscriber):
         try:
             return self.select_related(
@@ -25,51 +35,37 @@ class GymSubscriptionsManager(models.Manager):
         except GymSubscription.DoesNotExist:
             raise APIError(GymSubscriptionError.SUBSCRIPTION_NOT_FOUND)
 
-    def check_in(self, subscriber, gym):
-        error = None
+    def consume_visit(self, subscriber, gym):
+        subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
 
-        with transaction.atomic():
-            subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
+        subscription: GymSubscription = (
+            self.select_for_update(of=("self",))
+            .select_related("plan")
+            .filter(
+                subscriber=subscriber,
+                status=GymSubscription.Status.ACTIVE,
+            )
+            .first()
+        )  # type: ignore
 
-            subscription: GymSubscription = (
-                self.select_for_update(of=("self",))
-                .select_related("plan")
-                .filter(
-                    subscriber=subscriber,
-                    status=GymSubscription.Status.ACTIVE,
-                )
-                .first()
-            )  # type: ignore
+        if subscription is None:
+            raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
-            if subscription is None:
-                error = APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
-            elif subscription.is_expired:
-                subscription.expire(reason=subscription.expire_reason)
+        if subscription.is_expired:
+            subscription.expire(reason=subscription.expire_reason)
+            subscription = self._promote_next_for_gym(subscriber, gym)  # type: ignore
+            if subscription is None or not subscription.is_active:
+                raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
-                subscription = self._promote_next(subscriber)  # type: ignore
+        if subscription.plan.gym_id != gym.id:
+            raise APIError(GymSubscriptionError.WRONG_GYM)
 
-                if subscription is None or not subscription.is_active:
-                    error = APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
+        subscription.remaining_visits -= 1
+        subscription.save(update_fields=["remaining_visits", "updated_at"])
 
-            if error is None:
-                if subscription.plan.gym_id != gym.id:
-                    error = APIError(GymSubscriptionError.WRONG_GYM)
-                else:
-                    subscription.remaining_visits -= 1
-
-                    subscription.save(
-                        update_fields=[
-                            "remaining_visits",
-                            "updated_at",
-                        ]
-                    )
-
-                    if subscription.remaining_visits <= 0:
-                        subscription.expire(reason=subscription.expire_reason)
-                        self._promote_next(subscriber)
-
-        if error is not None:
-            raise error
+        if subscription.remaining_visits <= 0:
+            subscription.expire(reason=subscription.expire_reason)
+            self._promote_next_for_gym(subscriber, gym)
 
         return subscription
 
@@ -110,11 +106,41 @@ class GymSubscriptionsManager(models.Manager):
                 return subscription
 
             subscription.cancel()
-            self._promote_next(subscriber)
+            self._promote_next_any(subscriber)
 
             return subscription
 
-    def _promote_next(self, subscriber) -> "GymSubscription | None":
+    def _promote_next_for_gym(self, subscriber, gym) -> "GymSubscription | None":
+        """Promote the oldest pending subscription for *this gym* only."""
+        if self._has_active_subscription(subscriber):
+            return None
+
+        next_subscription = (
+            self.select_for_update(of=("self",))
+            .select_related("plan")
+            .filter(
+                subscriber=subscriber,
+                status=GymSubscription.Status.PENDING,
+                plan__gym=gym,
+            )
+            .order_by("created_at")
+            .first()
+        )
+
+        if next_subscription is None:
+            return None
+
+        try:
+            with transaction.atomic():
+                self._activate_subscription(next_subscription)
+        except IntegrityError as e:
+            if "unique_active_subscription_per_user" in str(e):
+                return None
+            raise
+
+        return next_subscription
+
+    def _promote_next_any(self, subscriber) -> "GymSubscription | None":
         if self._has_active_subscription(subscriber):
             return None
 
@@ -135,10 +161,10 @@ class GymSubscriptionsManager(models.Manager):
         try:
             with transaction.atomic():
                 self._activate_subscription(next_subscription)
-        except IntegrityError:
-            # A concurrent transaction activated a subscription first.
-            # The partial unique constraint is the source of truth.
-            return None
+        except IntegrityError as e:
+            if "unique_active_subscription_per_user" in str(e):
+                return None
+            raise
 
         return next_subscription
 

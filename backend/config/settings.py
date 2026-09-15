@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "users_sessions",
     "users_referrals",
     "users_measurements",
+    "users_nfc_cards",
     "users_notifications",
     "users_pwa",
     # Gym apps
@@ -52,6 +53,7 @@ INSTALLED_APPS = [
     "gym_plans",
     "gym_subscriptions",
     "gym_visits",
+    "gym_devices",
     # Commerce apps
     "commerce_products",
     "commerce_orders",
@@ -149,7 +151,7 @@ else:
 # ============================================================================
 AUTH_USER_MODEL = "users.User"
 AUTHENTICATION_BACKENDS = [
-    "authentication.backends.OTPAuthBackend",
+    "authentication.authentication.OTPAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 
@@ -187,7 +189,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 REST_FRAMEWORK = {
     # Authentication
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "authentication.backends.AccessTokenAuthentication",
+        "authentication.authentication.AccessTokenAuthentication",
     ],
     # Permissions
     "DEFAULT_PERMISSION_CLASSES": [
@@ -352,6 +354,10 @@ CELERY_BEAT_SCHEDULE = {
     "sweep-gym-subscriptions": {
         "task": "gym_subscriptions.tasks.sweep_gym_subscriptions",
         "schedule": crontab(hour=3, minute=0),
+    },
+    "delete-stale-gym-devices": {
+        "task": "gym_devices.tasks.delete_stale_gym_devices",
+        "schedule": crontab(hour=3, minute=10),
     },
 }
 

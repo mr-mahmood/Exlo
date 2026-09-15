@@ -3,10 +3,8 @@
 
 from datetime import timedelta
 from decimal import Decimal
-
 from django.test import TestCase
 from django.utils import timezone
-
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
@@ -85,6 +83,7 @@ class GymSubscriptionSerializerFieldsTests(GymSubscriptionSerializerTestBase):
         expected_keys = {
             "id",
             "plan",
+            "gym",
             "status",
             "end_reason",
             "remaining_visits",
@@ -127,11 +126,25 @@ class GymSubscriptionSerializerFieldsTests(GymSubscriptionSerializerTestBase):
         self.assertEqual(data["plan"]["gym"]["id"], str(self.gym.pk))
         self.assertEqual(data["plan"]["gym"]["name"], "Test Gym")
 
+    def test_top_level_gym_is_nested_object(self):
+        sub = self.make_subscription()
+        data = GymSubscriptionReadSerializer(sub).data
+
+        self.assertIn("gym", data)
+        self.assertIsInstance(data["gym"], dict)
+        self.assertEqual(data["gym"]["id"], str(self.gym.pk))
+        self.assertEqual(data["gym"]["name"], "Test Gym")
+
+    def test_top_level_gym_matches_plan_gym(self):
+        sub = self.make_subscription()
+        data = GymSubscriptionReadSerializer(sub).data
+
+        self.assertEqual(data["gym"], data["plan"]["gym"])
+
     def test_plan_exposes_expected_fields(self):
         sub = self.make_subscription()
         data = GymSubscriptionReadSerializer(sub).data
 
-        # Match GymMembershipPlanSerializer.fields
         for key in (
             "id",
             "name",
@@ -148,7 +161,13 @@ class GymSubscriptionSerializerFieldsTests(GymSubscriptionSerializerTestBase):
         sub = self.make_subscription()
         data = GymSubscriptionReadSerializer(sub).data
 
-        # Match GymBasicSerializer.fields
+        for key in ("id", "name", "province", "city", "address", "is_active"):
+            self.assertIn(key, data["gym"])
+
+    def test_plan_gym_exposes_expected_fields(self):
+        sub = self.make_subscription()
+        data = GymSubscriptionReadSerializer(sub).data
+
         for key in ("id", "name", "province", "city", "address", "is_active"):
             self.assertIn(key, data["plan"]["gym"])
 
@@ -272,7 +291,6 @@ class GymSubscriptionSerializerValuesTests(GymSubscriptionSerializerTestBase):
     def test_price_is_string_decimal(self):
         sub = self.make_subscription()
         data = GymSubscriptionReadSerializer(sub).data
-        # DRF renders DecimalField as string by default
         self.assertEqual(data["plan"]["price"], "10000.00")
 
     def test_plan_duration_month_and_visit_limit(self):
@@ -289,7 +307,17 @@ class GymSubscriptionSerializerValuesTests(GymSubscriptionSerializerTestBase):
     def test_gym_fields_are_correct(self):
         sub = self.make_subscription()
         data = GymSubscriptionReadSerializer(sub).data
-        gym = data["plan"]["gym"]
+        gym = data["gym"]
+        self.assertEqual(gym["province"], "Tehran")
+        self.assertEqual(gym["city"], "Tehran")
+        self.assertEqual(gym["address"], "Test Address")
+
+    def test_top_level_gym_fields_are_correct(self):
+        sub = self.make_subscription()
+        data = GymSubscriptionReadSerializer(sub).data
+        gym = data["gym"]
+        self.assertEqual(gym["id"], str(self.gym.pk))
+        self.assertEqual(gym["name"], "Test Gym")
         self.assertEqual(gym["province"], "Tehran")
         self.assertEqual(gym["city"], "Tehran")
         self.assertEqual(gym["address"], "Test Address")
@@ -308,10 +336,6 @@ class GymSubscriptionSerializerReadOnlyTests(GymSubscriptionSerializerTestBase):
             )
 
     def test_serializer_ignores_input_on_all_fields(self):
-        """
-        Even if a client sends data, .data ignores it — this serializer
-        has no write path.
-        """
         sub = self.make_subscription(
             status=GymSubscription.Status.ACTIVE,
             remaining_visits=10,
@@ -323,8 +347,6 @@ class GymSubscriptionSerializerReadOnlyTests(GymSubscriptionSerializerTestBase):
                 "remaining_visits": 999,
             },
         )
-        # Since all fields are read-only, is_valid() passes trivially
-        # and the output reflects the instance, not the input.
         self.assertTrue(serializer.is_valid())
         self.assertEqual(serializer.data["status"], "ACTIVE")
         self.assertEqual(serializer.data["remaining_visits"], 10)
@@ -337,7 +359,6 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
     def test_serializes_queryset(self):
         self.make_subscription(status=GymSubscription.Status.PENDING)
 
-        # Need a distinct order_item for a second subscription
         order_2 = Order.objects.create(
             buyer=self.user,
             status=Order.Status.PAID,
@@ -373,6 +394,7 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
 
         self.assertEqual(len(data), 2)
         for item in data:
+            self.assertIn("gym", item)
             self.assertIn("plan", item)
             self.assertIn("gym", item["plan"])
 
@@ -390,11 +412,6 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
 # ============================================================================
 class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase):
     def test_serializer_does_not_fetch_per_row_when_prefetched(self):
-        """
-        If the queryset carries select_related("plan", "plan__gym"),
-        serializing N subscriptions should not add N queries.
-        """
-        # Build 5 subscriptions, each with its own order item.
         order_items = []
         for _ in range(5):
             order = Order.objects.create(
@@ -430,18 +447,10 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
 
         qs = GymSubscription.objects.select_related("plan", "plan__gym")
 
-        # Snapshot the count of queries triggered during serialization.
         with self.assertNumQueries(1):
-            # 1 query to fetch the queryset.
             list(GymSubscriptionReadSerializer(qs, many=True).data)
 
     def test_serializer_fires_extra_queries_without_prefetch(self):
-        """
-        Without select_related, each row triggers a query for plan and
-        another for plan.gym. This test documents the cost so the
-        prefetch requirement is visible.
-        """
-        # Same setup as above: 3 subscriptions.
         order_items = []
         for _ in range(3):
             order = Order.objects.create(
@@ -478,8 +487,5 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
         qs = GymSubscription.objects.all()
 
         # 1 fetch + 3 plan + 3 gym = 7 with no prefetch.
-        # If someone adds select_related to this test, the number drops — good,
-        # update the expectation. If someone removes it elsewhere, this
-        # documents what the cost looks like.
         with self.assertNumQueries(7):
             list(GymSubscriptionReadSerializer(qs, many=True).data)

@@ -10,17 +10,11 @@ from users.models import User
 class AccessTokenAuthentication(JWTAuthentication):
 
     def get_user(self, validated_token):
-        try:
-            user_id = validated_token.get("key_1")
-
-            if not user_id:
-                raise APIError(AuthenticationError.INVALID_ACCESS_TOKEN)
-
-            user = User.objects.get(id=user_id)
-            return user
-
-        except User.DoesNotExist:
-            raise APIError(UserAccountError.USER_NOT_EXIST)
+        user_id = validated_token.get("key_1")
+        if not user_id:
+            raise APIError(AuthenticationError.INVALID_ACCESS_TOKEN)
+        user = User.objects.get_user(user_id)
+        return user
 
     def authenticate(self, request):
 
@@ -66,14 +60,11 @@ class AccessTokenAuthentication(JWTAuthentication):
 class RefreshTokenAuthentication(JWTAuthentication):
 
     def get_user(self, validated_token):
-        try:
-            user_id = validated_token.get("key_1")
-            if not user_id:
-                raise APIError(AuthenticationError.INVALID_ACCESS_TOKEN)
-            user = User.objects.get(id=user_id)
-            return user
-        except User.DoesNotExist:
-            raise APIError(UserAccountError.USER_NOT_EXIST)
+        user_id = validated_token.get("key_1")
+        if not user_id:
+            raise APIError(AuthenticationError.INVALID_ACCESS_TOKEN)
+        user = User.objects.get_user(user_id)
+        return user
 
     def authenticate(self, request):
 

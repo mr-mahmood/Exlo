@@ -1,4 +1,4 @@
-# authentication/tests/test_backends.py
+# authentication/tests/test_authentication.py
 # type: ignore
 
 from django.test import TestCase
@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from authentication.token_services import create_tokens_for_user
 from users.models import User
 from users_sessions.models import Session
-from authentication.backends import (
+from authentication.authentication import (
     AccessTokenAuthentication,
     RefreshTokenAuthentication,
 )

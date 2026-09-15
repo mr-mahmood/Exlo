@@ -247,7 +247,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             serializer.is_valid(raise_exception=True)
 
         self.assertEqual(
-            context.exception.args[0][0],
+            context.exception.error_code,
             GymPlansError.INVALID_PRICE[0],
         )
 
@@ -267,7 +267,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             serializer.is_valid(raise_exception=True)
 
         self.assertEqual(
-            context.exception.args[0][0],
+            context.exception.error_code,
             GymPlansError.INVALID_DURATION[0],
         )
 
@@ -288,6 +288,6 @@ class GymMembershipPlanSerializerTest(TestCase):
             serializer.is_valid(raise_exception=True)
 
         self.assertEqual(
-            context.exception.args[0][0],
+            context.exception.error_code,
             GymPlansError.INVALID_VISIT_LIMIT[0],
         )

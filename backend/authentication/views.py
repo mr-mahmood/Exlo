@@ -11,7 +11,7 @@ from users.serializers import UserProfileSerializer
 from users_sessions.models import Session
 from .token_services import create_tokens_for_user, refresh_tokens
 from .utils import attach_auth_tokens, is_bearer_transport
-from .backends import RefreshTokenAuthentication
+from .authentication import RefreshTokenAuthentication
 from .otp_service import generate_otp, verify_otp
 from django.conf import settings
 from django.core.cache import cache

@@ -115,7 +115,9 @@ class UserModelTest(TestCase):
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
         self.assertEqual(admin.role, User.Role.ADMIN)
-        self.assertTrue(admin.check_password("admin123"))
+        self.assertTrue(
+            admin.check_password("admin123")
+        )  # TODO remove the static password from here
 
     # ============ PROPERTY TESTS ============
 

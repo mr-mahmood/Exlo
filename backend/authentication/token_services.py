@@ -29,11 +29,7 @@ def refresh_tokens(refresh_token_str, request):
     if not user_id:
         raise APIError(AuthenticationError.INVALID_REFRESH_TOKEN)
 
-    try:
-        user: User = User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        raise APIError(UserAccountError.USER_NOT_EXIST)
-
+    user = User.objects.get_user(user_id)
     user.validate_account_status()
 
     # Blacklist old refresh token

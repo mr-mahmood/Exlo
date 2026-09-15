@@ -8,6 +8,12 @@ from core.errors import APIError, UserAccountError
 
 class UserManager(BaseUserManager):
 
+    def get_user(self, user_id) -> "User":
+        try:
+            return User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            raise APIError(UserAccountError.USER_NOT_EXIST)
+
     def _generate_unique_referral_code(self):
         """
         Generate random, human-readable referral codes.
@@ -191,6 +197,16 @@ class User(AbstractUser):
     def is_user_active(self):
         """Check if user can access the system at all"""
         return self.is_active and not self.is_blocked
+
+    @property
+    def is_admin(self):
+        """Check if user is admin"""
+        return bool(
+            self.is_user_active
+            and self.is_staff
+            and self.is_superuser
+            and self.role == User.Role.ADMIN
+        )
 
     def validate_account_status(self):
         """

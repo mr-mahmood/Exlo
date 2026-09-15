@@ -3,16 +3,19 @@ from rest_framework import serializers
 
 from gym_plans.serializers import GymMembershipPlanSerializer
 from .models import GymSubscription
+from gym.serializers import GymBasicSerializer
 
 
 class GymSubscriptionReadSerializer(serializers.ModelSerializer):
     plan = GymMembershipPlanSerializer(read_only=True)
+    gym = GymBasicSerializer(source="plan.gym", read_only=True)
 
     class Meta:
         model = GymSubscription
         fields = [
             "id",
             "plan",
+            "gym",
             "status",
             "end_reason",
             "remaining_visits",

@@ -41,7 +41,6 @@ class GymDetailAPIView(APIView):
     def get(self, request, gym_id):
 
         gym = Gym.objects.get_gym(gym_id, active_only=True)
-        gym = Gym.objects.filter(id=gym.id).prefetch_related("photos").first()
 
         serializer = self.serializer_class(
             gym,

@@ -53,7 +53,10 @@ class GymAnnouncementSerializerTest(TestCase):
 
         with self.assertRaises(APIError) as context:
             serializer.save(author=self.user)
-        self.assertEqual(context.exception.args[0], GymAnnouncementError.GYM_REQUIRED)
+        self.assertEqual(
+            context.exception.error_code,
+            GymAnnouncementError.GYM_REQUIRED[0],
+        )
 
     def test_serializer_read_only_fields(self):
         """Test that read-only fields are not writable."""

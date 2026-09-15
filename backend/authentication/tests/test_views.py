@@ -13,7 +13,6 @@ from core.errors import (
     SessionError,
     UserAccountError,
     OTPError,
-    AuthenticationError,
 )
 from unittest.mock import patch
 

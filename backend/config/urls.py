@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/auth/", include("authentication.urls")),
     # User apps
     path("api/users/", include("users.urls")),
+    path("api/users/", include("users_nfc_cards.urls")),
     path("api/sessions/", include("users_sessions.urls")),
     path("api/referrals/", include("users_referrals.urls")),
     path("api/measurements/", include("users_measurements.urls")),
@@ -19,7 +20,9 @@ urlpatterns = [
     path("api/gym/", include("gym_photos.urls")),
     path("api/gym/", include("gym_announcements.urls")),
     path("api/gym/", include("gym_plans.urls")),
-    path("api/subscriptions/", include("gym_subscriptions.urls")),
+    path("api/gym/", include("gym_visits.urls")),
+    path("api/gym/", include("gym_devices.urls")),
+    path("api/gym/subscriptions/", include("gym_subscriptions.urls")),
 ]
 
 if settings.DEBUG:

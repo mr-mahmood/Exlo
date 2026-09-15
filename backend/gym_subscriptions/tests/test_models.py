@@ -679,7 +679,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             status=GymSubscription.Status.PENDING,
         )
 
-        result = GymSubscription.objects._promote_next(self.user)
+        result = GymSubscription.objects._promote_next_any(self.user)
 
         first.refresh_from_db()
         second.refresh_from_db()
@@ -711,7 +711,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             created_at=now,
         )
 
-        result = GymSubscription.objects._promote_next(self.user)
+        result = GymSubscription.objects._promote_next_any(self.user)
 
         older.refresh_from_db()
         newer.refresh_from_db()
@@ -741,7 +741,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             status=GymSubscription.Status.PENDING,
         )
 
-        result = GymSubscription.objects._promote_next(self.user)
+        result = GymSubscription.objects._promote_next_any(self.user)
 
         active.refresh_from_db()
         pending.refresh_from_db()
@@ -759,7 +759,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
     def test_promote_next_returns_none_when_no_pending_subscription_exists(
         self,
     ):
-        result = GymSubscription.objects._promote_next(self.user)
+        result = GymSubscription.objects._promote_next_any(self.user)
 
         self.assertIsNone(result)
 
@@ -772,7 +772,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             cancelled_at=timezone.now(),
         )
 
-        result = GymSubscription.objects._promote_next(self.user)
+        result = GymSubscription.objects._promote_next_any(self.user)
 
         cancelled.refresh_from_db()
 
@@ -1063,7 +1063,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             expires_at=timezone.now() + timedelta(days=10),
         )
 
-        result = GymSubscription.objects.check_in(
+        result = GymSubscription.objects.consume_visit(
             self.user,
             self.gym,
         )
@@ -1087,7 +1087,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
+            GymSubscription.objects.consume_visit(
                 self.user,
                 self.gym_2,
             )
@@ -1106,7 +1106,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
 
     def test_check_in_without_active_subscription_raises_error(self):
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
+            GymSubscription.objects.consume_visit(
                 self.user,
                 self.gym,
             )
@@ -1126,7 +1126,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
+            GymSubscription.objects.consume_visit(
                 self.user,
                 self.gym,
             )
@@ -1156,7 +1156,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
+            GymSubscription.objects.consume_visit(
                 self.user,
                 self.gym,
             )
@@ -1191,7 +1191,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             status=GymSubscription.Status.PENDING,
         )
 
-        result = GymSubscription.objects.check_in(
+        result = GymSubscription.objects.consume_visit(
             self.user,
             self.gym,
         )
@@ -1217,12 +1217,10 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             self.plan_2.visit_limit - 1,
         )
 
-    def test_check_in_expired_subscription_promotes_pending_then_checks_gym(
-        self,
-    ):
+    def test_check_in_expired_subscription_does_not_promote_other_gym(self):
         expired = self.create_raw_subscription(
             self.user,
-            self.plan,
+            self.plan,  # Gym A
             status=GymSubscription.Status.ACTIVE,
             remaining_visits=10,
             expires_at=timezone.now() - timedelta(seconds=1),
@@ -1230,32 +1228,22 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
 
         pending = self.create_raw_subscription(
             self.user,
-            self.plan_3,
+            self.plan_3,  # Gym B
             status=GymSubscription.Status.PENDING,
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
-                self.user,
-                self.gym,
-            )
+            GymSubscription.objects.consume_visit(self.user, self.gym)  # Gym A
 
         expired.refresh_from_db()
         pending.refresh_from_db()
 
         self.assertEqual(
             context.exception.error_code,
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
-        self.assertEqual(
-            expired.status,
-            GymSubscription.Status.EXPIRED,
-        )
-        self.assertEqual(
-            pending.status,
-            GymSubscription.Status.ACTIVE,
-        )
-        self.assertEqual(pending.remaining_visits, self.plan_3.visit_limit)
+        self.assertEqual(expired.status, GymSubscription.Status.EXPIRED)
+        self.assertEqual(pending.status, GymSubscription.Status.PENDING)
 
     def test_check_in_last_visit_expires_subscription(self):
         subscription = self.create_raw_subscription(
@@ -1266,7 +1254,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             expires_at=timezone.now() + timedelta(days=10),
         )
 
-        result = GymSubscription.objects.check_in(
+        result = GymSubscription.objects.consume_visit(
             self.user,
             self.gym,
         )
@@ -1299,7 +1287,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             status=GymSubscription.Status.PENDING,
         )
 
-        result = GymSubscription.objects.check_in(
+        result = GymSubscription.objects.consume_visit(
             self.user,
             self.gym,
         )
@@ -1332,7 +1320,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             expires_at=timezone.now() + timedelta(days=10),
         )
 
-        GymSubscription.objects.check_in(
+        GymSubscription.objects.consume_visit(
             self.user,
             self.gym,
         )
@@ -1351,12 +1339,10 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
             ).exists()
         )
 
-    def test_check_in_does_not_decrement_when_wrong_gym_after_promotion(
-        self,
-    ):
+    def test_check_in_does_not_decrement_other_gym_subscription(self):
         first = self.create_raw_subscription(
             self.user,
-            self.plan,
+            self.plan,  # Gym A, expired
             status=GymSubscription.Status.ACTIVE,
             remaining_visits=10,
             expires_at=timezone.now() - timedelta(seconds=1),
@@ -1364,35 +1350,23 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
 
         second = self.create_raw_subscription(
             self.user,
-            self.plan_3,
+            self.plan_3,  # Gym B, pending
             status=GymSubscription.Status.PENDING,
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
-                self.user,
-                self.gym,
-            )
+            GymSubscription.objects.consume_visit(self.user, self.gym)  # Gym A
 
         first.refresh_from_db()
         second.refresh_from_db()
 
         self.assertEqual(
             context.exception.error_code,
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
-        self.assertEqual(
-            first.status,
-            GymSubscription.Status.EXPIRED,
-        )
-        self.assertEqual(
-            second.status,
-            GymSubscription.Status.ACTIVE,
-        )
-        self.assertEqual(
-            second.remaining_visits,
-            self.plan_3.visit_limit,
-        )
+        self.assertEqual(first.status, GymSubscription.Status.EXPIRED)
+        self.assertEqual(second.status, GymSubscription.Status.PENDING)
+        self.assertEqual(second.remaining_visits, 0)  # pending, never activated
 
     def test_check_in_does_not_decrement_when_subscription_has_one_visit_and_wrong_gym(
         self,
@@ -1406,7 +1380,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
+            GymSubscription.objects.consume_visit(
                 self.user,
                 self.gym_2,
             )
@@ -1604,10 +1578,10 @@ class GymSubscriptionTransactionTests(GymSubscriptionTestBase):
             GymSubscription.Status.PENDING,
         )
 
-    def test_check_in_wrong_gym_keeps_expiration_and_promotion_changes(self):
+    def test_check_in_wrong_gym_expires_old_but_does_not_promote_other_gym(self):
         expired = self.create_raw_subscription(
             self.user,
-            self.plan,
+            self.plan,  # Gym A
             status=GymSubscription.Status.ACTIVE,
             remaining_visits=10,
             expires_at=timezone.now() - timedelta(seconds=1),
@@ -1615,27 +1589,18 @@ class GymSubscriptionTransactionTests(GymSubscriptionTestBase):
 
         pending = self.create_raw_subscription(
             self.user,
-            self.plan_3,
+            self.plan_3,  # Gym B
             status=GymSubscription.Status.PENDING,
         )
 
         with self.assertRaises(APIError):
-            GymSubscription.objects.check_in(
-                self.user,
-                self.gym,
-            )
+            GymSubscription.objects.consume_visit(self.user, self.gym)  # Gym A
 
         expired.refresh_from_db()
         pending.refresh_from_db()
 
-        self.assertEqual(
-            expired.status,
-            GymSubscription.Status.EXPIRED,
-        )
-        self.assertEqual(
-            pending.status,
-            GymSubscription.Status.ACTIVE,
-        )
+        self.assertEqual(expired.status, GymSubscription.Status.EXPIRED)
+        self.assertEqual(pending.status, GymSubscription.Status.PENDING)
 
     def test_check_in_wrong_gym_does_not_roll_back_visit_decrement_before_error(
         self,
@@ -1649,7 +1614,7 @@ class GymSubscriptionTransactionTests(GymSubscriptionTestBase):
         )
 
         with self.assertRaises(APIError) as context:
-            GymSubscription.objects.check_in(
+            GymSubscription.objects.consume_visit(
                 self.user,
                 self.gym_2,
             )
