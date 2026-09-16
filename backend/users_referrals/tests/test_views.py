@@ -139,14 +139,6 @@ class UserReferralPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
         self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
-    def test_get_referrals_blocked_user(self):
-        """Test retrieving referrals for blocked user"""
-        self.user.is_blocked = True
-        self.user.save()
-
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
     def test_get_referrals_inactive_user(self):
         """Test retrieving referrals for inactive user"""
         self.user.is_active = False
@@ -230,7 +222,6 @@ class UserReferralPIViewTest(TestCase):
         referred_user = referral["referred_user"]
         self.assertNotIn("password", referred_user)
         self.assertNotIn("is_active", referred_user)
-        self.assertNotIn("is_blocked", referred_user)
         self.assertNotIn("is_superuser", referred_user)
         self.assertNotIn("last_login", referred_user)
         self.assertNotIn("created_at", referred_user)

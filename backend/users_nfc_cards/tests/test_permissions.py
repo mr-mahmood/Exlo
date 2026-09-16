@@ -145,14 +145,6 @@ class HasPermissionTests(PermissionTestBase):
         view = type("V", (), {"kwargs": {}})()
         self.assertFalse(perm.has_permission(request, view))
 
-    def test_blocked_user_is_rejected(self):
-        self.owner_a.is_blocked = True
-        self.owner_a.save(update_fields=["is_blocked"])
-        request = self.make_request(self.owner_a)
-        perm = CanAssignUserNfcCard()
-        view = type("V", (), {"kwargs": {}})()
-        self.assertFalse(perm.has_permission(request, view))
-
     def test_inactive_user_is_rejected(self):
         self.owner_a.is_active = False
         self.owner_a.save(update_fields=["is_active"])

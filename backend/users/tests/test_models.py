@@ -33,7 +33,6 @@ class UserModelTest(TestCase):
         self.assertEqual(user.gender, User.Gender.MALE)
         self.assertEqual(user.date_of_birth, date(1990, 1, 1))
         self.assertTrue(user.is_active)
-        self.assertFalse(user.is_blocked)
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
         self.assertEqual(user.role, User.Role.USER)
@@ -134,53 +133,7 @@ class UserModelTest(TestCase):
         user.save()
         self.assertEqual(user.full_name, "Jane")
 
-    def test_is_user_active_property(self):
-        """Test is_user_active property"""
-        user: User = User.objects.create_user(**self.valid_data)
-
-        # Active user
-        self.assertTrue(user.is_user_active)
-
-        # Inactive user
-        user.is_active = False
-        user.save()
-        self.assertFalse(user.is_user_active)
-
-        # Blocked user
-        user.is_active = True
-        user.is_blocked = True
-        user.save()
-        self.assertFalse(user.is_user_active)
-
-        # Inactive & Blocked user
-        user.is_active = False
-        user.is_blocked = True
-        user.save()
-        self.assertFalse(user.is_user_active)
-
     # ============ ACTION TESTS ============
-
-    def test_block_user(self):
-        """Test blocking a user"""
-        user: User = User.objects.create_user(**self.valid_data)
-        user.block()
-
-        user.refresh_from_db()
-        self.assertTrue(user.is_blocked)
-        self.assertFalse(user.is_active)
-        self.assertIsNotNone(user.blocked_at)
-
-    def test_unblock_user(self):
-        """Test unblocking a user"""
-        user: User = User.objects.create_user(**self.valid_data)
-        user.block()
-
-        user.unblock()
-
-        user.refresh_from_db()
-        self.assertFalse(user.is_blocked)
-        self.assertTrue(user.is_active)
-        self.assertIsNone(user.blocked_at)
 
     def test_update_last_login_at(self):
         """Test updating last login timestamp"""
@@ -209,26 +162,12 @@ class UserModelTest(TestCase):
         """Test account status validation for inactive user"""
         user: User = User.objects.create_user(**self.valid_data)
         user.is_active = False
-        user.is_blocked = False
         user.save()
 
         with self.assertRaises(APIError) as context:
             user.validate_account_status()
         self.assertEqual(
             context.exception.error_code, UserAccountError.USER_ACCOUNT_INACTIVE[0]
-        )
-
-    def test_validate_account_status_blocked_user(self):
-        """Test account status validation for blocked user"""
-        user: User = User.objects.create_user(**self.valid_data)
-        user.is_active = True
-        user.is_blocked = True
-        user.save()
-
-        with self.assertRaises(APIError) as context:
-            user.validate_account_status()
-        self.assertEqual(
-            context.exception.error_code, UserAccountError.USER_ACCOUNT_BLOCKED[0]
         )
 
     # ============ REFERRAL CODE TESTS ============

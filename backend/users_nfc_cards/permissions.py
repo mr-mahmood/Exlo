@@ -9,7 +9,7 @@ from gym_subscriptions.models import GymSubscription
 class CanAssignUserNfcCard(BasePermission):
 
     def has_permission(self, request, view):
-        # Gate: caller must be an active user (not blocked, not anonymous).
+        # Gate: caller must be an active user
         if not IsUserActive().has_permission(request, view):
             return False
         return True

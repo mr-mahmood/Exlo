@@ -191,12 +191,3 @@ class AssignCardViewTests(ViewTestBase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         existing.refresh_from_db()
         self.assertEqual(existing.uid, "EXISTING")
-
-    def test_blocked_owner_cannot_assign(self):
-        self.create_active_subscription(self.target, self.plan_a)
-        self.owner_a.is_blocked = True
-        self.owner_a.save(update_fields=["is_blocked"])
-
-        response = self.assign(self.owner_a, self.target.id)
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

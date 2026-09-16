@@ -159,21 +159,6 @@ class AccessTokenAuthenticationTest(TestCase):
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
-    def test_authenticate_blocked_user(self):
-        """Test authentication for blocked user"""
-        self.user.block()
-
-        request = self.factory.get("/")
-        request.COOKIES = {"access_token": self.access_token}
-
-        auth = AccessTokenAuthentication()
-        with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
-
-        self.assertEqual(
-            context.exception.error_code, UserAccountError.USER_ACCOUNT_BLOCKED[0]
-        )
-
     def test_authenticate_inactive_user(self):
         """Test authentication for inactive user"""
         self.user.is_active = False
@@ -408,21 +393,6 @@ class RefreshTokenAuthenticationTest(TestCase):
             auth.authenticate(request)  # type: ignore
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
-
-    def test_authenticate_blocked_user(self):
-        """Test authentication for blocked user"""
-        self.user.block()
-
-        request = self.factory.get("/")
-        request.COOKIES = {"refresh_token": self.refresh_token}
-
-        auth = RefreshTokenAuthentication()
-        with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
-
-        self.assertEqual(
-            context.exception.error_code, UserAccountError.USER_ACCOUNT_BLOCKED[0]
-        )
 
     def test_authenticate_inactive_user(self):
         """Test authentication for inactive user"""
@@ -717,22 +687,6 @@ class AccessTokenAuthenticationWithBearerTransportTest(TestCase):
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
-    def test_authenticate_with_bearer_header_and_blocked_user(self):
-        """Test authentication for blocked user when X-Auth-Transport: bearer is set"""
-        self.user.block()
-
-        request = self.factory.get("/")
-        request.META["HTTP_AUTHORIZATION"] = f"Bearer {self.access_token}"
-        request.META["HTTP_X_AUTH_TRANSPORT"] = "bearer"
-
-        auth = AccessTokenAuthentication()
-        with self.assertRaises(APIError) as context:
-            auth.authenticate(request)
-
-        self.assertEqual(
-            context.exception.error_code, UserAccountError.USER_ACCOUNT_BLOCKED[0]
-        )
-
     def test_authenticate_with_bearer_header_and_inactive_user(self):
         """Test authentication for inactive user when X-Auth-Transport: bearer is set"""
         self.user.is_active = False
@@ -952,22 +906,6 @@ class RefreshTokenAuthenticationWithBearerTransportTest(TestCase):
             auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
-
-    def test_authenticate_with_bearer_header_and_blocked_user(self):
-        """Test refresh authentication for blocked user when X-Auth-Transport: bearer is set"""
-        self.user.block()
-
-        request = self.factory.get("/")
-        request.META["HTTP_AUTHORIZATION"] = f"Bearer {self.refresh_token}"
-        request.META["HTTP_X_AUTH_TRANSPORT"] = "bearer"
-
-        auth = RefreshTokenAuthentication()
-        with self.assertRaises(APIError) as context:
-            auth.authenticate(request)
-
-        self.assertEqual(
-            context.exception.error_code, UserAccountError.USER_ACCOUNT_BLOCKED[0]
-        )
 
     def test_authenticate_with_bearer_header_and_inactive_user(self):
         """Test refresh authentication for inactive user when X-Auth-Transport: bearer is set"""

@@ -47,14 +47,6 @@ class NfcFlowTestBase(TestCase):
             first_name="C",
             last_name="D",
         )
-        self.blocked_user = User.objects.create_user(
-            phone_number="09120000003",
-            password="x",
-            first_name="E",
-            last_name="F",
-        )
-        self.blocked_user.is_blocked = True
-        self.blocked_user.save(update_fields=["is_blocked"])
 
         self.plan_a = GymMembershipPlan.objects.create_plan(
             name="Plan A",
@@ -322,17 +314,6 @@ class CheckInFlowTests(NfcFlowTestBase):
             GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
 
-    def test_blocked_user_cannot_check_in(self):
-        self.assign_card(self.blocked_user, "BLOCKED1")
-
-        response = self.check_in(gym=self.gym_a, token=self.token_a, uid="BLOCKED1")
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"],
-            UserAccountError.USER_ACCOUNT_BLOCKED[0],
-        )
-
     def test_last_visit_expires_subscription_and_allows_next_day(self):
         sub = GymSubscription.objects.get(subscriber=self.user)
         sub.remaining_visits = 1
@@ -560,23 +541,6 @@ class CheckOutFlowTests(NfcFlowTestBase):
         self.assertEqual(
             response.data["error_code"],
             UserNfcCardError.CARD_NOT_FOUND[0],
-        )
-
-    def test_check_out_blocked_user_is_rejected(self):
-        self.make_active_subscription(self.other_user, self.plan_a)
-        self.assign_card(self.other_user, "OTHER1")
-
-        self.check_in(gym=self.gym_a, token=self.token_a, uid="OTHER1")
-
-        self.other_user.is_blocked = True
-        self.other_user.save(update_fields=["is_blocked"])
-
-        response = self.check_out(gym=self.gym_a, token=self.token_a, uid="OTHER1")
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"],
-            UserAccountError.USER_ACCOUNT_BLOCKED[0],
         )
 
 

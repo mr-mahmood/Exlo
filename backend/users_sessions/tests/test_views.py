@@ -107,14 +107,6 @@ class UserSessionPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
         self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
-    def test_get_sessions_blocked_user(self):
-        """Test retrieving sessions for blocked user"""
-        self.user.is_blocked = True
-        self.user.save()
-
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
     def test_get_sessions_inactive_user(self):
         """Test retrieving sessions for inactive user"""
         self.user.is_active = False
@@ -209,18 +201,6 @@ class UserSessionPIViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
         self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
-
-    def test_delete_session_blocked_user(self):
-        """Test deleting session for blocked user"""
-        self.user.is_blocked = True
-        self.user.save()
-
-        response = self.client.delete(
-            self.url, data={"session_id": str(self.session1.session_id)}, format="json"
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], "NOT_FOUND")  # type: ignore
 
     def test_delete_session_inactive_user(self):
         """Test deleting session for inactive user"""

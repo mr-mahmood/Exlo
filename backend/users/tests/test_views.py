@@ -64,7 +64,6 @@ class UserSignupViewTest(TestCase):
         self.assertEqual(user.date_of_birth, self.valid_data["date_of_birth"])
         self.assertIsNotNone(user.referral_code)
         self.assertTrue(user.is_active)
-        self.assertFalse(user.is_blocked)
 
         # Check session created
         self.assertTrue(Session.objects.filter(user=user).exists())
@@ -522,14 +521,6 @@ class PhoneChangeFlowTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
         self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
-    def test_phone_change_blocked_user(self):
-        """Test phone change for blocked user"""
-        self.user.is_blocked = True
-        self.user.save()
-
-        response = self.client.post(self.old_request_url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-
     def test_phone_change_inactive_user(self):
         """Test phone change for inactive user"""
         self.user.is_active = False
@@ -573,12 +564,6 @@ class UserProfileViewTest(TestCase):
         response = client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
         self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
-
-    def test_get_profile_blocked_user(self):
-        self.user.is_blocked = True
-        self.user.save()
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_get_profile_inactive_user(self):
         self.user.is_active = False

@@ -202,20 +202,6 @@ class AuthenticationViewsTest(TestCase):
 
     # --- LOGIN VERIFY TESTS ---
 
-    def test_login_verify_blocked_user(self):
-        """Test login verify for blocked user"""
-        self.user.block()
-
-        # Request OTP
-        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-
-        # Try to verify
-        data = {"phone_number": "09123456789", "otp": "123456"}
-        response = self.client.post(self.login_verify_url, data)
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0])  # type: ignore
-
     def test_login_verify_inactive_user(self):
         """Test login verify for inactive user"""
         self.user.is_active = False
@@ -300,23 +286,6 @@ class AuthenticationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SessionError.SESSION_EXPIRE[0])  # type: ignore
-
-    def test_refresh_blocked_user(self):
-        """Test refresh for blocked user"""
-        # Login to get tokens
-        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
-        self.client.cookies = verify_response.cookies
-
-        # Block user
-        self.user.block()
-
-        response = self.client.post(self.refresh_url)
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0])  # type: ignore
 
     def test_refresh_inactive_user(self):
         """Test refresh for inactive user"""
@@ -626,24 +595,6 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
         self.assertIn("refresh", response.data)
         self.assertNotIn("access_token", response.cookies)
 
-    def test_login_verify_with_bearer_transport_blocked_user(self):
-        """Test login verify with X-Auth-Transport: bearer for blocked user"""
-        self.user.block()
-
-        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-
-        data = {"phone_number": "09123456789", "otp": "123456"}
-        response = self.client.post(
-            self.login_verify_url, data, HTTP_X_AUTH_TRANSPORT="bearer"
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
-        )
-        self.assertNotIn("access", response.data)
-        self.assertNotIn("refresh", response.data)
-
     def test_login_verify_with_bearer_transport_inactive_user(self):
         """Test login verify with X-Auth-Transport: bearer for inactive user"""
         self.user.is_active = False
@@ -736,29 +687,6 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SessionError.SESSION_EXPIRE[0])
-        self.assertNotIn("access", response.data)
-        self.assertNotIn("refresh", response.data)
-
-    def test_refresh_with_bearer_transport_blocked_user(self):
-        """Test refresh with X-Auth-Transport: bearer for blocked user"""
-        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
-
-        refresh_token = verify_response.cookies["refresh_token"].value
-        self.user.block()
-
-        response = self.client.post(
-            self.refresh_url,
-            HTTP_AUTHORIZATION=f"Bearer {refresh_token}",
-            HTTP_X_AUTH_TRANSPORT="bearer",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
-        )
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)
 

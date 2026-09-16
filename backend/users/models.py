@@ -145,17 +145,8 @@ class User(AbstractUser):
         default=True,
     )
 
-    is_blocked = models.BooleanField(
-        default=False,
-    )
-
     # Timestamps
     last_login_at = models.DateTimeField(
-        null=True,
-        blank=True,
-    )
-
-    blocked_at = models.DateTimeField(
         null=True,
         blank=True,
     )
@@ -178,7 +169,7 @@ class User(AbstractUser):
         db_table = "users"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["is_active", "is_blocked"]),
+            models.Index(fields=["is_active"]),
             models.Index(fields=["role"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["last_login_at"]),
@@ -194,51 +185,20 @@ class User(AbstractUser):
         return f"{self.first_name} {self.last_name}".strip()
 
     @property
-    def is_user_active(self):
-        """Check if user can access the system at all"""
-        return self.is_active and not self.is_blocked
-
-    @property
     def is_admin(self):
         """Check if user is admin"""
         return bool(
-            self.is_user_active
+            self.is_active
             and self.is_staff
             and self.is_superuser
             and self.role == User.Role.ADMIN
         )
 
     def validate_account_status(self):
-        """
-        Validate user account status.
-        Raises appropriate errors if account is not in good standing.
-
-        Priority:
-        1. Blocked status (most severe)
-        2. Inactive status
-        3. Active and not blocked - all good
-        """
-        if self.is_blocked:
-            raise APIError(UserAccountError.USER_ACCOUNT_BLOCKED)
-
         if not self.is_active:
             raise APIError(UserAccountError.USER_ACCOUNT_INACTIVE)
 
         return self
-
-    def block(self):
-        """Block the user."""
-        self.is_blocked = True
-        self.is_active = False
-        self.blocked_at = timezone.now()
-        self.save(update_fields=["is_blocked", "is_active", "blocked_at", "updated_at"])
-
-    def unblock(self):
-        """Unblock the user."""
-        self.is_blocked = False
-        self.is_active = True
-        self.blocked_at = None
-        self.save(update_fields=["is_blocked", "is_active", "blocked_at", "updated_at"])
 
     def update_last_login_at(self):
         """update session last_activity_at"""

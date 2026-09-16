@@ -7,7 +7,7 @@ class IsUserActive(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.is_user_active
+            and request.user.is_active
         )
 
 
@@ -16,7 +16,7 @@ class IsAdmin(BasePermission):
         return bool(
             request.user
             and request.user.is_authenticated
-            and request.user.is_user_active
+            and request.user.is_active
             and request.user.is_staff
             and request.user.is_superuser
             and request.user.role == User.Role.ADMIN
