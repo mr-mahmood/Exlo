@@ -643,12 +643,6 @@ class GymVisitsError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
-    INVALID_METHOD = (
-        "VISIT_005",
-        "Invalid check method",
-        status.HTTP_400_BAD_REQUEST,
-    )
-
 
 # ============================================================================
 # GYM DEVICE

@@ -12,7 +12,7 @@ from core.errors import APIError, GymVisitsError, GymSubscriptionError
 
 class GymVisitManager(models.Manager):
 
-    def check_in(self, user, gym, subscription, method):
+    def check_in(self, user, gym, subscription, method) -> "GymVisit":
 
         if self.filter(user=user, checked_out_at__isnull=True).exists():
             raise APIError(GymVisitsError.ALREADY_CHECKED_IN)

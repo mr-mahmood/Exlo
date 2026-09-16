@@ -155,9 +155,9 @@ class UserMeasurementsListViewTest(TestCase):
 
         response = self.client.post(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.INVALID_HEIGHT[0],
         )
 
@@ -198,9 +198,9 @@ class UserMeasurementsListViewTest(TestCase):
         self.client.force_authenticate(user=self.user)
         response = self.client.post(self.url, {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             "MEAS_022",  # The new error code
         )
 
@@ -370,9 +370,9 @@ class UserMeasurementDetailViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -386,9 +386,9 @@ class UserMeasurementDetailViewTest(TestCase):
         response = self.client.get(non_existent_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -442,9 +442,9 @@ class UserMeasurementDetailViewTest(TestCase):
         response = self.client.put(self.url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -481,9 +481,9 @@ class UserMeasurementDetailViewTest(TestCase):
         response = self.client.put(self.url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.INVALID_HEIGHT[0],
         )
 
@@ -514,9 +514,9 @@ class UserMeasurementDetailViewTest(TestCase):
         response = self.client.delete(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -533,9 +533,9 @@ class UserMeasurementDetailViewTest(TestCase):
         response = self.client.delete(non_existent_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -576,9 +576,9 @@ class UserMeasurementDetailViewTest(TestCase):
         # Try to get it again
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -632,9 +632,9 @@ class UserMeasurementDetailViewTest(TestCase):
         # Try to delete again
         response = self.client.delete(self.url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             MeasurementsError.MEASUREMENT_NOT_FOUND[0],
         )
 
@@ -915,9 +915,10 @@ class MeasurementPhotosViewTest(TestCase):
         response = self.client.get(self.photos_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"], MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS[0]
+            response.data["error_code"],
+            MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS[0],
         )
 
     def test_get_photos_not_owner(self):
@@ -926,9 +927,10 @@ class MeasurementPhotosViewTest(TestCase):
         response = self.client.get(self.photos_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"], MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS[0]
+            response.data["error_code"],
+            MeasurementsError.NO_EXISTING_MEASUREMENTS_PHOTOS[0],
         )
 
     def test_post_photo_authenticated(self):
@@ -990,9 +992,10 @@ class MeasurementPhotosViewTest(TestCase):
         response = self.client.post(self.photos_url, data, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"], MeasurementsError.MEASUREMENTS_PHOTO_TYPE_EXIST[0]
+            response.data["error_code"],
+            MeasurementsError.MEASUREMENTS_PHOTO_TYPE_EXIST[0],
         )
 
     def test_post_photo_invalid_type(self):
@@ -1005,9 +1008,9 @@ class MeasurementPhotosViewTest(TestCase):
         response = self.client.post(self.photos_url, data, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("error", response.data)
+        self.assertIn("error_code", response.data)
         self.assertEqual(
-            response.data["error"],
+            response.data["error_code"],
             "VALIDATION_ERROR",
         )
 
@@ -1085,8 +1088,10 @@ class MeasurementPhotoDetailViewTest(TestCase):
         response = self.client.get(self.detail_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+        self.assertIn("error_code", response.data)
+        self.assertEqual(
+            response.data["error_code"], MeasurementsError.PHOTO_NOT_FOUND[0]
+        )
 
     def test_get_photo_not_found(self):
         """Test GET photo with non-existent ID"""
@@ -1101,8 +1106,10 @@ class MeasurementPhotoDetailViewTest(TestCase):
         response = self.client.get(invalid_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+        self.assertIn("error_code", response.data)
+        self.assertEqual(
+            response.data["error_code"], MeasurementsError.PHOTO_NOT_FOUND[0]
+        )
 
     def test_delete_photo_authenticated(self):
         """Test DELETE photo with authenticated user"""
@@ -1129,8 +1136,10 @@ class MeasurementPhotoDetailViewTest(TestCase):
         response = self.client.delete(self.detail_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+        self.assertIn("error_code", response.data)
+        self.assertEqual(
+            response.data["error_code"], MeasurementsError.PHOTO_NOT_FOUND[0]
+        )
 
     def test_delete_photo_not_found(self):
         """Test DELETE photo with non-existent ID"""
@@ -1145,8 +1154,10 @@ class MeasurementPhotoDetailViewTest(TestCase):
         response = self.client.delete(invalid_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+        self.assertIn("error_code", response.data)
+        self.assertEqual(
+            response.data["error_code"], MeasurementsError.PHOTO_NOT_FOUND[0]
+        )
 
     def test_delete_photo_file_cleanup(self):
         """Test that photo file is deleted from storage"""
@@ -1174,8 +1185,10 @@ class MeasurementPhotoDetailViewTest(TestCase):
         # Try to get it again
         response = self.client.get(self.detail_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], MeasurementsError.PHOTO_NOT_FOUND[0])
+        self.assertIn("error_code", response.data)
+        self.assertEqual(
+            response.data["error_code"], MeasurementsError.PHOTO_NOT_FOUND[0]
+        )
 
 
 class MeasurementPhotosIntegrationTest(TestCase):

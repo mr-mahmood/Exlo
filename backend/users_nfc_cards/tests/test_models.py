@@ -76,7 +76,7 @@ class AssignCardTests(UserNfcCardTestBase):
 
         self.assertEqual(
             ctx.exception.error_code,
-            UserNfcCardError.CARD_NOT_FOUND[0],
+            UserNfcCardError.INVALID_UID[0],
         )
 
     def test_raises_card_not_found_for_whitespace_only_uid(self):
@@ -85,7 +85,7 @@ class AssignCardTests(UserNfcCardTestBase):
 
         self.assertEqual(
             ctx.exception.error_code,
-            UserNfcCardError.CARD_NOT_FOUND[0],
+            UserNfcCardError.INVALID_UID[0],
         )
 
     def test_replaces_existing_card_for_same_user(self):

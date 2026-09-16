@@ -105,7 +105,7 @@ class UserSessionPIViewTest(TestCase):
         response = client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_get_sessions_blocked_user(self):
         """Test retrieving sessions for blocked user"""
@@ -158,7 +158,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
 
     def test_delete_session_other_users_session(self):
         """Test that user cannot delete another user's session"""
@@ -175,7 +175,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
 
         # Verify session still exists
         self.assertTrue(
@@ -189,7 +189,7 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.delete(self.url, data={}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
 
     def test_delete_session_invalid_uuid(self):
         """Test deleting a session with invalid UUID format"""
@@ -198,7 +198,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
 
     def test_delete_session_unauthenticated(self):
         """Test deleting a session without authentication"""
@@ -208,7 +208,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_delete_session_blocked_user(self):
         """Test deleting session for blocked user"""
@@ -220,7 +220,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "NOT_FOUND")  # type: ignore
+        self.assertEqual(response.data["error_code"], "NOT_FOUND")  # type: ignore
 
     def test_delete_session_inactive_user(self):
         """Test deleting session for inactive user"""
@@ -232,7 +232,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "NOT_FOUND")  # type: ignore
+        self.assertEqual(response.data["error_code"], "NOT_FOUND")  # type: ignore
 
     # ========== BULK OPERATIONS ==========
 

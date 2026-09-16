@@ -198,7 +198,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_request_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], UserValidationError.INVALID_PHONE_NUMBER[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])  # type: ignore
 
     # --- LOGIN VERIFY TESTS ---
 
@@ -214,7 +214,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], UserAccountError.USER_ACCOUNT_BLOCKED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0])  # type: ignore
 
     def test_login_verify_inactive_user(self):
         """Test login verify for inactive user"""
@@ -229,7 +229,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], UserAccountError.USER_ACCOUNT_INACTIVE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])  # type: ignore
 
     def test_login_verify_missing_otp(self):
         """Test login verify with missing OTP"""
@@ -237,7 +237,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], OTPError.PHONE_REQUIRED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])  # type: ignore
 
     def test_login_verify_missing_phone(self):
         """Test login verify with missing phone number"""
@@ -245,7 +245,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], OTPError.PHONE_REQUIRED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])  # type: ignore
 
     def test_login_verify_existing_user_sets_cookies(self):
         """Test that login verify sets proper cookies for existing user"""
@@ -299,7 +299,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SessionError.SESSION_EXPIRE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_EXPIRE[0])  # type: ignore
 
     def test_refresh_blocked_user(self):
         """Test refresh for blocked user"""
@@ -316,7 +316,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], UserAccountError.USER_ACCOUNT_BLOCKED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0])  # type: ignore
 
     def test_refresh_inactive_user(self):
         """Test refresh for inactive user"""
@@ -334,7 +334,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], UserAccountError.USER_ACCOUNT_INACTIVE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])  # type: ignore
 
     def test_refresh_rotates_tokens(self):
         """Test that refresh rotates the token"""
@@ -639,7 +639,7 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            response.data["error"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
+            response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
         )
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)
@@ -658,7 +658,7 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            response.data["error"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
+            response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
         )
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)
@@ -735,7 +735,7 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SessionError.SESSION_EXPIRE[0])
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_EXPIRE[0])
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)
 
@@ -757,7 +757,7 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            response.data["error"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
+            response.data["error_code"], UserAccountError.USER_ACCOUNT_BLOCKED[0]
         )
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)
@@ -782,7 +782,7 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
-            response.data["error"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
+            response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
         )
         self.assertNotIn("access", response.data)
         self.assertNotIn("refresh", response.data)

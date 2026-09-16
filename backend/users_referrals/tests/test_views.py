@@ -137,7 +137,7 @@ class UserReferralPIViewTest(TestCase):
         response = client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_get_referrals_blocked_user(self):
         """Test retrieving referrals for blocked user"""
@@ -613,4 +613,4 @@ class UserReferralPIViewIntegrationTest(TestCase):
         response = client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore

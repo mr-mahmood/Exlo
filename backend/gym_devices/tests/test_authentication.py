@@ -39,17 +39,23 @@ class DeviceTokenAuthenticationTests(TestCase):
 
     def test_returns_none_when_no_authorization_header(self):
         request = self._make_request(header_value=None, gym_id=self.gym.id)
-        result = self.auth.authenticate(request)
-        self.assertIsNone(result)
+        with self.assertRaises(APIError) as ctx:
+            self.auth.authenticate(request)
+        self.assertEqual(
+            ctx.exception.error_code, GymDeviceError.INVALID_DEVICE_CREDENTIAL[0]
+        )
 
     def test_returns_none_when_wrong_keyword(self):
         request = self._make_request(header_value="Token abc123", gym_id=self.gym.id)
-        result = self.auth.authenticate(request)
-        self.assertIsNone(result)
+        with self.assertRaises(APIError) as ctx:
+            self.auth.authenticate(request)
+        self.assertEqual(
+            ctx.exception.error_code, GymDeviceError.INVALID_DEVICE_CREDENTIAL[0]
+        )
 
     def test_raises_when_header_has_more_than_two_parts(self):
         request = self._make_request(
-            header_value="Bearer token extra", gym_id=self.gym.id
+            header_value="Device token extra", gym_id=self.gym.id
         )
         with self.assertRaises(APIError) as ctx:
             self.auth.authenticate(request)
@@ -58,7 +64,7 @@ class DeviceTokenAuthenticationTests(TestCase):
         )
 
     def test_raises_when_header_has_only_keyword(self):
-        request = self._make_request(header_value="Bearer", gym_id=self.gym.id)
+        request = self._make_request(header_value="Device", gym_id=self.gym.id)
         with self.assertRaises(APIError) as ctx:
             self.auth.authenticate(request)
         self.assertEqual(
@@ -67,7 +73,7 @@ class DeviceTokenAuthenticationTests(TestCase):
 
     def test_raises_when_gym_id_missing_from_resolver(self):
         request = self._make_request(
-            header_value=f"Bearer {self.raw_token}", gym_id=None
+            header_value=f"Device {self.raw_token}", gym_id=None
         )
         # No resolver_match set -> _extract_gym_id returns None
         request.resolver_match = None
@@ -79,7 +85,7 @@ class DeviceTokenAuthenticationTests(TestCase):
 
     def test_raises_when_gym_id_not_in_kwargs(self):
         request = self._make_request(
-            header_value=f"Bearer {self.raw_token}", gym_id=self.gym.id
+            header_value=f"Device {self.raw_token}", gym_id=self.gym.id
         )
         request.resolver_match = DummyResolverMatch({})
         with self.assertRaises(APIError) as ctx:
@@ -92,7 +98,7 @@ class DeviceTokenAuthenticationTests(TestCase):
 
     def test_authenticates_valid_token(self):
         request = self._make_request(
-            header_value=f"Bearer {self.raw_token}", gym_id=self.gym.id
+            header_value=f"Device {self.raw_token}", gym_id=self.gym.id
         )
         user, device = self.auth.authenticate(request)
         self.assertIsNone(user)
@@ -100,14 +106,14 @@ class DeviceTokenAuthenticationTests(TestCase):
 
     def test_keyword_case_insensitive(self):
         request = self._make_request(
-            header_value=f"bearer {self.raw_token}", gym_id=self.gym.id
+            header_value=f"Device {self.raw_token}", gym_id=self.gym.id
         )
         user, device = self.auth.authenticate(request)
         self.assertEqual(device.id, self.device.id)
 
     def test_bearer_uppercase(self):
         request = self._make_request(
-            header_value=f"BEARER {self.raw_token}", gym_id=self.gym.id
+            header_value=f"Device {self.raw_token}", gym_id=self.gym.id
         )
         user, device = self.auth.authenticate(request)
         self.assertEqual(device.id, self.device.id)
@@ -115,7 +121,7 @@ class DeviceTokenAuthenticationTests(TestCase):
     # ---------- Invalid token ----------
 
     def test_raises_when_token_too_short(self):
-        request = self._make_request(header_value="Bearer short", gym_id=self.gym.id)
+        request = self._make_request(header_value="Device short", gym_id=self.gym.id)
         with self.assertRaises(APIError) as ctx:
             self.auth.authenticate(request)
         self.assertEqual(ctx.exception.error_code, GymDeviceError.DEVICE_NOT_FOUND[0])
@@ -123,7 +129,7 @@ class DeviceTokenAuthenticationTests(TestCase):
     def test_raises_when_token_not_matching(self):
         bad_token = self.raw_token[:12] + "0" * (len(self.raw_token) - 12)
         request = self._make_request(
-            header_value=f"Bearer {bad_token}", gym_id=self.gym.id
+            header_value=f"Device {bad_token}", gym_id=self.gym.id
         )
         with self.assertRaises(APIError) as ctx:
             self.auth.authenticate(request)
@@ -132,7 +138,7 @@ class DeviceTokenAuthenticationTests(TestCase):
     def test_raises_when_device_inactive(self):
         self.device.revoke_device()
         request = self._make_request(
-            header_value=f"Bearer {self.raw_token}", gym_id=self.gym.id
+            header_value=f"Device {self.raw_token}", gym_id=self.gym.id
         )
         with self.assertRaises(APIError) as ctx:
             self.auth.authenticate(request)
@@ -143,7 +149,7 @@ class DeviceTokenAuthenticationTests(TestCase):
             gym=self.other_gym
         )
         request = self._make_request(
-            header_value=f"Bearer {other_token}", gym_id=self.gym.id
+            header_value=f"Device {other_token}", gym_id=self.gym.id
         )
         with self.assertRaises(APIError) as ctx:
             self.auth.authenticate(request)
@@ -154,14 +160,14 @@ class DeviceTokenAuthenticationTests(TestCase):
     def test_raises_when_gym_inactive(self):
         device, token = GymDevice.objects.register_device(gym=self.inactive_gym)
         request = self._make_request(
-            header_value=f"Bearer {token}", gym_id=self.inactive_gym.id
+            header_value=f"Device {token}", gym_id=self.inactive_gym.id
         )
         with self.assertRaises(APIError):
             self.auth.authenticate(request)
 
     def test_raises_when_gym_not_found(self):
         request = self._make_request(
-            header_value=f"Bearer {self.raw_token}", gym_id=uuid.uuid4()
+            header_value=f"Device {self.raw_token}", gym_id=uuid.uuid4()
         )
         with self.assertRaises(APIError):
             self.auth.authenticate(request)
@@ -169,15 +175,15 @@ class DeviceTokenAuthenticationTests(TestCase):
     # ---------- _extract_gym_id ----------
 
     def test_extract_gym_id_returns_none_when_no_resolver_match(self):
-        request = self._make_request(header_value="Bearer x")
+        request = self._make_request(header_value="Device x")
         request.resolver_match = None
         self.assertIsNone(self.auth._extract_gym_id(request))
 
     def test_extract_gym_id_returns_value(self):
-        request = self._make_request(header_value="Bearer x", gym_id=self.gym.id)
+        request = self._make_request(header_value="Device x", gym_id=self.gym.id)
         self.assertEqual(self.auth._extract_gym_id(request), self.gym.id)
 
     def test_extract_gym_id_returns_none_when_missing(self):
-        request = self._make_request(header_value="Bearer x")
+        request = self._make_request(header_value="Device x")
         request.resolver_match = DummyResolverMatch({})
         self.assertIsNone(self.auth._extract_gym_id(request))

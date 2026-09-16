@@ -18,17 +18,17 @@ class GlobalJSONRenderer(JSONRenderer):
             payload = {
                 "success": True,
                 "data": data if data is not None else None,
-                "error": None,
+                "error_code": None,
             }
         else:
             # Extract error information
-            error_code = data.get("error", "ERROR")
+            error_code = data.get("error_code", "ERROR")
             error_message = data.get("error_message") if settings.DEBUG else None
 
             payload = {
                 "success": False,
                 "data": None,
-                "error": error_code,
+                "error_code": error_code,
             }
 
             # Only include error_message in development

@@ -17,10 +17,7 @@ class UserNfcCardAssignView(APIView):
 
         self.check_object_permissions(request, user)
 
-        uid = request.data.get("uid", "")
-        if not isinstance(uid, str):
-            raise APIError(UserNfcCardError.INVALID_UID)
-
+        uid = request.data.get("uid")
         card = UserNfcCard.objects.assign_card(
             user=user,
             uid=uid,

@@ -112,7 +112,7 @@ class UserSignupViewTest(TestCase):
         cache.clear()
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SignUpError.SIGN_UP_NOT_ALLOWED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SignUpError.SIGN_UP_NOT_ALLOWED[0])  # type: ignore
 
     def test_signup_with_expired_phone_verification(self):
         """Test signup with expired phone verification"""
@@ -185,7 +185,7 @@ class UserSignupViewTest(TestCase):
         )
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
 
     # ========== REFERRAL TESTS ==========
     def test_signup_with_invalid_referral(self):
@@ -195,7 +195,7 @@ class UserSignupViewTest(TestCase):
 
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SignUpError.REFERRAL_CODE_NOT_VALID[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0])  # type: ignore
 
     # ========== EDGE CASES ==========
     def test_signup_with_special_characters_in_name(self):
@@ -235,7 +235,7 @@ class UserSignupViewTest(TestCase):
 
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
 
     # ========== SELF-REFERRAL PREVENTION ==========
     def test_signup_self_referral_prevention(self):
@@ -262,7 +262,7 @@ class UserSignupViewTest(TestCase):
 
             response = self.client.post(self.url, data)
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(response.data["error"], SignUpError.REFERRAL_CODE_NOT_VALID[0])  # type: ignore
+            self.assertEqual(response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0])  # type: ignore
 
             from users_referrals.models import Referral
 
@@ -358,14 +358,14 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "OTP-002")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-002")  # type: ignore
 
     # ========== ERROR CASES - OLD PHONE ==========
     def test_old_otp_verify_without_state(self):
         """Test verifying old OTP without any state"""
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "OTP-002")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-002")  # type: ignore
 
     def test_old_otp_verify_invalid_otp(self):
         """Test verifying old OTP with invalid code"""
@@ -373,7 +373,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "999999"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-003")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-003")  # type: ignore
 
         state = cache.get(f"phone_change_step_{self.user.id}")
         self.assertEqual(state["step"], "old_otp_sent")
@@ -385,7 +385,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-004")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-004")  # type: ignore
 
     def test_old_otp_request_missing_otp(self):
         """Test old OTP verification without OTP code"""
@@ -393,7 +393,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-001")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-001")  # type: ignore
 
     # ========== ERROR CASES - NEW PHONE ==========
     def test_new_otp_request_without_old_verification(self):
@@ -402,7 +402,7 @@ class PhoneChangeFlowTest(TestCase):
             self.new_request_url, {"phone_number": "09123456788"}
         )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error"], "OTP-002")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-002")  # type: ignore
 
     def test_new_otp_request_missing_phone(self):
         """Test new phone OTP request without phone number"""
@@ -411,7 +411,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_request_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-001")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-001")  # type: ignore
 
     def test_new_otp_request_duplicate_phone(self):
         """Test changing to a phone that already exists"""
@@ -429,7 +429,7 @@ class PhoneChangeFlowTest(TestCase):
             self.new_request_url, {"phone_number": "09123456788"}
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])  # type: ignore
 
     def test_new_otp_request_same_phone(self):
         """Test changing to the same phone number"""
@@ -440,7 +440,7 @@ class PhoneChangeFlowTest(TestCase):
             self.new_request_url, {"phone_number": self.user.phone_number}
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "USER-006")  # type: ignore
+        self.assertEqual(response.data["error_code"], "USER-006")  # type: ignore
 
     def test_new_otp_verify_without_state(self):
         """Test verifying new phone OTP without state"""
@@ -455,7 +455,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_verify_url, {"otp": "999999"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-003")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-003")  # type: ignore
 
     def test_new_otp_verify_wrong_step(self):
         """Test verifying new OTP at wrong step"""
@@ -464,7 +464,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-004")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-004")  # type: ignore
 
     def test_new_otp_verify_missing_otp(self):
         """Test new OTP verification without OTP code"""
@@ -474,7 +474,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_verify_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "OTP-001")  # type: ignore
+        self.assertEqual(response.data["error_code"], "OTP-001")  # type: ignore
 
     def test_new_otp_verify_expired_state(self):
         """Test verifying new phone with expired state"""
@@ -520,7 +520,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = client.post(self.old_request_url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_phone_change_blocked_user(self):
         """Test phone change for blocked user"""
@@ -572,7 +572,7 @@ class UserProfileViewTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_get_profile_blocked_user(self):
         self.user.is_blocked = True
@@ -639,7 +639,7 @@ class UserProfileViewTest(TestCase):
         data = {"first_name": "Jo"}
         response = self.client.put(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "VAL-002")  # type: ignore
+        self.assertEqual(response.data["error_code"], "VAL-002")  # type: ignore
 
     # ========== AUTHENTICATION TESTS ==========
     def test_update_profile_unauthenticated(self):
@@ -647,7 +647,7 @@ class UserProfileViewTest(TestCase):
         data = {"first_name": "Jane"}
         response = client.put(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
 
     def test_update_profile_picture_with_invalid_file_type(self):
         """Test updating profile picture with invalid file type"""
@@ -665,7 +665,7 @@ class UserProfileViewTest(TestCase):
         response = self.client.put(self.url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         # The error is wrapped in a VALIDATION_ERROR response
-        self.assertEqual(response.data["error"], "VALIDATION_ERROR")  # type: ignore
+        self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")  # type: ignore
         self.assertIn("profile_picture", response.data["error_message"])  # type: ignore
 
     # ========== DATE OF BIRTH NULL HANDLING ==========
@@ -677,7 +677,7 @@ class UserProfileViewTest(TestCase):
 
         # Your API wraps validation errors
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "VALIDATION_ERROR")  # type: ignore
+        self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")  # type: ignore
         self.assertIn("date_of_birth", response.data["error_message"])  # type: ignore
 
     def test_update_profile_date_of_birth_to_empty_string(self):
@@ -686,7 +686,7 @@ class UserProfileViewTest(TestCase):
 
         response = self.client.put(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error"], "VALIDATION_ERROR")  # type: ignore
+        self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")  # type: ignore
         self.assertIn("date_of_birth", response.data["error_message"])  # type: ignore
 
     # ========== PROFILE PICTURE UPDATE ==========

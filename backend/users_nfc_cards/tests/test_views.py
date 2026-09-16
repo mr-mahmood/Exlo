@@ -155,9 +155,7 @@ class AssignCardViewTests(ViewTestBase):
 
     def test_missing_uid_returns_invalid(self):
         response = self.assign(self.admin, self.target.id, uid="")
-
-        # Empty string -> assign_card raises CARD_NOT_FOUND (per current model).
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_non_string_uid_returns_invalid(self):
         self.client.force_authenticate(user=self.admin)

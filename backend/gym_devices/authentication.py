@@ -7,13 +7,13 @@ from gym_devices.models import GymDevice
 
 
 class DeviceTokenAuthentication(authentication.BaseAuthentication):
-    keyword = "Bearer"
+    keyword = "Device"
 
     def authenticate(self, request):
 
         header = authentication.get_authorization_header(request).split()
         if not header or header[0].lower() != self.keyword.lower().encode():
-            return None
+            raise APIError(GymDeviceError.INVALID_DEVICE_CREDENTIAL)
 
         if len(header) != 2:
             raise APIError(GymDeviceError.INVALID_DEVICE_CREDENTIAL)

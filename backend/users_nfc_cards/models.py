@@ -9,16 +9,20 @@ from users.models import User
 class UserNfcCardManager(models.Manager):
 
     def find_card(self, uid) -> "UserNfcCard":
+        if not isinstance(uid, str) or not uid.strip():
+            raise APIError(UserNfcCardError.INVALID_UID)
+
+        uid = uid.strip()
         try:
             return self.get(uid=uid)
         except UserNfcCard.DoesNotExist:
             raise APIError(UserNfcCardError.CARD_NOT_FOUND)
 
     def assign_card(self, user, uid, assigned_by=None) -> "UserNfcCard":
-        uid = uid.strip()
-        if not uid:
-            raise APIError(UserNfcCardError.CARD_NOT_FOUND)
+        if not isinstance(uid, str) or not uid.strip():
+            raise APIError(UserNfcCardError.INVALID_UID)
 
+        uid = uid.strip()
         # UID is already claimed by a different user?
         if self.filter(uid=uid).exclude(user=user).exists():
             raise APIError(UserNfcCardError.CARD_ALREADY_ASSIGNED)

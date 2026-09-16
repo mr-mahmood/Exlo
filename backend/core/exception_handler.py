@@ -9,7 +9,7 @@ def custom_exception_handler(exc, context):
         from rest_framework.response import Response
 
         response_data = {
-            "error": exc.error_code,
+            "error_code": exc.error_code,
         }
 
         # Only include message in debug mode
@@ -37,7 +37,7 @@ def custom_exception_handler(exc, context):
 
         # Prepare data for renderer
         response_data = {
-            "error": error_code_map.get(response.status_code, "ERROR"),
+            "error_code": error_code_map.get(response.status_code, "ERROR"),
         }
 
         # Add detail in debug mode
