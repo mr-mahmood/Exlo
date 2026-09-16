@@ -71,14 +71,14 @@ class PermissionTestBase(TestCase):
         self.plan_a = GymMembershipPlan.objects.create_plan(
             name="Plan A",
             gym=self.gym_a,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("1000"),
         )
         self.plan_b = GymMembershipPlan.objects.create_plan(
             name="Plan B",
             gym=self.gym_b,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("1000"),
         )
@@ -100,13 +100,9 @@ class PermissionTestBase(TestCase):
         return perm.has_object_permission(request, view, target)
 
     def create_active_subscription(self, user, plan):
-        return GymSubscription.objects.create(
+        return GymSubscription.objects.create_subscription(
             subscriber=user,
-            plan=plan,
             order_item=self._make_order_item(user, plan),
-            status=GymSubscription.Status.ACTIVE,
-            expires_at=timezone.now() + timedelta(days=30),
-            remaining_visits=10,
         )
 
     def _make_order_item(self, user, plan):
@@ -198,11 +194,9 @@ class HasObjectPermissionTests(PermissionTestBase):
         self.assertFalse(self.call_permission(self.owner_a, self.target))
 
     def test_target_with_pending_subscription_is_allowed(self):
-        GymSubscription.objects.create(
+        GymSubscription.objects.create_subscription(
             subscriber=self.target,
-            plan=self.plan_a,
             order_item=self._make_order_item(self.target, self.plan_a),
-            status=GymSubscription.Status.PENDING,
         )
         self.assertTrue(self.call_permission(self.owner_a, self.target))
 

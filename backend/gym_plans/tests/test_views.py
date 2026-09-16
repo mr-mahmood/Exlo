@@ -63,7 +63,7 @@ class GymPlansViewsTest(TestCase):
             gym=self.gym,
             name="Basic Monthly",
             description="Basic plan with limited visits",
-            duration_month=1,
+            duration_months=1,
             visit_limit=10,
             price=Decimal("29.99"),
             is_active=True,
@@ -73,7 +73,7 @@ class GymPlansViewsTest(TestCase):
             gym=self.gym,
             name="Premium Monthly",
             description="Unlimited access",
-            duration_month=1,
+            duration_months=1,
             visit_limit=0,
             price=Decimal("49.99"),
             is_active=True,
@@ -83,7 +83,7 @@ class GymPlansViewsTest(TestCase):
             gym=self.gym,
             name="Yearly Premium",
             description="Yearly unlimited access",
-            duration_month=12,
+            duration_months=12,
             visit_limit=0,
             price=Decimal("499.99"),
             is_active=False,  # Inactive
@@ -145,7 +145,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "New Plan",
             "description": "Brand new plan",
-            "duration_month": 3,
+            "duration_months": 3,
             "visit_limit": 20,
             "price": "99.99",
             "is_active": True,
@@ -159,7 +159,7 @@ class GymPlansViewsTest(TestCase):
 
         # Verify plan was created in database
         plan = GymMembershipPlan.objects.get(gym=self.gym, name="New Plan")
-        self.assertEqual(plan.duration_month, 3)
+        self.assertEqual(plan.duration_months, 3)
         self.assertEqual(plan.visit_limit, 20)
         self.assertTrue(plan.is_active)
 
@@ -170,7 +170,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "Owner Plan",
             "description": "Created by owner",
-            "duration_month": 6,
+            "duration_months": 6,
             "visit_limit": 30,
             "price": "149.99",
             "is_active": True,
@@ -188,7 +188,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "Hacked Plan",
             "description": "Should not be created",
-            "duration_month": 1,
+            "duration_months": 1,
             "price": "0.00",
         }
 
@@ -204,7 +204,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_month": 1,
+            "duration_months": 1,
         }
 
         response = self.client.post(self.create_url, data)
@@ -221,7 +221,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_month": 1,
+            "duration_months": 1,
             "price": "29.99",
         }
 
@@ -320,7 +320,7 @@ class GymPlansViewsTest(TestCase):
         self.authenticate(self.admin_user)
 
         # Delete a plan
-        self.plan1.delete()
+        self.plan1.soft_delete()
 
         url = reverse(
             "gym_plans:update",
@@ -399,7 +399,7 @@ class GymPlansViewsTest(TestCase):
         self.authenticate(self.admin_user)
 
         # Delete plan first
-        self.plan1.delete()
+        self.plan1.soft_delete()
 
         url = reverse(
             "gym_plans:delete",
@@ -437,7 +437,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test",
-            "duration_month": 1,
+            "duration_months": 1,
             "price": "29.99",
         }
 
@@ -491,7 +491,7 @@ class GymPlansViewsTest(TestCase):
             gym=other_gym,
             name="Other Gym Plan",
             description="This belongs to other gym",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("19.99"),
             is_active=True,
         )
@@ -541,7 +541,7 @@ class GymPlansViewsTest(TestCase):
             gym=other_gym,
             name="Other Gym Plan",
             description="Other gym description",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("19.99"),
             is_active=True,
         )
@@ -581,7 +581,7 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "New Plan",
             "description": "Brand new plan",
-            "duration_month": 3,
+            "duration_months": 3,
             "visit_limit": 20,
             "price": "99.99",
             "is_active": True,
@@ -645,7 +645,7 @@ class GymPlansViewsTest(TestCase):
             "gym": str(other_gym.id),
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_month": 1,
+            "duration_months": 1,
             "visit_limit": 10,
             "price": "29.99",
             "is_active": True,

@@ -67,7 +67,7 @@ class GymMembershipPlan(models.Model):
 
     name = models.CharField(max_length=255)
     description = models.TextField()
-    duration_month = models.IntegerField(default=1)
+    duration_months = models.IntegerField(default=1)
     visit_limit = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
 
@@ -104,7 +104,7 @@ class GymMembershipPlan(models.Model):
     def is_available(self):
         return self.is_active and not self.is_deleted
 
-    def delete(self):
+    def soft_delete(self):
         if self.is_available:
             self.deleted_at = timezone.now()
             self.is_active = False

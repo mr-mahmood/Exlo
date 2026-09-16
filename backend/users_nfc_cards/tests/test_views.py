@@ -58,7 +58,7 @@ class ViewTestBase(TestCase):
         self.plan_a = GymMembershipPlan.objects.create_plan(
             name="Plan A",
             gym=self.gym_a,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("1000"),
         )
@@ -87,13 +87,9 @@ class ViewTestBase(TestCase):
         )
 
     def create_active_subscription(self, user, plan):
-        return GymSubscription.objects.create(
+        return GymSubscription.objects.create_subscription(
             subscriber=user,
-            plan=plan,
             order_item=self._make_order_item(user, plan),
-            status=GymSubscription.Status.ACTIVE,
-            expires_at=timezone.now() + timedelta(days=30),
-            remaining_visits=10,
         )
 
     def url(self, user_id):

@@ -37,7 +37,7 @@ class GymVisitModelTestBase(TestCase):
         self.plan = GymMembershipPlan.objects.create_plan(
             name="Plan A",
             gym=self.gym,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("1000"),
         )
@@ -66,13 +66,9 @@ class GymVisitModelTestBase(TestCase):
             tax_amount=Decimal("0"),
             total_amount=Decimal("0"),
         )
-        return GymSubscription.objects.create(
+        return GymSubscription.objects.create_subscription(
             subscriber=user,
-            plan=self.plan,
             order_item=item,
-            status=status,
-            expires_at=timezone.now() + timedelta(days=30),
-            remaining_visits=remaining,
         )
 
 

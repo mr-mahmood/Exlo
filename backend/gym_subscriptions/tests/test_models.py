@@ -52,7 +52,7 @@ class GymSubscriptionTestBase(TestCase):
         self.plan = GymMembershipPlan.objects.create_plan(
             name="Monthly Plan",
             gym=self.gym,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("10000"),
         )
@@ -60,7 +60,7 @@ class GymSubscriptionTestBase(TestCase):
         self.plan_2 = GymMembershipPlan.objects.create_plan(
             name="Three Month Plan",
             gym=self.gym,
-            duration_month=3,
+            duration_months=3,
             visit_limit=60,
             price=Decimal("20000"),
         )
@@ -68,7 +68,7 @@ class GymSubscriptionTestBase(TestCase):
         self.plan_3 = GymMembershipPlan.objects.create_plan(
             name="Second Gym Plan",
             gym=self.gym_2,
-            duration_month=1,
+            duration_months=1,
             visit_limit=20,
             price=Decimal("30000"),
         )
@@ -92,7 +92,7 @@ class GymSubscriptionTestBase(TestCase):
                 "id": str(plan.pk),
                 "name": plan.name,
                 "gym_id": str(plan.gym_id),
-                "duration_month": plan.duration_month,
+                "duration_months": plan.duration_months,
                 "visit_limit": plan.visit_limit,
             },
             quantity=1,
@@ -117,7 +117,8 @@ class GymSubscriptionTestBase(TestCase):
         plan,
         *,
         status=GymSubscription.Status.PENDING,
-        remaining_visits=0,
+        remaining_visits=None,
+        duration_months=None,
         started_at=None,
         expires_at=None,
         end_reason=None,
@@ -126,12 +127,20 @@ class GymSubscriptionTestBase(TestCase):
     ):
         order_item = self.create_order_item(user, plan)
 
+        # New design: remaining_visits and duration_months are set at creation
+        # from the plan. Default to plan values unless explicitly overridden.
+        if remaining_visits is None:
+            remaining_visits = plan.visit_limit
+        if duration_months is None:
+            duration_months = plan.duration_months
+
         subscription = GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
             order_item=order_item,
             status=status,
             remaining_visits=remaining_visits,
+            duration_months=duration_months,
             started_at=started_at,
             expires_at=expires_at,
             end_reason=end_reason,
@@ -336,6 +345,43 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
             self.plan.visit_limit,
         )
 
+    def test_create_subscription_copies_duration_months_from_plan(self):
+        subscription = self.create_subscription(self.user, self.plan_2)
+
+        self.assertEqual(
+            subscription.duration_months,
+            self.plan_2.duration_months,
+        )
+
+    def test_create_subscription_copies_visit_limit_from_plan(self):
+        subscription = self.create_subscription(self.user, self.plan_2)
+
+        self.assertEqual(
+            subscription.remaining_visits,
+            self.plan_2.visit_limit,
+        )
+
+    def test_create_pending_subscription_copies_duration_and_visits_from_plan(
+        self,
+    ):
+        # Create an active subscription first so the next one stays pending
+        self.create_subscription(self.user, self.plan)
+
+        pending = self.create_subscription(self.user, self.plan_2)
+
+        self.assertEqual(
+            pending.status,
+            GymSubscription.Status.PENDING,
+        )
+        self.assertEqual(
+            pending.duration_months,
+            self.plan_2.duration_months,
+        )
+        self.assertEqual(
+            pending.remaining_visits,
+            self.plan_2.visit_limit,
+        )
+
     def test_create_subscription_sets_correct_expiration(self):
         before = timezone.now()
 
@@ -343,8 +389,8 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
 
         after = timezone.now()
 
-        expected_min = before + relativedelta(months=self.plan.duration_month)
-        expected_max = after + relativedelta(months=self.plan.duration_month)
+        expected_min = before + relativedelta(months=self.plan.duration_months)
+        expected_max = after + relativedelta(months=self.plan.duration_months)
 
         self.assertGreaterEqual(subscription.expires_at, expected_min)
         self.assertLessEqual(subscription.expires_at, expected_max)
@@ -478,12 +524,47 @@ class GymSubscriptionActivationTests(GymSubscriptionTestBase):
         )
         self.assertIsNotNone(subscription.started_at)
         self.assertIsNotNone(subscription.expires_at)
+        # remaining_visits is set at creation from the plan, not at activation
         self.assertEqual(
             subscription.remaining_visits,
             self.plan.visit_limit,
         )
         self.assertIsNone(subscription.end_reason)
         self.assertIsNone(subscription.cancelled_at)
+
+    def test_activate_preserves_remaining_visits(self):
+        subscription = self.create_raw_subscription(
+            self.user,
+            self.plan,
+            status=GymSubscription.Status.PENDING,
+            remaining_visits=5,
+        )
+
+        subscription.activate()
+        subscription.refresh_from_db()
+
+        # activate() must not change remaining_visits
+        self.assertEqual(subscription.remaining_visits, 5)
+
+    def test_activate_uses_subscription_duration_months(self):
+        subscription = self.create_raw_subscription(
+            self.user,
+            self.plan_2,
+            status=GymSubscription.Status.PENDING,
+        )
+
+        before = timezone.now()
+
+        subscription.activate()
+        subscription.refresh_from_db()
+
+        after = timezone.now()
+
+        expected_min = before + relativedelta(months=subscription.duration_months)
+        expected_max = after + relativedelta(months=subscription.duration_months)
+
+        self.assertGreaterEqual(subscription.expires_at, expected_min)
+        self.assertLessEqual(subscription.expires_at, expected_max)
 
     def test_activate_uses_plan_duration(self):
         subscription = self.create_raw_subscription(
@@ -499,8 +580,8 @@ class GymSubscriptionActivationTests(GymSubscriptionTestBase):
 
         after = timezone.now()
 
-        expected_min = before + relativedelta(months=self.plan_2.duration_month)
-        expected_max = after + relativedelta(months=self.plan_2.duration_month)
+        expected_min = before + relativedelta(months=self.plan_2.duration_months)
+        expected_max = after + relativedelta(months=self.plan_2.duration_months)
 
         self.assertGreaterEqual(subscription.expires_at, expected_min)
         self.assertLessEqual(subscription.expires_at, expected_max)
@@ -515,6 +596,7 @@ class GymSubscriptionActivationTests(GymSubscriptionTestBase):
         subscription.activate()
         subscription.refresh_from_db()
 
+        # remaining_visits was set at creation from plan.visit_limit
         self.assertEqual(
             subscription.remaining_visits,
             self.plan_2.visit_limit,
@@ -1366,7 +1448,8 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         )
         self.assertEqual(first.status, GymSubscription.Status.EXPIRED)
         self.assertEqual(second.status, GymSubscription.Status.PENDING)
-        self.assertEqual(second.remaining_visits, 0)  # pending, never activated
+        # Pending subscription retains its plan visit_limit until activated
+        self.assertEqual(second.remaining_visits, self.plan_3.visit_limit)
 
     def test_check_in_does_not_decrement_when_subscription_has_one_visit_and_wrong_gym(
         self,

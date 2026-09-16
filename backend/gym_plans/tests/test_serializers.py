@@ -39,7 +39,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "gym": self.gym,
             "name": "Premium Monthly",
             "description": "Unlimited access to all facilities",
-            "duration_month": 1,
+            "duration_months": 1,
             "visit_limit": 0,
             "price": Decimal("49.99"),
             "is_active": True,
@@ -57,7 +57,7 @@ class GymMembershipPlanSerializerTest(TestCase):
 
         self.assertEqual(data["name"], "Premium Monthly")
         self.assertEqual(data["price"], "49.99")
-        self.assertEqual(data["duration_month"], 1)
+        self.assertEqual(data["duration_months"], 1)
 
     def test_serializer_includes_gym(self):
         """Test that the serializer includes the nested gym."""
@@ -113,7 +113,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "name",
             "gym",
             "description",
-            "duration_month",
+            "duration_months",
             "visit_limit",
             "is_active",
             "price",
@@ -124,7 +124,7 @@ class GymMembershipPlanSerializerTest(TestCase):
 
         self.assertEqual(data["name"], "Premium Monthly")
         self.assertEqual(data["price"], "49.99")
-        self.assertEqual(data["duration_month"], 1)
+        self.assertEqual(data["duration_months"], 1)
         self.assertEqual(data["visit_limit"], 0)
         self.assertTrue(data["is_active"])
 
@@ -155,7 +155,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             data={
                 "name": "Test Plan",
                 "description": "Test Description",
-                "duration_month": 1,
+                "duration_months": 1,
                 "price": "29.99",
                 "is_active": True,
             }
@@ -221,7 +221,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         """Test serializer with missing required fields."""
         data = {
             "name": "Test",
-            "duration_month": 1,
+            "duration_months": 1,
         }
 
         serializer = GymMembershipPlanSerializer(data=data)
@@ -236,7 +236,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_month": 1,
+            "duration_months": 1,
             "price": "-10.00",
             "is_active": True,
         }
@@ -256,7 +256,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_month": -1,
+            "duration_months": -1,
             "price": "29.99",
             "is_active": True,
         }
@@ -276,7 +276,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_month": 1,
+            "duration_months": 1,
             "visit_limit": -5,
             "price": "29.99",
             "is_active": True,

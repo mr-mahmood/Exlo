@@ -16,7 +16,7 @@ class GymMembershipPlanSerializer(serializers.ModelSerializer):
             "name",
             "gym",
             "description",
-            "duration_month",
+            "duration_months",
             "visit_limit",
             "is_active",
             "price",
@@ -26,7 +26,7 @@ class GymMembershipPlanSerializer(serializers.ModelSerializer):
             "gym",
         ]
 
-    def validate_duration_month(self, value):
+    def validate_duration_months(self, value):
         if value < 0:
             raise APIError(GymPlansError.INVALID_DURATION)
         return value

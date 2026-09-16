@@ -42,14 +42,14 @@ class SubscriptionViewTestBase(TestCase):
         self.plan = GymMembershipPlan.objects.create_plan(
             name="Monthly Plan",
             gym=self.gym,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("10000"),
         )
         self.plan_2 = GymMembershipPlan.objects.create_plan(
             name="Three Month Plan",
             gym=self.gym,
-            duration_month=3,
+            duration_months=3,
             visit_limit=60,
             price=Decimal("20000"),
         )

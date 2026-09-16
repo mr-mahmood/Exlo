@@ -32,7 +32,7 @@ class GymSubscriptionSerializerTestBase(TestCase):
         self.plan = GymMembershipPlan.objects.create_plan(
             name="Monthly Plan",
             gym=self.gym,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("10000"),
         )
@@ -150,7 +150,7 @@ class GymSubscriptionSerializerFieldsTests(GymSubscriptionSerializerTestBase):
             "name",
             "gym",
             "description",
-            "duration_month",
+            "duration_months",
             "visit_limit",
             "is_active",
             "price",
@@ -296,7 +296,7 @@ class GymSubscriptionSerializerValuesTests(GymSubscriptionSerializerTestBase):
     def test_plan_duration_month_and_visit_limit(self):
         sub = self.make_subscription()
         data = GymSubscriptionReadSerializer(sub).data
-        self.assertEqual(data["plan"]["duration_month"], 1)
+        self.assertEqual(data["plan"]["duration_months"], 1)
         self.assertEqual(data["plan"]["visit_limit"], 30)
 
     def test_plan_is_active_reflects_plan_state(self):

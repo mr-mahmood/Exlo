@@ -29,7 +29,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Premium Monthly",
             description="Unlimited access",
-            duration_month=1,
+            duration_months=1,
             visit_limit=0,
             price=Decimal("49.99"),
             is_active=True,
@@ -39,7 +39,7 @@ class GymMembershipPlanModelTest(TestCase):
         self.assertEqual(plan.gym, self.gym)
         self.assertEqual(plan.name, "Premium Monthly")
         self.assertEqual(plan.description, "Unlimited access")
-        self.assertEqual(plan.duration_month, 1)
+        self.assertEqual(plan.duration_months, 1)
         self.assertEqual(plan.visit_limit, 0)
         self.assertEqual(plan.price, Decimal("49.99"))
         self.assertTrue(plan.is_active)
@@ -52,7 +52,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan",
             description="Test Description",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
 
@@ -74,7 +74,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Premium Monthly",
             description="Unlimited access",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("49.99"),
         )
 
@@ -87,13 +87,13 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan",
             description="Test Description",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
 
         self.assertFalse(plan.is_deleted)
 
-        plan.delete()
+        plan.soft_delete()
         self.assertTrue(plan.is_deleted)
 
     def test_is_available_property(self):
@@ -102,14 +102,14 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan",
             description="Test Description",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
             is_active=True,
         )
 
         self.assertTrue(plan.is_available)
 
-        plan.delete()
+        plan.soft_delete()
         self.assertFalse(plan.is_available)
 
         # Deactivate without deleting
@@ -117,7 +117,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan 2",
             description="Test Description",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
             is_active=False,
         )
@@ -129,14 +129,14 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan",
             description="Test Description",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
 
         self.assertIsNone(plan.deleted_at)
         self.assertTrue(plan.is_active)
 
-        plan.delete()
+        plan.soft_delete()
 
         self.assertIsNotNone(plan.deleted_at)
         self.assertFalse(plan.is_active)
@@ -148,7 +148,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Active Plan",
             description="Active",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
             is_active=True,
         )
@@ -162,7 +162,7 @@ class GymMembershipPlanModelTest(TestCase):
         self.assertEqual(retrieved.id, plan.id)
 
         # Delete the plan
-        plan.delete()
+        plan.soft_delete()
 
         # Should raise error when trying to get deleted plan with active_only=True
         with self.assertRaises(Exception):
@@ -178,11 +178,11 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Deleted Plan",
             description="Will be deleted",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
 
-        plan.delete()
+        plan.soft_delete()
 
         # Should be able to get deleted plan with active_only=False
         retrieved = GymMembershipPlan.objects.get_plan(
@@ -201,7 +201,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Plan 1",
             description="Active",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
             is_active=True,
         )
@@ -209,7 +209,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Plan 2",
             description="Active",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("39.99"),
             is_active=True,
         )
@@ -217,11 +217,11 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Plan 3",
             description="Deleted",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("49.99"),
             is_active=True,
         )
-        plan3.delete()
+        plan3.soft_delete()
 
         plans = GymMembershipPlan.objects.get_gym_plans(
             gym=self.gym,
@@ -240,17 +240,17 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Plan 1",
             description="Active",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
         plan2 = GymMembershipPlan.objects.create_plan(
             gym=self.gym,
             name="Plan 2",
             description="Deleted",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("39.99"),
         )
-        plan2.delete()
+        plan2.soft_delete()
 
         plans = GymMembershipPlan.objects.get_gym_plans(
             gym=self.gym,
@@ -268,7 +268,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan",
             description="Test",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
 
@@ -281,7 +281,7 @@ class GymMembershipPlanModelTest(TestCase):
             gym=self.gym,
             name="Test Plan",
             description="Test",
-            duration_month=1,
+            duration_months=1,
             price=Decimal("29.99"),
         )
 

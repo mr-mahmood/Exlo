@@ -26,10 +26,12 @@ from gym_subscriptions.models import GymSubscription
 from gym_visits.models import GymVisit
 from users.models import User
 from users_nfc_cards.models import UserNfcCard
+from django.conf import settings
 
 
 class NfcFlowTestBase(TestCase):
     def setUp(self):
+        settings.DEBUG = True
         self.client = APIClient()
 
         self.gym_a = Gym.objects.create(name="Gym A")
@@ -51,7 +53,7 @@ class NfcFlowTestBase(TestCase):
         self.plan_a = GymMembershipPlan.objects.create_plan(
             name="Plan A",
             gym=self.gym_a,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("1000"),
         )
@@ -85,6 +87,12 @@ class NfcFlowTestBase(TestCase):
         )
 
     def make_active_subscription(self, user, plan, *, remaining=10, expires_in_days=30):
+        """Create an ACTIVE subscription directly.
+
+        Used only to set up pre-conditions. Populates duration_months and
+        remaining_visits from the plan to stay consistent with the manager
+        creation path.
+        """
         return GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
@@ -92,7 +100,41 @@ class NfcFlowTestBase(TestCase):
             status=GymSubscription.Status.ACTIVE,
             expires_at=timezone.now() + timedelta(days=expires_in_days),
             remaining_visits=remaining,
+            duration_months=plan.duration_months,
         )
+
+    def create_subscription(self, user, plan):
+        """Create via the real manager path.
+
+        Returns an ACTIVE subscription if the user has none, otherwise PENDING.
+        """
+        return GymSubscription.objects.create_subscription(
+            subscriber=user,
+            order_item=self._make_order_item(user, plan),
+        )
+
+    def make_pending_subscription(self, user, plan):
+        """Create a PENDING subscription via the manager path.
+
+        Uses create_subscription so remaining_visits / duration_months are
+        populated from the plan, then demotes to PENDING if it came out ACTIVE.
+        """
+        sub = self.create_subscription(user, plan)
+        if sub.status != GymSubscription.Status.PENDING:
+            sub.status = GymSubscription.Status.PENDING
+            sub.started_at = None
+            sub.expires_at = None
+            sub.end_reason = None
+            sub.save(
+                update_fields=[
+                    "status",
+                    "started_at",
+                    "expires_at",
+                    "end_reason",
+                    "updated_at",
+                ]
+            )
+        return sub
 
     def assign_card(self, user, uid):
         return UserNfcCard.objects.assign_card(user=user, uid=uid, assigned_by=None)
@@ -371,12 +413,8 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         expired.expires_at = timezone.now() - timedelta(seconds=1)
         expired.save(update_fields=["expires_at"])
 
-        pending = GymSubscription.objects.create(
-            subscriber=self.user,
-            plan=self.plan_a,
-            order_item=self._make_order_item(self.user, self.plan_a),
-            status=GymSubscription.Status.PENDING,
-        )
+        pending = self.make_pending_subscription(self.user, self.plan_a)
+        self.assertEqual(pending.status, GymSubscription.Status.PENDING)
 
         response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -392,7 +430,7 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         plan_b = GymMembershipPlan.objects.create_plan(
             name="Plan B",
             gym=self.gym_b,
-            duration_month=1,
+            duration_months=1,
             visit_limit=30,
             price=Decimal("1000"),
         )
@@ -400,12 +438,10 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         expired.expires_at = timezone.now() - timedelta(seconds=1)
         expired.save(update_fields=["expires_at"])
 
-        pending_b = GymSubscription.objects.create(
-            subscriber=self.user,
-            plan=plan_b,
-            order_item=self._make_order_item(self.user, plan_b),
-            status=GymSubscription.Status.PENDING,
-        )
+        # Use the manager path so remaining_visits / duration_months are
+        # populated from plan_b, then force PENDING.
+        pending_b = self.make_pending_subscription(self.user, plan_b)
+        self.assertEqual(pending_b.status, GymSubscription.Status.PENDING)
 
         response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
 

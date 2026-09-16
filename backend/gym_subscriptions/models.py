@@ -74,7 +74,7 @@ class GymSubscriptionsManager(models.Manager):
         if order_item.item_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
             raise APIError(GymSubscriptionError.INVALID_ORDER_ITEM)
 
-        plan = order_item.commerce_product.gym_membership_plan
+        plan: GymMembershipPlan = order_item.commerce_product.gym_membership_plan
 
         with transaction.atomic():
             subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
@@ -84,6 +84,8 @@ class GymSubscriptionsManager(models.Manager):
                 plan=plan,
                 order_item=order_item,
                 status=GymSubscription.Status.PENDING,
+                remaining_visits=plan.visit_limit,
+                duration_months=plan.duration_months,
             )
 
             if not self._has_active_subscription(subscriber):
@@ -237,6 +239,7 @@ class GymSubscription(models.Model):
         blank=True,
     )
 
+    duration_months = models.PositiveIntegerField(default=1)
     remaining_visits = models.PositiveIntegerField(default=0)
 
     started_at = models.DateTimeField(null=True, blank=True)
@@ -298,8 +301,7 @@ class GymSubscription(models.Model):
 
             self.status = self.Status.ACTIVE
             self.started_at = now
-            self.expires_at = now + relativedelta(months=self.plan.duration_month)
-            self.remaining_visits = self.plan.visit_limit
+            self.expires_at = now + relativedelta(months=self.duration_months)
             self.end_reason = None
             self.cancelled_at = None
 
@@ -308,7 +310,6 @@ class GymSubscription(models.Model):
                     "status",
                     "started_at",
                     "expires_at",
-                    "remaining_visits",
                     "end_reason",
                     "cancelled_at",
                     "updated_at",
@@ -322,11 +323,11 @@ class GymSubscription(models.Model):
             self.save(update_fields=["status", "end_reason", "updated_at"])
 
     def cancel(self):
-        if self.status in (self.Status.EXPIRED, self.Status.CANCELLED):
-            return
+        if self.status in (self.Status.PENDING, self.Status.ACTIVE):
+            self.status = self.Status.CANCELLED
+            self.end_reason = self.EndReason.CANCELLED
+            self.cancelled_at = timezone.now()
 
-        self.status = self.Status.CANCELLED
-        self.end_reason = self.EndReason.CANCELLED
-        self.cancelled_at = timezone.now()
-
-        self.save(update_fields=["status", "end_reason", "cancelled_at", "updated_at"])
+            self.save(
+                update_fields=["status", "end_reason", "cancelled_at", "updated_at"]
+            )

@@ -95,6 +95,5 @@ class GymPlansDeleteAPIView(APIView):
             active_only=True,
         )
 
-        # its soft delete so it dont make no harm for the active members of this plan
-        plan.delete()
+        plan.soft_delete()
         return Response(status=status.HTTP_200_OK)
