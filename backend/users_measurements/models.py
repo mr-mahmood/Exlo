@@ -4,7 +4,6 @@ from decimal import Decimal
 import uuid
 from django.db import models
 from users.models import User
-from django.utils import timezone
 
 
 class Measurements(models.Model):
