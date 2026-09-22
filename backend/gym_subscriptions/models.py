@@ -133,8 +133,7 @@ class GymSubscriptionsManager(models.Manager):
             return None
 
         try:
-            with transaction.atomic():
-                self._activate_subscription(next_subscription)
+            self._activate_subscription(next_subscription)
         except IntegrityError as e:
             if "unique_active_subscription_per_user" in str(e):
                 return None
@@ -161,8 +160,7 @@ class GymSubscriptionsManager(models.Manager):
             return None
 
         try:
-            with transaction.atomic():
-                self._activate_subscription(next_subscription)
+            self._activate_subscription(next_subscription)
         except IntegrityError as e:
             if "unique_active_subscription_per_user" in str(e):
                 return None
@@ -192,15 +190,15 @@ class GymSubscriptionsManager(models.Manager):
 
 class GymSubscription(models.Model):
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
-        ACTIVE = "ACTIVE", "Active"
-        EXPIRED = "EXPIRED", "Expired"
-        CANCELLED = "CANCELLED", "Cancelled"
+        PENDING = "PENDING"
+        ACTIVE = "ACTIVE"
+        EXPIRED = "EXPIRED"
+        CANCELLED = "CANCELLED"
 
     class EndReason(models.TextChoices):
-        TIME = "TIME", "Time expired"
-        VISITS = "VISITS", "Visits exhausted"
-        CANCELLED = "CANCELLED", "Cancelled"
+        TIME = "TIME"
+        VISITS = "VISITS"
+        CANCELLED = "CANCELLED"
 
     id = models.UUIDField(
         primary_key=True,

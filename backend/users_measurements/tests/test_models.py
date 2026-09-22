@@ -3,11 +3,10 @@
 
 from django.test import TestCase
 from users.models import User
-from decimal import Decimal
 import uuid
 from users_measurements.models import Measurements, MeasurementPhotos
 from django.core.files.uploadedfile import SimpleUploadedFile
-import tempfile
+from decimal import Decimal
 from PIL import Image
 import io
 from django.conf import settings
@@ -110,12 +109,12 @@ class MeasurementsModelTest(TestCase):
         measurement3 = Measurements.objects.create(user=self.user)
         self.assertIsNone(measurement3.bmi)
 
-    def test_decimal_precision(self):
-        """Test decimal field precision and rounding"""
+    def test_int_precision(self):
+        """Test int field precision and rounding"""
         measurement = Measurements.objects.create(
             user=self.user,
-            height_cm=Decimal("175.55"),  # Should be stored with 1 decimal
-            weight_kg=Decimal("72.34"),  # Should be stored with 1 decimal
+            height_cm=Decimal("175.55"),
+            weight_kg=Decimal("72.34"), 
         )
 
         measurement.refresh_from_db()
@@ -217,7 +216,7 @@ class MeasurementsModelTest(TestCase):
         self.assertEqual(Measurements.objects.filter(user=self.user).count(), 3)
 
     def test_none_values_handling(self):
-        """Test that None values are handled correctly in Decimal fields"""
+        """Test that None values are handled correctly in int fields"""
         measurement = Measurements.objects.create(
             user=self.user, height_cm=None, weight_kg=None, chest_cm=None
         )
@@ -261,7 +260,7 @@ class MeasurementsModelEdgeCasesTest(TestCase):
         self.assertEqual(measurement2.bmi, Decimal(str(expected_bmi2)))
 
     def test_max_digits_constraints(self):
-        """Test that Decimal fields respect max_digits"""
+        """Test that int fields respect max_digits"""
         # height_cm max_digits=5, so max value is 999.9
         measurement = Measurements.objects.create(
             user=self.user, height_cm=Decimal("999.9"), weight_kg=Decimal("999.9")

@@ -53,7 +53,7 @@ class GymMembershipPlan(models.Model):
     # Primary key is the commerce_product_id (One-to-One)
     id = models.OneToOneField(
         CommerceProduct,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         primary_key=True,
         editable=False,
         related_name="gym_membership_plan",
@@ -61,7 +61,7 @@ class GymMembershipPlan(models.Model):
 
     gym = models.ForeignKey(
         Gym,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="membership_plans",
     )
 
@@ -71,10 +71,7 @@ class GymMembershipPlan(models.Model):
     visit_limit = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
 
-    price = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-    )
+    price = models.PositiveBigIntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

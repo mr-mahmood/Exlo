@@ -2,7 +2,6 @@
 # type: ignore
 
 from datetime import timedelta
-from decimal import Decimal
 from uuid import uuid4
 
 from django.test import TestCase
@@ -55,7 +54,7 @@ class NfcFlowTestBase(TestCase):
             gym=self.gym_a,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("1000"),
+            price=1000,
         )
 
         self.device_a, self.token_a = GymDevice.objects.register_device(gym=self.gym_a)
@@ -67,10 +66,10 @@ class NfcFlowTestBase(TestCase):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("0"),
+            subtotal_amount=0,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=0,
             paid_at=timezone.now(),
         )
         return OrderItem.objects.create(
@@ -79,11 +78,11 @@ class NfcFlowTestBase(TestCase):
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
             item_snapshot={},
             quantity=1,
-            unit_price=Decimal("0"),
-            subtotal_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("0"),
+            unit_price=0,
+            subtotal_amount=0,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=0,
         )
 
     def make_active_subscription(self, user, plan, *, remaining=10, expires_in_days=30):
@@ -432,7 +431,7 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
             gym=self.gym_b,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("1000"),
+            price=1000,
         )
         expired = self.make_active_subscription(self.user, self.plan_a, remaining=5)
         expired.expires_at = timezone.now() - timedelta(seconds=1)

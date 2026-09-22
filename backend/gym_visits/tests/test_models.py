@@ -3,7 +3,6 @@
 
 from datetime import timedelta
 import time
-from decimal import Decimal
 from unittest.mock import patch
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -39,7 +38,7 @@ class GymVisitModelTestBase(TestCase):
             gym=self.gym,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("1000"),
+            price=1000,
         )
 
     def make_subscription(
@@ -48,10 +47,10 @@ class GymVisitModelTestBase(TestCase):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("0"),
+            subtotal_amount=0,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=0,
             paid_at=timezone.now(),
         )
         item = OrderItem.objects.create(
@@ -60,11 +59,11 @@ class GymVisitModelTestBase(TestCase):
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
             item_snapshot={},
             quantity=1,
-            unit_price=Decimal("0"),
-            subtotal_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("0"),
+            unit_price=0,
+            subtotal_amount=0,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=0,
         )
         return GymSubscription.objects.create_subscription(
             subscriber=user,

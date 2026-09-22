@@ -6,7 +6,7 @@ from django.db import models
 
 class CommerceProduct(models.Model):
     class ProductType(models.TextChoices):
-        GYM_MEMBERSHIP = "GYM_MEMBERSHIP", "Gym Membership"
+        GYM_MEMBERSHIP = "GYM_MEMBERSHIP"
 
     # Primary Key
     id = models.UUIDField(

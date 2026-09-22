@@ -23,6 +23,9 @@ urlpatterns = [
     path("api/gym/", include("gym_visits.urls")),
     path("api/gym/", include("gym_devices.urls")),
     path("api/gym/subscriptions/", include("gym_subscriptions.urls")),
+    # commerce apps
+    path("api/commerce/wallet/", include("commerce_wallet.urls")),
+    path("api/commerce/wallet-ledger/", include("commerce_wallet_ledger.urls")),
 ]
 
 if settings.DEBUG:

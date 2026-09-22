@@ -2,10 +2,10 @@
 # type: ignore
 
 from django.test import TestCase
+from decimal import Decimal
 from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
-from decimal import Decimal
 from users_measurements.models import Measurements
 from core.errors import MeasurementsError
 from users.models import User

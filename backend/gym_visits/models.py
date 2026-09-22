@@ -33,9 +33,9 @@ class GymVisitManager(models.Manager):
 
 class GymVisit(models.Model):
     class Method(models.TextChoices):
-        NFC = "NFC", "Nfc"
-        QR = "QR", "QR"
-        STAFF = "STAFF", "Staff"
+        NFC = "NFC"
+        QR = "QR"
+        STAFF = "STAFF"
 
     id = models.UUIDField(
         primary_key=True,
@@ -126,14 +126,13 @@ class GymVisit(models.Model):
         self.checked_out_method = method
 
         try:
-            with transaction.atomic():
-                self.save(
-                    update_fields=[
-                        "checked_out_at",
-                        "checked_out_method",
-                        "updated_at",
-                    ]
-                )
+            self.save(
+                update_fields=[
+                    "checked_out_at",
+                    "checked_out_method",
+                    "updated_at",
+                ]
+            )
         except IntegrityError as e:
             if "gym_visit_checkout_after_checkin" in str(e):
                 raise APIError(GymVisitsError.INVALID_CHECKOUT_TIME)

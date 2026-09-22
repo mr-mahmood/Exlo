@@ -25,9 +25,9 @@ class GymAnnouncementManager(models.Manager):
 
 class GymAnnouncement(models.Model):
     class Status(models.TextChoices):
-        DRAFT = "DRAFT", "Draft"
-        PUBLISHED = "PUBLISHED", "Published"
-        ARCHIVED = "ARCHIVED", "Archived"
+        DRAFT = "DRAFT"
+        PUBLISHED = "PUBLISHED"
+        ARCHIVED = "ARCHIVED"
 
     id = models.UUIDField(
         primary_key=True,

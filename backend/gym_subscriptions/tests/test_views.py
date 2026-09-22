@@ -3,7 +3,6 @@
 
 import uuid
 from datetime import timedelta
-from decimal import Decimal
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
@@ -44,14 +43,14 @@ class SubscriptionViewTestBase(TestCase):
             gym=self.gym,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("10000"),
+            price=10000,
         )
         self.plan_2 = GymMembershipPlan.objects.create_plan(
             name="Three Month Plan",
             gym=self.gym,
             duration_months=3,
             visit_limit=60,
-            price=Decimal("20000"),
+            price=20000,
         )
 
         self.list_url = reverse("gym_subscriptions:gym-subscription-list")
@@ -63,10 +62,10 @@ class SubscriptionViewTestBase(TestCase):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
             paid_at=timezone.now(),
         )
         return OrderItem.objects.create(
@@ -75,11 +74,11 @@ class SubscriptionViewTestBase(TestCase):
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
             item_snapshot={"id": str(plan.pk), "name": plan.name},
             quantity=1,
-            unit_price=Decimal("100000"),
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            unit_price=100000,
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
         )
 
     def make_subscription(
@@ -444,7 +443,7 @@ class SubscriptionDetailTests(SubscriptionViewTestBase):
         payload = response.data["subscription"]
         self.assertEqual(payload["plan"]["gym"]["id"], str(self.gym.pk))
         self.assertEqual(payload["plan"]["name"], "Monthly Plan")
-        self.assertEqual(payload["plan"]["price"], "10000.00")
+        self.assertEqual(payload["plan"]["price"], 10000)
 
     def test_serializes_top_level_gym(self):
         sub = self.make_subscription(

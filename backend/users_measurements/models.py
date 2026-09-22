@@ -1,5 +1,6 @@
 # user_measurements/models.py
 
+from decimal import Decimal
 import uuid
 from django.db import models
 from users.models import User
@@ -156,7 +157,7 @@ class Measurements(models.Model):
     def bmi(self):
         if self.height_cm and self.weight_kg:
             height_m = self.height_cm / 100
-            return round(self.weight_kg / (height_m**2), 1)
+            return Decimal(round(self.weight_kg / (height_m**2), 1))
         return None
 
 
@@ -166,9 +167,9 @@ def user_profile_picture_path(instance, filename):
 
 class MeasurementPhotos(models.Model):
     class PhotoType(models.TextChoices):
-        FRONT = "FRONT", "Front"
-        BACK = "BACK", "Back"
-        SIDE = "SIDE", "Side"
+        FRONT = "FRONT"
+        BACK = "BACK"
+        SIDE = "SIDE"
 
     id = models.UUIDField(
         primary_key=True,

@@ -3,7 +3,6 @@
 
 
 from datetime import timedelta
-from decimal import Decimal
 from unittest.mock import patch
 
 from dateutil.relativedelta import relativedelta
@@ -54,7 +53,7 @@ class GymSubscriptionTestBase(TestCase):
             gym=self.gym,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("10000"),
+            price=10000,
         )
 
         self.plan_2 = GymMembershipPlan.objects.create_plan(
@@ -62,7 +61,7 @@ class GymSubscriptionTestBase(TestCase):
             gym=self.gym,
             duration_months=3,
             visit_limit=60,
-            price=Decimal("20000"),
+            price=20000,
         )
 
         self.plan_3 = GymMembershipPlan.objects.create_plan(
@@ -70,17 +69,17 @@ class GymSubscriptionTestBase(TestCase):
             gym=self.gym_2,
             duration_months=1,
             visit_limit=20,
-            price=Decimal("30000"),
+            price=30000,
         )
 
     def create_order_item(self, user, plan):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
             paid_at=timezone.now(),
         )
 
@@ -96,11 +95,11 @@ class GymSubscriptionTestBase(TestCase):
                 "visit_limit": plan.visit_limit,
             },
             quantity=1,
-            unit_price=Decimal("100000"),
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            unit_price=100000,
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
         )
 
     def create_subscription(self, user, plan):

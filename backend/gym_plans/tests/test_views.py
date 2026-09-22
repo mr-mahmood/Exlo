@@ -2,7 +2,6 @@
 # type: ignore
 
 import uuid
-from decimal import Decimal
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -65,7 +64,7 @@ class GymPlansViewsTest(TestCase):
             description="Basic plan with limited visits",
             duration_months=1,
             visit_limit=10,
-            price=Decimal("29.99"),
+            price=29,
             is_active=True,
         )
 
@@ -75,7 +74,7 @@ class GymPlansViewsTest(TestCase):
             description="Unlimited access",
             duration_months=1,
             visit_limit=0,
-            price=Decimal("49.99"),
+            price=49,
             is_active=True,
         )
 
@@ -85,7 +84,7 @@ class GymPlansViewsTest(TestCase):
             description="Yearly unlimited access",
             duration_months=12,
             visit_limit=0,
-            price=Decimal("499.99"),
+            price=499,
             is_active=False,  # Inactive
         )
 
@@ -147,7 +146,7 @@ class GymPlansViewsTest(TestCase):
             "description": "Brand new plan",
             "duration_months": 3,
             "visit_limit": 20,
-            "price": "99.99",
+            "price": 99,
             "is_active": True,
         }
 
@@ -155,7 +154,7 @@ class GymPlansViewsTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["plan"]["name"], "New Plan")
-        self.assertEqual(response.data["plan"]["price"], "99.99")
+        self.assertEqual(response.data["plan"]["price"], 99)
 
         # Verify plan was created in database
         plan = GymMembershipPlan.objects.get(gym=self.gym, name="New Plan")
@@ -172,7 +171,7 @@ class GymPlansViewsTest(TestCase):
             "description": "Created by owner",
             "duration_months": 6,
             "visit_limit": 30,
-            "price": "149.99",
+            "price": 149,
             "is_active": True,
         }
 
@@ -189,7 +188,7 @@ class GymPlansViewsTest(TestCase):
             "name": "Hacked Plan",
             "description": "Should not be created",
             "duration_months": 1,
-            "price": "0.00",
+            "price": 150000,
         }
 
         response = self.client.post(self.create_url, data)
@@ -204,12 +203,12 @@ class GymPlansViewsTest(TestCase):
         data = {
             "name": "Test Plan",
             "description": "Test Description",
-            "duration_months": 1,
         }
 
         response = self.client.post(self.create_url, data)
-
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("visit_limit", response.data["error_message"])
+        self.assertIn("price", response.data["error_message"])
 
     def test_create_plan_gym_not_found(self):
         """Test creating a plan for non-existent gym."""
@@ -222,7 +221,7 @@ class GymPlansViewsTest(TestCase):
             "name": "Test Plan",
             "description": "Test Description",
             "duration_months": 1,
-            "price": "29.99",
+            "price": 29,
         }
 
         response = self.client.post(url, data)
@@ -245,19 +244,19 @@ class GymPlansViewsTest(TestCase):
 
         data = {
             "name": "Updated Plan Name",
-            "price": "39.99",
+            "price": 39,
         }
 
         response = self.client.put(url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["plan"]["name"], "Updated Plan Name")
-        self.assertEqual(response.data["plan"]["price"], "39.99")
+        self.assertEqual(response.data["plan"]["price"], 39)
 
         # Verify database update
         self.plan1.refresh_from_db()
         self.assertEqual(self.plan1.name, "Updated Plan Name")
-        self.assertEqual(self.plan1.price, Decimal("39.99"))
+        self.assertEqual(self.plan1.price, 39)
 
     def test_update_plan_gym_owner(self):
         """Test that gym owner can update a plan."""
@@ -438,7 +437,7 @@ class GymPlansViewsTest(TestCase):
             "name": "Test Plan",
             "description": "Test",
             "duration_months": 1,
-            "price": "29.99",
+            "price": 29,
         }
 
         response = self.client.post(self.create_url, data)
@@ -492,7 +491,7 @@ class GymPlansViewsTest(TestCase):
             name="Other Gym Plan",
             description="This belongs to other gym",
             duration_months=1,
-            price=Decimal("19.99"),
+            price=19,
             is_active=True,
         )
 
@@ -542,7 +541,7 @@ class GymPlansViewsTest(TestCase):
             name="Other Gym Plan",
             description="Other gym description",
             duration_months=1,
-            price=Decimal("19.99"),
+            price=19,
             is_active=True,
         )
 
@@ -583,7 +582,7 @@ class GymPlansViewsTest(TestCase):
             "description": "Brand new plan",
             "duration_months": 3,
             "visit_limit": 20,
-            "price": "99.99",
+            "price": 99,
             "is_active": True,
         }
 
@@ -617,7 +616,7 @@ class GymPlansViewsTest(TestCase):
             url,
             {
                 "name": "Updated Plan",
-                "price": "39.99",
+                "price": 39,
             },
         )
 
@@ -647,7 +646,7 @@ class GymPlansViewsTest(TestCase):
             "description": "Test Description",
             "duration_months": 1,
             "visit_limit": 10,
-            "price": "29.99",
+            "price": 29,
             "is_active": True,
         }
 

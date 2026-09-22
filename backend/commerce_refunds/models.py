@@ -1,3 +1,14 @@
+# commerce_refunds/models.py
+
+import uuid
 from django.db import models
 
-# Create your models here.
+
+class RefundManager(models.Manager):
+    pass
+
+
+class Refund(models.Model):
+
+    # Custom manager
+    objects: RefundManager = RefundManager()
