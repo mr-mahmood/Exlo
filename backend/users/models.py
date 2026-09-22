@@ -21,12 +21,11 @@ class UserManager(BaseUserManager):
         Excludes visually ambiguous characters:
         0, O, 1, I
         """
+        CHARACTERS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+        LENGTH = 6
+
         while True:
-            CHARACTERS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-            LENGTH = 6
-
             code = "".join(secrets.choice(CHARACTERS) for _ in range(LENGTH))
-
             if not User.objects.filter(referral_code=code):
                 return code
 
@@ -35,35 +34,30 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", False)
         extra_fields.setdefault("is_superuser", False)
 
-        with transaction.atomic():
+        user = User(
+            phone_number=phone_number,
+            referral_code=self._generate_unique_referral_code(),
+            **extra_fields,
+        )
 
-            user = User(
-                phone_number=phone_number,
-                referral_code=self._generate_unique_referral_code(),
-                **extra_fields,
-            )
-
-            user.set_unusable_password()
-            user.save(using=self._db)
-
-            return user
+        user.set_unusable_password()
+        user.save(using=self._db)
+        return user
 
     def create_superuser(self, phone_number, password, **extra_fields):
         extra_fields.setdefault("role", User.Role.ADMIN)
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
 
-        with transaction.atomic():
-            user = User(
-                phone_number=phone_number,
-                referral_code=self._generate_unique_referral_code(),
-                **extra_fields,
-            )
+        user = User(
+            phone_number=phone_number,
+            referral_code=self._generate_unique_referral_code(),
+            **extra_fields,
+        )
 
-            user.set_password(password)
-            user.save(using=self._db)
-
-            return user
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
 
 
 def user_profile_picture_path(instance, filename):
@@ -76,12 +70,12 @@ class User(AbstractUser):
     last_login = None
 
     class Gender(models.TextChoices):
-        MALE = "MALE", "Male"
-        FEMALE = "FEMALE", "Female"
+        MALE = "MALE"
+        FEMALE = "FEMALE"
 
     class Role(models.TextChoices):
-        ADMIN = "ADMIN", "Admin"
-        USER = "USER", "User"
+        ADMIN = "ADMIN"
+        USER = "USER"
 
     # Primary Key
     id = models.UUIDField(

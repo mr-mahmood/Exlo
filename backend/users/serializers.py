@@ -1,5 +1,6 @@
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from rest_framework import serializers
+from commerce_wallet.models import Wallet
 from users.models import User
 from core.errors import APIError, SignUpError
 from users.validators import (
@@ -75,14 +76,18 @@ class UserSignupSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        validated_data.pop("referral", None)
+
         try:
-            validated_data.pop("referral", None)
-            return User.objects.create_user(**validated_data)
-        except IntegrityError as e:
+            with transaction.atomic():
+                user = User.objects.create_user(**validated_data)
+                Wallet.objects.create(owner=user)
+                return user
+        except IntegrityError:
             # Important condition check, DO NOT REMOVE
-            # This handles the rare race condition where two users get same referral_code
-            # IntegrityError only happend for referral code becuase
-            # other fildes checked before with custome validation
+            # This handles the rare race condition where two users get same referral_code.
+            # IntegrityError only happens for referral code (other fields checked before
+            # with custom validation) or wallet creation (OneToOneField duplicate).
             raise APIError(SignUpError.UNEXPECTED_ERROR)
 
 

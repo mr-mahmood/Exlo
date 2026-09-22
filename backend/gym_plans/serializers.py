@@ -8,6 +8,9 @@ from gym.serializers import GymBasicSerializer
 
 class GymMembershipPlanSerializer(serializers.ModelSerializer):
     gym = GymBasicSerializer(read_only=True)
+    duration_months = serializers.IntegerField(required=True, allow_null=False)
+    visit_limit = serializers.IntegerField(required=True, allow_null=False)
+    price = serializers.IntegerField(required=True, allow_null=False)
 
     class Meta:
         model = GymMembershipPlan
@@ -27,16 +30,16 @@ class GymMembershipPlanSerializer(serializers.ModelSerializer):
         ]
 
     def validate_duration_months(self, value):
-        if value < 0:
+        if value <= 0:
             raise APIError(GymPlansError.INVALID_DURATION)
         return value
 
     def validate_visit_limit(self, value):
-        if value < 0:
+        if value <= 0:
             raise APIError(GymPlansError.INVALID_VISIT_LIMIT)
         return value
 
     def validate_price(self, value):
-        if value < 0:
+        if value <= 0:
             raise APIError(GymPlansError.INVALID_PRICE)
         return value

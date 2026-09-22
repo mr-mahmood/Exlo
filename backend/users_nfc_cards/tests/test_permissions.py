@@ -1,7 +1,6 @@
 # users_nfc_cards/tests/test_permissions.py
 
 from datetime import timedelta
-from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
@@ -73,14 +72,14 @@ class PermissionTestBase(TestCase):
             gym=self.gym_a,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("1000"),
+            price=1000,
         )
         self.plan_b = GymMembershipPlan.objects.create_plan(
             name="Plan B",
             gym=self.gym_b,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("1000"),
+            price=1000,
         )
 
         self.factory = APIRequestFactory()
@@ -112,10 +111,10 @@ class PermissionTestBase(TestCase):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("0"),
+            subtotal_amount=0,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=0,
             paid_at=timezone.now(),
         )
         return OrderItem.objects.create(
@@ -124,11 +123,11 @@ class PermissionTestBase(TestCase):
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
             item_snapshot={},
             quantity=1,
-            unit_price=Decimal("0"),
-            subtotal_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("0"),
+            unit_price=0,
+            subtotal_amount=0,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=0,
         )
 
 

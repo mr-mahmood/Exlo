@@ -2,10 +2,7 @@
 # type: ignore
 
 import uuid
-from decimal import Decimal
-
 from django.test import TestCase
-
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
 from gym_plans.serializers import GymMembershipPlanSerializer
@@ -41,7 +38,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "description": "Unlimited access to all facilities",
             "duration_months": 1,
             "visit_limit": 0,
-            "price": Decimal("49.99"),
+            "price": 49,
             "is_active": True,
         }
         data.update(overrides)
@@ -56,7 +53,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         data = serializer.data
 
         self.assertEqual(data["name"], "Premium Monthly")
-        self.assertEqual(data["price"], "49.99")
+        self.assertEqual(data["price"], 49)
         self.assertEqual(data["duration_months"], 1)
 
     def test_serializer_includes_gym(self):
@@ -123,7 +120,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             self.assertIn(field, data)
 
         self.assertEqual(data["name"], "Premium Monthly")
-        self.assertEqual(data["price"], "49.99")
+        self.assertEqual(data["price"], 49)
         self.assertEqual(data["duration_months"], 1)
         self.assertEqual(data["visit_limit"], 0)
         self.assertTrue(data["is_active"])
@@ -156,7 +153,8 @@ class GymMembershipPlanSerializerTest(TestCase):
                 "name": "Test Plan",
                 "description": "Test Description",
                 "duration_months": 1,
-                "price": "29.99",
+                "visit_limit": 10,
+                "price": 29,
                 "is_active": True,
             }
         )
@@ -193,12 +191,12 @@ class GymMembershipPlanSerializerTest(TestCase):
         plan = self.create_plan(
             name="Original Name",
             description="Original Description",
-            price=Decimal("29.99"),
+            price=29,
         )
 
         update_data = {
             "name": "Updated Name",
-            "price": "59.99",
+            "price": 59,
         }
 
         serializer = GymMembershipPlanSerializer(
@@ -213,12 +211,12 @@ class GymMembershipPlanSerializerTest(TestCase):
         updated_plan.refresh_from_db()
 
         self.assertEqual(updated_plan.name, "Updated Name")
-        self.assertEqual(updated_plan.price, Decimal("59.99"))
+        self.assertEqual(updated_plan.price, 59)
         self.assertEqual(updated_plan.description, "Original Description")
         self.assertEqual(updated_plan.gym_id, self.gym.id)
 
     def test_serializer_validation_errors(self):
-        """Test serializer with missing required fields."""
+        """Test serializer with missing required fields"""
         data = {
             "name": "Test",
             "duration_months": 1,
@@ -237,7 +235,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "name": "Test Plan",
             "description": "Test Description",
             "duration_months": 1,
-            "price": "-10.00",
+            "price": -10,
             "is_active": True,
         }
 
@@ -257,7 +255,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "name": "Test Plan",
             "description": "Test Description",
             "duration_months": -1,
-            "price": "29.99",
+            "price": 29,
             "is_active": True,
         }
 
@@ -278,7 +276,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "description": "Test Description",
             "duration_months": 1,
             "visit_limit": -5,
-            "price": "29.99",
+            "price": 29,
             "is_active": True,
         }
 

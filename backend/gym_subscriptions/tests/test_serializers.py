@@ -2,7 +2,6 @@
 # type: ignore
 
 from datetime import timedelta
-from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 from commerce_orders.models import CommerceProduct, Order, OrderItem
@@ -34,16 +33,16 @@ class GymSubscriptionSerializerTestBase(TestCase):
             gym=self.gym,
             duration_months=1,
             visit_limit=30,
-            price=Decimal("10000"),
+            price=10000,
         )
 
         self.order = Order.objects.create(
             buyer=self.user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            subtotal_amount=10000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
             paid_at=timezone.now(),
         )
 
@@ -53,11 +52,11 @@ class GymSubscriptionSerializerTestBase(TestCase):
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
             item_snapshot={"id": str(self.plan.pk), "name": self.plan.name},
             quantity=1,
-            unit_price=Decimal("100000"),
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            unit_price=100000,
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
         )
 
     def make_subscription(self, **overrides):
@@ -288,10 +287,10 @@ class GymSubscriptionSerializerValuesTests(GymSubscriptionSerializerTestBase):
         self.assertIsNotNone(data["created_at"])
         self.assertIsNotNone(data["updated_at"])
 
-    def test_price_is_string_decimal(self):
+    def test_price_is_string_int(self):
         sub = self.make_subscription()
         data = GymSubscriptionReadSerializer(sub).data
-        self.assertEqual(data["plan"]["price"], "10000.00")
+        self.assertEqual(data["plan"]["price"], 10000)
 
     def test_plan_duration_month_and_visit_limit(self):
         sub = self.make_subscription()
@@ -362,10 +361,10 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
         order_2 = Order.objects.create(
             buyer=self.user,
             status=Order.Status.PAID,
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
             paid_at=timezone.now(),
         )
         order_item_2 = OrderItem.objects.create(
@@ -374,11 +373,11 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
             item_snapshot={},
             quantity=1,
-            unit_price=Decimal("100000"),
-            subtotal_amount=Decimal("100000"),
-            discount_amount=Decimal("0"),
-            tax_amount=Decimal("0"),
-            total_amount=Decimal("100000"),
+            unit_price=100000,
+            subtotal_amount=100000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=100000,
         )
         GymSubscription.objects.create(
             subscriber=self.user,
@@ -417,10 +416,10 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
             order = Order.objects.create(
                 buyer=self.user,
                 status=Order.Status.PAID,
-                subtotal_amount=Decimal("100000"),
-                discount_amount=Decimal("0"),
-                tax_amount=Decimal("0"),
-                total_amount=Decimal("100000"),
+                subtotal_amount=100000,
+                discount_amount=0,
+                tax_amount=0,
+                total_amount=100000,
                 paid_at=timezone.now(),
             )
             order_items.append(
@@ -430,11 +429,11 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                     item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
                     item_snapshot={},
                     quantity=1,
-                    unit_price=Decimal("100000"),
-                    subtotal_amount=Decimal("100000"),
-                    discount_amount=Decimal("0"),
-                    tax_amount=Decimal("0"),
-                    total_amount=Decimal("100000"),
+                    unit_price=100000,
+                    subtotal_amount=100000,
+                    discount_amount=0,
+                    tax_amount=0,
+                    total_amount=100000,
                 )
             )
         for oi in order_items:
@@ -456,10 +455,10 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
             order = Order.objects.create(
                 buyer=self.user,
                 status=Order.Status.PAID,
-                subtotal_amount=Decimal("100000"),
-                discount_amount=Decimal("0"),
-                tax_amount=Decimal("0"),
-                total_amount=Decimal("100000"),
+                subtotal_amount=100000,
+                discount_amount=0,
+                tax_amount=0,
+                total_amount=100000,
                 paid_at=timezone.now(),
             )
             order_items.append(
@@ -469,11 +468,11 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                     item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
                     item_snapshot={},
                     quantity=1,
-                    unit_price=Decimal("100000"),
-                    subtotal_amount=Decimal("100000"),
-                    discount_amount=Decimal("0"),
-                    tax_amount=Decimal("0"),
-                    total_amount=Decimal("100000"),
+                    unit_price=100000,
+                    subtotal_amount=100000,
+                    discount_amount=0,
+                    tax_amount=0,
+                    total_amount=100000,
                 )
             )
         for oi in order_items:

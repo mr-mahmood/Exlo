@@ -1,9 +1,8 @@
 # user_measurements/tests/test_serializers.py
 
 from typing import cast
-
-from django.test import TestCase
 from decimal import Decimal
+from django.test import TestCase
 from users_measurements.models import Measurements
 from users_measurements.serializers import UserMeasurementSerializer
 from core.errors import MeasurementsError, APIError
@@ -578,8 +577,8 @@ class UserMeasurementSerializerTest(TestCase):
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
-    def test_serializer_with_decimal_precision(self):
-        """Test serializer handles decimal precision correctly"""
+    def test_serializer_with_int_precision(self):
+        """Test serializer handles int precision correctly"""
         data = {
             "height_cm": "175.5",
             "weight_kg": "72.3",
@@ -590,7 +589,7 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
         measurement = cast(Measurements, serializer.save(user=self.user))
 
-        # Should be rounded to 1 decimal place
+        # Should be rounded to 1 int place
         self.assertEqual(measurement.height_cm, Decimal("175.5"))
         self.assertEqual(measurement.weight_kg, Decimal("72.3"))
         self.assertEqual(measurement.chest_cm, Decimal("102.5"))

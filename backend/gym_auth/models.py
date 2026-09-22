@@ -2,16 +2,16 @@
 
 import uuid
 from django.db import models
-from django.conf import settings
+from users.models import User
 from gym.models import Gym
 
 
 class UserGymRole(models.Model):
     class Role(models.TextChoices):
-        OWNER = "OWNER", "Owner"
-        STAFF = "STAFF", "Staff"
-        COACH = "COACH", "Coach"
-        ATHLETE = "ATHLETE", "Athlete"
+        OWNER = "OWNER"
+        STAFF = "STAFF"
+        COACH = "COACH"
+        ATHLETE = "ATHLETE"
 
     id = models.UUIDField(
         primary_key=True,
@@ -20,15 +20,15 @@ class UserGymRole(models.Model):
     )
 
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
+        User,
+        on_delete=models.PROTECT,
         related_name="gyms",
         db_index=True,
     )
 
     gym = models.ForeignKey(
         Gym,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="users",
         db_index=True,
     )

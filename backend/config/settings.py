@@ -60,6 +60,8 @@ INSTALLED_APPS = [
     "commerce_payments",
     "commerce_refunds",
     "commerce_commissions",
+    "commerce_wallet",
+    "commerce_wallet_ledger",
 ]
 
 MIDDLEWARE = [
@@ -440,6 +442,10 @@ MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 # Zibal Payment Gateway Settings
 # ============================================================================
 ZIBAL_MERCHANT = os.getenv("ZIBAL_MERCHANT")
+ZIBAL_API_TOKEN = os.getenv("ZIBAL_API_TOKEN")
+ZIBAL_ACCOUNT_ID = os.getenv("ZIBAL_ACCOUNT_ID")
+ZIBAL_IPG_FEE_MAX = 250_000  # Rial
+ZIBAL_EBANK_FEE_MAX = 600_000  # Rial
 
 # ============================================================================
 # Sms.ir

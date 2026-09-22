@@ -2,7 +2,6 @@
 # type: ignore
 
 import time
-from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 from gym.models import Gym
@@ -31,7 +30,7 @@ class GymMembershipPlanModelTest(TestCase):
             description="Unlimited access",
             duration_months=1,
             visit_limit=0,
-            price=Decimal("49.99"),
+            price=49,
             is_active=True,
         )
 
@@ -41,7 +40,7 @@ class GymMembershipPlanModelTest(TestCase):
         self.assertEqual(plan.description, "Unlimited access")
         self.assertEqual(plan.duration_months, 1)
         self.assertEqual(plan.visit_limit, 0)
-        self.assertEqual(plan.price, Decimal("49.99"))
+        self.assertEqual(plan.price, 49)
         self.assertTrue(plan.is_active)
         self.assertIsNone(plan.deleted_at)
         self.assertIsInstance(plan.id, CommerceProduct)
@@ -53,7 +52,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan",
             description="Test Description",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
 
         # Check that CommerceProduct was created
@@ -75,7 +74,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Premium Monthly",
             description="Unlimited access",
             duration_months=1,
-            price=Decimal("49.99"),
+            price=49,
         )
 
         expected = f"{plan.name} - {plan.gym.name}"
@@ -88,7 +87,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan",
             description="Test Description",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
 
         self.assertFalse(plan.is_deleted)
@@ -103,7 +102,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan",
             description="Test Description",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
             is_active=True,
         )
 
@@ -118,7 +117,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan 2",
             description="Test Description",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
             is_active=False,
         )
         self.assertFalse(plan2.is_available)
@@ -130,7 +129,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan",
             description="Test Description",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
 
         self.assertIsNone(plan.deleted_at)
@@ -149,7 +148,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Active Plan",
             description="Active",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
             is_active=True,
         )
 
@@ -179,7 +178,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Deleted Plan",
             description="Will be deleted",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
 
         plan.soft_delete()
@@ -202,7 +201,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Plan 1",
             description="Active",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
             is_active=True,
         )
         plan2 = GymMembershipPlan.objects.create_plan(
@@ -210,7 +209,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Plan 2",
             description="Active",
             duration_months=1,
-            price=Decimal("39.99"),
+            price=39,
             is_active=True,
         )
         plan3 = GymMembershipPlan.objects.create_plan(
@@ -218,7 +217,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Plan 3",
             description="Deleted",
             duration_months=1,
-            price=Decimal("49.99"),
+            price=49,
             is_active=True,
         )
         plan3.soft_delete()
@@ -241,14 +240,14 @@ class GymMembershipPlanModelTest(TestCase):
             name="Plan 1",
             description="Active",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
         plan2 = GymMembershipPlan.objects.create_plan(
             gym=self.gym,
             name="Plan 2",
             description="Deleted",
             duration_months=1,
-            price=Decimal("39.99"),
+            price=39,
         )
         plan2.soft_delete()
 
@@ -269,7 +268,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan",
             description="Test",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
 
         self.assertIsNotNone(plan.created_at)
@@ -282,7 +281,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Test Plan",
             description="Test",
             duration_months=1,
-            price=Decimal("29.99"),
+            price=29,
         )
 
         original_updated = plan.updated_at

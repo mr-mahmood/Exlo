@@ -16,9 +16,9 @@ class OrderManager(models.Manager):
 
 class Order(models.Model):
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
-        PAID = "PAID", "Paid"
-        CANCELLED = "CANCELLED", "Cancelled"
+        PENDING = "PENDING"
+        PAID = "PAID"
+        CANCELLED = "CANCELLED"
 
     id = models.UUIDField(
         primary_key=True,
@@ -38,27 +38,10 @@ class Order(models.Model):
         default=Status.PENDING,
     )
 
-    subtotal_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-    )
-
-    discount_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=0,
-    )
-
-    tax_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=0,
-    )
-
-    total_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-    )
+    subtotal_amount = models.PositiveBigIntegerField(default=0)
+    discount_amount = models.PositiveBigIntegerField(default=0)
+    tax_amount = models.PositiveBigIntegerField(default=0)
+    total_amount = models.PositiveBigIntegerField(default=0)
 
     paid_at = models.DateTimeField(null=True, blank=True)
 
@@ -96,7 +79,7 @@ class OrderItem(models.Model):
 
     order = models.ForeignKey(
         Order,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="items",
     )
 
@@ -107,34 +90,12 @@ class OrderItem(models.Model):
 
     item_snapshot = models.JSONField()
 
-    quantity = models.PositiveIntegerField()
-
-    unit_price = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-    )
-
-    subtotal_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-    )
-
-    discount_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=0,
-    )
-
-    tax_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=0,
-    )
-
-    total_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-    )
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.PositiveBigIntegerField(default=0)
+    subtotal_amount = models.PositiveBigIntegerField(default=0)
+    discount_amount = models.PositiveBigIntegerField(default=0)
+    tax_amount = models.PositiveBigIntegerField(default=0)
+    total_amount = models.PositiveBigIntegerField(default=0)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

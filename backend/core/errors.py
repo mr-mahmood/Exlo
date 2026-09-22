@@ -682,3 +682,61 @@ class UserNfcCardError(APIError):
         "This card uid is not correct",
         status.HTTP_400_BAD_REQUEST,
     )
+
+
+# ============================================================================
+# WALLET
+# ============================================================================
+class WalletError(APIError):
+    BALANCE_NOT_ENOUGH = (
+        "WALLET_001",
+        "balance is not enough",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    AMOUNT_REQUIRE = (
+        "WALLET_002",
+        "amount must provided",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    AMOUNT_TOO_LOW = (
+        "WALLET_003",
+        "amount must be bigger that min",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    AMOUNT_TOO_HIGH = (
+        "WALLET_004",
+        "amount must be lowwer that max",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+# ============================================================================
+# PAYMENT
+# ============================================================================
+class PaymentError(APIError):
+    GATEWAY_ERROR = (
+        "PAY_001",
+        "payment gateway have error",
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+    PAYMENT_NOT_FOUND = (
+        "PAY_002",
+        "payment not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+
+# ============================================================================
+# PAYMENT GATEWAY
+# ============================================================================
+class PaymentGatewayError(APIError):
+
+    GATEWAY_NOT_FOUND = (
+        "GAT_001",
+        "gateway not found",
+        status.HTTP_404_NOT_FOUND,
+    )
