@@ -6,7 +6,7 @@ from rest_framework import status
 from django.db import transaction
 from gym.models import Gym
 from gym_subscriptions.models import GymSubscription
-from core.errors import APIError, GymVisitsError
+from core.errors import APIError, GymVisitsError, UserNfcCardError
 from gym_visits.models import GymVisit
 from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymDevice
@@ -19,9 +19,18 @@ class NfcCardCheckInView(APIView):
     permission_classes = [IsGymDevice]
 
     def post(self, request, gym_id):
-
         uid = request.data.get("uid")
-        user: User = UserNfcCard.objects.find_card(uid=uid).user
+
+        card, card_assigned = UserNfcCard.objects.find_or_assign_card(
+            uid=uid,
+            gym_id=gym_id,
+        )
+
+        if card_assigned:
+            # esp32 dont open gate
+            return Response({"card_assigned": True}, status=status.HTTP_201_CREATED)
+
+        user: User = card.user
         user.validate_account_status()
 
         gym = Gym.objects.get_gym(gym_id)
@@ -31,14 +40,16 @@ class NfcCardCheckInView(APIView):
                 subscriber=user,
                 gym=gym,
             )
-            visit = GymVisit.objects.check_in(
+
+            GymVisit.objects.check_in(
                 user=user,
                 gym=gym,
                 subscription=subscription,
                 method=GymVisit.Method.NFC,
             )
 
-        return Response(status=status.HTTP_201_CREATED)
+        # esp32 open gate
+        return Response({"card_assigned": False}, status=status.HTTP_200_OK)
 
 
 class NfcCardCheckOutView(APIView):

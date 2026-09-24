@@ -14,6 +14,12 @@ class UserManager(BaseUserManager):
         except User.DoesNotExist:
             raise APIError(UserAccountError.USER_NOT_EXIST)
 
+    def get_user_by_phone(self, phone_number) -> "User":
+        try:
+            return User.objects.get(phone_number=phone_number)
+        except User.DoesNotExist:
+            raise APIError(UserAccountError.USER_NOT_EXIST)
+
     def _generate_unique_referral_code(self):
         """
         Generate random, human-readable referral codes.

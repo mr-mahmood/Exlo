@@ -37,10 +37,11 @@ class GymDeviceManager(models.Manager):
 
         return device
 
-    def register_device(self, gym) -> tuple["GymDevice", str]:
+    def register_device(self, gym, device_type) -> tuple["GymDevice", str]:
         raw_token = self._generate_token()
         device = self.create(
             gym=gym,
+            device_type=device_type,
             token_hash=hash_secret(raw_token),
             token_prefix=raw_token[:12],
         )
@@ -52,6 +53,10 @@ class GymDeviceManager(models.Manager):
 
 
 class GymDevice(models.Model):
+    class GymDeviceType(models.TextChoices):
+        ENTRANCE = "entrance", "Entrance"
+        LOCKER = "locker", "Locker"
+
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -62,6 +67,11 @@ class GymDevice(models.Model):
         Gym,
         on_delete=models.PROTECT,
         related_name="devices",
+    )
+
+    device_type = models.CharField(
+        max_length=50,
+        choices=GymDeviceType.choices,
     )
 
     token_hash = models.CharField(max_length=255)
@@ -81,6 +91,7 @@ class GymDevice(models.Model):
         indexes = [
             models.Index(fields=["gym", "is_active"]),
             models.Index(fields=["gym", "token_prefix"]),
+            models.Index(fields=["gym", "device_type", "is_active"]),
             models.Index(fields=["gym", "token_prefix", "is_active"]),
             models.Index(fields=["token_prefix"]),
             models.Index(fields=["created_at"]),

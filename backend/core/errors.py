@@ -660,6 +660,12 @@ class GymDeviceError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
+    INVALID_DEVICE_TYPE = (
+        "DEVICE_003",
+        "device type is not valid",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
 
 # ============================================================================
 # USER NFC CARD
@@ -680,6 +686,12 @@ class UserNfcCardError(APIError):
     INVALID_UID = (
         "CARD_003",
         "This card uid is not correct",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    CARD_ASSIGNMENT_ALREADY_PENDING = (
+        "CARD_004",
+        "There is already a assign request for this user or cache set return false",
         status.HTTP_400_BAD_REQUEST,
     )
 

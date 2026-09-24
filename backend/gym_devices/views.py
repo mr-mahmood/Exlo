@@ -36,14 +36,32 @@ class GymDevicesCreateAPIView(APIView):
     serializer_class = GymDeviceSerializer
 
     def post(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(
+            gym_id=gym_id,
+            active_only=True,
+        )
 
-        device, raw_token = GymDevice.objects.register_device(gym=gym)
-        device = self.serializer_class(device, context={"request": request}).data
+        serializer = self.serializer_class(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        device_type = serializer.validated_data["device_type"]  # type: ignore
+
+        device, raw_token = GymDevice.objects.register_device(
+            gym=gym,
+            device_type=device_type,
+        )
+
+        device_data = self.serializer_class(
+            device,
+            context={"request": request},
+        ).data
 
         return Response(
             {
-                "device": device,
+                "device": device_data,
                 "token": raw_token,
             },
             status=status.HTTP_201_CREATED,
