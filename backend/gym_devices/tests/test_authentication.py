@@ -273,7 +273,7 @@ class DeviceTokenAuthenticationTests(TestCase):
     def test_raises_when_gym_not_found(self):
         request = self._make_request(
             header_value=f"Device {self.raw_token}",
-            gym_id=uuid.uuid4(),
+            gym_id=uuid.uuid7(),
         )
 
         with self.assertRaises(APIError):

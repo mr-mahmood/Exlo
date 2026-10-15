@@ -53,13 +53,15 @@ class GymDeviceManager(models.Manager):
 
 
 class GymDevice(models.Model):
+
+    # type of esp 32 that send request can be for entrance/exit gate or lockers controler
     class GymDeviceType(models.TextChoices):
         ENTRANCE = "entrance", "Entrance"
         LOCKER = "locker", "Locker"
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 

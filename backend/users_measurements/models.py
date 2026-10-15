@@ -9,7 +9,7 @@ from users.models import User
 class Measurements(models.Model):
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 
@@ -161,7 +161,7 @@ class Measurements(models.Model):
 
 
 def user_profile_picture_path(instance, filename):
-    return f"measurement_photos/{uuid.uuid4().hex}.webp"
+    return f"measurement_photos/{uuid.uuid7().hex}.webp"
 
 
 class MeasurementPhotos(models.Model):
@@ -172,7 +172,7 @@ class MeasurementPhotos(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 

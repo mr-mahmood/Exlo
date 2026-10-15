@@ -22,7 +22,7 @@ class Order(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 
@@ -67,7 +67,7 @@ class OrderItemManager(models.Manager):
 class OrderItem(models.Model):
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 

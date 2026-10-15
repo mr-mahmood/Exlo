@@ -7,7 +7,7 @@ from core.errors import MeasurementsError, APIError
 import os
 import io
 from PIL import Image
-from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.files.base import ContentFile
 
 
 class MeasurementPhotosSerializer(serializers.ModelSerializer):
@@ -61,11 +61,9 @@ class MeasurementPhotosSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-
         photo = validated_data.pop("photo")
         webp_file = self.convert_to_webp(photo)
 
-        # Create the instance with converted image
         return MeasurementPhotos.objects.create(
             **validated_data,
             photo=webp_file,
@@ -73,28 +71,15 @@ class MeasurementPhotosSerializer(serializers.ModelSerializer):
 
     def convert_to_webp(self, photo):
         try:
-            # Open and convert image to WebP
-            img = Image.open(photo)
+            with Image.open(photo) as img:
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
 
-            # Convert to RGB if needed (for jpg compatibility)
-            if img.mode not in ["RGB", "RGBA"]:
-                img = img.convert("RGB")
+                output = io.BytesIO()
+                img.save(output, format="WebP", quality=85, optimize=True)
 
-            # Save to WebP
-            output = io.BytesIO()
-            img.save(output, format="WebP", quality=85, optimize=True)
-            output.seek(0)
-
-            # Create new file
-            name = os.path.splitext(photo.name)[0]
-            return InMemoryUploadedFile(
-                file=output,
-                field_name=photo.field_name,
-                name=f"{name}.webp",
-                content_type="image/webp",
-                size=output.getbuffer().nbytes,
-                charset=photo.charset,
-            )
+            name = f"{os.path.splitext(photo.name)[0]}.webp"
+            return ContentFile(output.getvalue(), name=name)
 
         except Exception:
             raise APIError(MeasurementsError.IMAGE_CONVERSION_FAILED)

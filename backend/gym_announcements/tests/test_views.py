@@ -121,7 +121,7 @@ class GymAnnouncementViewsTest(TestCase):
     def test_announcement_list_gym_not_found(self):
         """Test announcement list with non-existent gym."""
         self.authenticate(self.gym_member)
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
 
         response = self.client.get(
             reverse("gym_announcements:list", kwargs={"gym_id": non_existent_id})
@@ -244,7 +244,7 @@ class GymAnnouncementViewsTest(TestCase):
     def test_announcement_update_not_found(self):
         """Test updating non-existent announcement."""
         self.authenticate(self.gym_owner)
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
 
         data = {"title": "New Title"}
 
@@ -331,7 +331,7 @@ class GymAnnouncementViewsTest(TestCase):
     def test_announcement_delete_not_found(self):
         """Test deleting non-existent announcement."""
         self.authenticate(self.gym_owner)
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
 
         response = self.client.delete(
             reverse(

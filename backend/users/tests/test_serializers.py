@@ -471,7 +471,7 @@ class UserProfilePictureSerializerTest(TestCase):
         # Create a large file
         large_image = self.create_test_image(size=(2000, 2000))
         # Make it larger by setting size to exceed limit
-        large_image.size = settings.MAX_IMAGE_SIZE + 1
+        large_image.size = settings.MAX_IMAGE_SIZE + 1 # type: ignore
 
         data = {
             "profile_picture": large_image,

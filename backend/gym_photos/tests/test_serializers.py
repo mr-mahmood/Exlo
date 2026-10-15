@@ -142,7 +142,7 @@ class GymPhotoSerializerTest(TestCase):
         """Test that read-only fields are not writable."""
         data = {
             "photo": self.photo_data,
-            "id": str(uuid.uuid4()),
+            "id": str(uuid.uuid7()),
             "created_at": "2024-01-01T00:00:00Z",
         }
         serializer = GymPhotoSerializer(

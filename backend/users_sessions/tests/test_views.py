@@ -42,14 +42,14 @@ class UserSessionPIViewTest(TestCase):
         # Create test sessions
         self.session1 = Session.objects.create(
             user=self.user,
-            session_id=uuid.uuid4(),
+            session_id=uuid.uuid7(),
             ip_address="192.168.1.1",
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             last_activity_at=timezone.now(),
         )
         self.session2 = Session.objects.create(
             user=self.user,
-            session_id=uuid.uuid4(),
+            session_id=uuid.uuid7(),
             ip_address="192.168.1.2",
             user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
             last_activity_at=timezone.now(),
@@ -143,7 +143,7 @@ class UserSessionPIViewTest(TestCase):
 
     def test_delete_session_not_found(self):
         """Test deleting a non-existent session"""
-        non_existent_session_id = uuid.uuid4()
+        non_existent_session_id = uuid.uuid7()
 
         response = self.client.delete(
             self.url, data={"session_id": str(non_existent_session_id)}, format="json"
@@ -156,7 +156,7 @@ class UserSessionPIViewTest(TestCase):
         """Test that user cannot delete another user's session"""
         other_session = Session.objects.create(
             user=self.other_user,
-            session_id=uuid.uuid4(),
+            session_id=uuid.uuid7(),
             ip_address="192.168.1.3",
             user_agent="Mozilla/5.0",
             last_activity_at=timezone.now(),
@@ -233,7 +233,7 @@ class UserSessionPIViewTest(TestCase):
         """Test deleting current active session"""
         current_session = Session.objects.create(
             user=self.user,
-            session_id=uuid.uuid4(),
+            session_id=uuid.uuid7(),
             ip_address="192.168.1.4",
             user_agent="Current Session",
             last_activity_at=timezone.now(),
@@ -292,7 +292,7 @@ class UserSessionPIViewTest(TestCase):
         for i in range(55):
             Session.objects.create(
                 user=self.user,
-                session_id=uuid.uuid4(),
+                session_id=uuid.uuid7(),
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"Test Agent {i}",
                 last_activity_at=timezone.now(),
@@ -311,7 +311,7 @@ class UserSessionPIViewTest(TestCase):
         for i in range(30):
             Session.objects.create(
                 user=self.user,
-                session_id=uuid.uuid4(),
+                session_id=uuid.uuid7(),
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"Test Agent {i}",
                 last_activity_at=timezone.now(),
@@ -330,7 +330,7 @@ class UserSessionPIViewTest(TestCase):
         for i in range(150):
             Session.objects.create(
                 user=self.user,
-                session_id=uuid.uuid4(),
+                session_id=uuid.uuid7(),
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"Test Agent {i}",
                 last_activity_at=timezone.now(),
@@ -348,7 +348,7 @@ class UserSessionPIViewTest(TestCase):
         for i in range(55):
             Session.objects.create(
                 user=self.user,
-                session_id=uuid.uuid4(),
+                session_id=uuid.uuid7(),
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"Test Agent {i}",
                 last_activity_at=timezone.now(),
@@ -368,7 +368,7 @@ class UserSessionPIViewTest(TestCase):
         for i in range(10):
             Session.objects.create(
                 user=self.user,
-                session_id=uuid.uuid4(),
+                session_id=uuid.uuid7(),
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"Test Agent {i}",
                 last_activity_at=timezone.now(),
@@ -394,7 +394,7 @@ class UserSessionPIViewTest(TestCase):
         for i in range(25):
             Session.objects.create(
                 user=self.user,
-                session_id=uuid.uuid4(),
+                session_id=uuid.uuid7(),
                 ip_address=f"192.168.1.{i}",
                 user_agent=f"Test Agent {i}",
                 last_activity_at=timezone.now(),

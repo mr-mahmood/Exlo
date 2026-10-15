@@ -17,4 +17,5 @@ requests
 Pillow
 gunicorn
 pywebpush
-dateutil
+python-dateutil
+dj_database_url

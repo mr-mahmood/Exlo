@@ -43,8 +43,6 @@ INSTALLED_APPS = [
     "users_referrals",
     "users_measurements",
     "users_nfc_cards",
-    "users_notifications",
-    "users_pwa",
     # Gym apps
     "gym",
     "gym_photos",

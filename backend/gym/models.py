@@ -24,7 +24,7 @@ class GymManager(models.Manager):
 class Gym(models.Model):
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 

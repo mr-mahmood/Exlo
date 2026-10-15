@@ -1,5 +1,7 @@
 # authentication/tests/test_views.py
 # type: ignore
+
+import time
 from django.test import TestCase
 from django.urls import reverse
 from django.core.cache import cache
@@ -822,6 +824,8 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
 
         session = Session.objects.get(user=self.user)
         old_activity = session.last_activity_at
+
+        time.sleep(1)
 
         response = self.client.post(
             self.refresh_url,

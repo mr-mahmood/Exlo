@@ -6,7 +6,7 @@ from rest_framework import status
 from django.db import transaction
 from gym.models import Gym
 from gym_subscriptions.models import GymSubscription
-from core.errors import APIError, GymVisitsError, UserNfcCardError
+from core.errors import APIError, GymVisitsError
 from gym_visits.models import GymVisit
 from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymDevice
@@ -27,8 +27,8 @@ class NfcCardCheckInView(APIView):
         )
 
         if card_assigned:
-            # esp32 dont open gate
-            return Response({"card_assigned": True}, status=status.HTTP_201_CREATED)
+            # esp32 dont open gate just assign card to user
+            return Response(status=status.HTTP_201_CREATED)
 
         user: User = card.user
         user.validate_account_status()
@@ -49,7 +49,7 @@ class NfcCardCheckInView(APIView):
             )
 
         # esp32 open gate
-        return Response({"card_assigned": False}, status=status.HTTP_200_OK)
+        return Response(status=status.HTTP_200_OK)
 
 
 class NfcCardCheckOutView(APIView):

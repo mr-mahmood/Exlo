@@ -62,7 +62,7 @@ class GymAnnouncementSerializerTest(TestCase):
         """Test that read-only fields are not writable."""
         data = {
             **self.announcement_data,
-            "id": str(uuid.uuid4()),
+            "id": str(uuid.uuid7()),
             "published_at": "2024-01-01T00:00:00Z",
             "archived_at": "2024-01-02T00:00:00Z",
         }

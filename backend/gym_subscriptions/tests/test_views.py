@@ -414,7 +414,7 @@ class SubscriptionDetailTests(SubscriptionViewTestBase):
 
     def test_nonexistent_subscription_returns_subscription_not_found(self):
         self.authenticate(self.user)
-        response = self.client.get(self.detail_url(uuid.uuid4()))
+        response = self.client.get(self.detail_url(uuid.uuid7()))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(
@@ -572,7 +572,7 @@ class SubscriptionCancelTests(SubscriptionViewTestBase):
 
     def test_cancel_nonexistent_returns_404(self):
         self.authenticate(self.user)
-        response = self.client.post(self.cancel_url(uuid.uuid4()))
+        response = self.client.post(self.cancel_url(uuid.uuid7()))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 

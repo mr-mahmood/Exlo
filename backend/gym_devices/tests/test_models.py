@@ -38,7 +38,7 @@ class GymDeviceManagerGetDeviceTests(TestCase):
     def test_get_device_raises_when_not_found(self):
         with self.assertRaises(APIError) as ctx:
             GymDevice.objects.get_device(
-                uuid.uuid4(),
+                uuid.uuid7(),
                 self.gym,
             )
 

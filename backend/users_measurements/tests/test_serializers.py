@@ -772,7 +772,7 @@ class MeasurementPhotosSerializerTest(TestCase):
         # Create a large image (over the limit)
         large_image = self.create_test_image(size=(1000, 1000))
         # Make it larger by adding more data
-        large_image.size = settings.MAX_IMAGE_SIZE + 1
+        large_image.size = settings.MAX_IMAGE_SIZE + 1 # type: ignore
 
         data = {
             "type": MeasurementPhotos.PhotoType.FRONT,

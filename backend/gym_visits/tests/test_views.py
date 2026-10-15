@@ -2,7 +2,7 @@
 # type: ignore
 
 from datetime import timedelta
-from uuid import uuid4
+from uuid import uuid7
 
 from django.conf import settings
 from django.core.cache import cache
@@ -408,10 +408,6 @@ class NewCardAssignmentFlowTests(NfcFlowTestBase):
             response.status_code,
             status.HTTP_201_CREATED,
         )
-        self.assertEqual(
-            response.data["card_assigned"],
-            True,
-        )
 
         self.assertTrue(
             UserNfcCard.objects.filter(
@@ -587,11 +583,6 @@ class NewCardAssignmentFlowTests(NfcFlowTestBase):
         )
 
         self.assertEqual(
-            assignment_response.data["card_assigned"],
-            True,
-        )
-
-        self.assertEqual(
             GymVisit.objects.filter(
                 user=self.user,
                 gym=self.gym_a,
@@ -608,11 +599,6 @@ class NewCardAssignmentFlowTests(NfcFlowTestBase):
         self.assertEqual(
             check_in_response.status_code,
             status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            check_in_response.data["card_assigned"],
-            False,
         )
 
         self.assertEqual(
@@ -657,11 +643,6 @@ class CheckInFlowTests(NfcFlowTestBase):
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            response.data["card_assigned"],
-            False,
         )
 
         visit = GymVisit.objects.get(
@@ -1087,7 +1068,7 @@ class UnknownGymTests(NfcFlowTestBase):
     def test_nonexistent_gym_id_is_rejected(self):
         url = reverse(
             "gym_visits:gym-visit-check-in",
-            args=[uuid4()],
+            args=[uuid7()],
         )
 
         response = self.client.post(
@@ -1260,11 +1241,6 @@ class FullJourneyTests(NfcFlowTestBase):
         )
 
         self.assertEqual(
-            assignment_response.data["card_assigned"],
-            True,
-        )
-
-        self.assertEqual(
             GymVisit.objects.filter(
                 user=self.user,
                 gym=self.gym_a,
@@ -1289,11 +1265,6 @@ class FullJourneyTests(NfcFlowTestBase):
         self.assertEqual(
             check_in_response.status_code,
             status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            check_in_response.data["card_assigned"],
-            False,
         )
 
         sub.refresh_from_db()

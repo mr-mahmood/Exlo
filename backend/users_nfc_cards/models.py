@@ -38,9 +38,7 @@ class UserNfcCardManager(models.Manager):
 
         user: User = User.objects.get_user(user_id)
         card = self.assign_card(user=user, uid=uid)
-
         cache.delete(key)
-
         return card, True
 
     def assign_card(self, user, uid) -> "UserNfcCard":
@@ -70,7 +68,7 @@ class UserNfcCardManager(models.Manager):
 class UserNfcCard(models.Model):
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 

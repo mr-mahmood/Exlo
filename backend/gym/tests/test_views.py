@@ -96,7 +96,7 @@ class GymViewsTest(TestCase):
 
     def test_gym_detail_not_found(self):
         """Test gym detail with non-existent gym ID."""
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         response = self.client.get(
             reverse("gym:detail", kwargs={"gym_id": non_existent_id})
         )

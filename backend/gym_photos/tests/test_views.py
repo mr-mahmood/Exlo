@@ -90,7 +90,7 @@ class GymPhotosViewsTest(TestCase):
 
     def test_gym_photos_list_gym_not_found(self):
         """Test gym photos list with non-existent gym."""
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         response = self.client.get(
             reverse("gym_photos:list", kwargs={"gym_id": non_existent_id})
         )
@@ -168,7 +168,7 @@ class GymPhotosViewsTest(TestCase):
     def test_gym_photo_create_gym_not_found(self):
         """Test photo upload for non-existent gym."""
         self.authenticate(self.admin_user)
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         photo = self.create_real_image("test.jpg")
         data = {"photos": [photo]}
 
@@ -209,7 +209,7 @@ class GymPhotosViewsTest(TestCase):
     def test_gym_photo_delete_not_found(self):
         """Test photo delete with non-existent photo."""
         self.authenticate(self.admin_user)
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
 
         response = self.client.delete(
             reverse(

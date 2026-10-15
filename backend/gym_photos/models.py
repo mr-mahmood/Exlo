@@ -6,14 +6,14 @@ from gym.models import Gym
 
 
 def gym_picture_path(instance, filename):
-    return f"gym_photos/{uuid.uuid4().hex}.webp"
+    return f"gym_photos/{uuid.uuid7().hex}.webp"
 
 
 class GymPhotos(models.Model):
 
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 

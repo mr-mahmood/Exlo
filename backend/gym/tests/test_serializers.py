@@ -37,7 +37,7 @@ class GymSerializerTest(TestCase):
         serializer = GymSerializer(
             data={
                 **self.gym_data,
-                "id": str(uuid.uuid4()),
+                "id": str(uuid.uuid7()),
                 "gym_code": "CUSTOM",
                 "created_at": "2024-01-01T00:00:00Z",
             }

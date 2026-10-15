@@ -67,7 +67,7 @@ class UserManager(BaseUserManager):
 
 
 def user_profile_picture_path(instance, filename):
-    return f"profile_pics/{uuid.uuid4().hex}.webp"
+    return f"profile_pics/{uuid.uuid7().hex}.webp"
 
 
 class User(AbstractUser):
@@ -86,7 +86,7 @@ class User(AbstractUser):
     # Primary Key
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
         db_index=True,
     )

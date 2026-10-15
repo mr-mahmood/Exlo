@@ -7,7 +7,7 @@ from django.utils import timezone
 class Session(models.Model):
     id = models.UUIDField(
         primary_key=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 
@@ -19,7 +19,7 @@ class Session(models.Model):
 
     session_id = models.UUIDField(
         unique=True,
-        default=uuid.uuid4,
+        default=uuid.uuid7,
         editable=False,
     )
 
@@ -65,7 +65,7 @@ class Session(models.Model):
 
         return cls.objects.create(
             user=user,
-            session_id=uuid.uuid4(),
+            session_id=uuid.uuid7(),
             ip_address=ip[:45],
             user_agent=user_agent[:255],
             last_activity_at=timezone.now(),

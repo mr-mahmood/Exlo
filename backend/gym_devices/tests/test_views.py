@@ -316,7 +316,7 @@ class GymDevicesListAPIViewTests(GymDevicesViewsBaseTestCase):
         self._login_admin()
 
         url = self._url(
-            gym_id=uuid.uuid4(),
+            gym_id=uuid.uuid7(),
         )
 
         response = self.client.get(url)
@@ -675,7 +675,7 @@ class GymDevicesCreateAPIViewTests(GymDevicesViewsBaseTestCase):
         self._login_admin()
 
         url = self._url(
-            gym_id=uuid.uuid4(),
+            gym_id=uuid.uuid7(),
         )
 
         response = self.client.post(
@@ -906,7 +906,7 @@ class GymDevicesDeActiveAPIViewTests(GymDevicesViewsBaseTestCase):
         self._login_admin()
 
         url = self._url(
-            device_id=uuid.uuid4(),
+            device_id=uuid.uuid7(),
         )
 
         response = self.client.post(url)

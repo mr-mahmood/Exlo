@@ -4,7 +4,7 @@ import os
 import io
 from PIL import Image
 from django.conf import settings
-from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.files.base import ContentFile
 from rest_framework import serializers
 from .models import GymPhotos
 from core.errors import APIError, GymError
@@ -62,27 +62,15 @@ class GymPhotoSerializer(serializers.ModelSerializer):
 
     def convert_to_webp(self, image_file):
         try:
-            img = Image.open(image_file)
+            with Image.open(image_file) as img:
+                if img.mode not in ("RGB", "RGBA"):
+                    img = img.convert("RGB")
 
-            if img.mode not in ["RGB", "RGBA"]:
-                img = img.convert("RGB")
+                output = io.BytesIO()
+                img.save(output, format="WebP", quality=85, optimize=True)
 
-            output = io.BytesIO()
-            img.save(output, format="WebP", quality=85, optimize=True)
-            output.seek(0)
+            name = f"{os.path.splitext(image_file.name)[0]}.webp"
+            return ContentFile(output.getvalue(), name=name)
 
-            # Create new file
-            name = os.path.splitext(image_file.name)[0]
-            webp_file = InMemoryUploadedFile(
-                file=output,
-                field_name=image_file.field_name,
-                name=f"{name}.webp",
-                content_type="image/webp",
-                size=output.getbuffer().nbytes,
-                charset=image_file.charset,
-            )
-
-            return webp_file
-
-        except Exception as e:
+        except Exception:
             raise APIError(GymError.IMAGE_CONVERSION_FAILED)

@@ -166,7 +166,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         plan = self.create_plan()
 
         data = {
-            "id": str(uuid.uuid4()),
+            "id": str(uuid.uuid7()),
             "gym": self.other_gym.id,
             "name": "Updated Name",
         }

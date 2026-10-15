@@ -113,7 +113,7 @@ class GymPlansViewsTest(TestCase):
 
     def test_list_plans_gym_not_found(self):
         """Test plan list with non-existent gym."""
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         url = reverse("gym_plans:list", kwargs={"gym_id": non_existent_id})
 
         response = self.client.get(url)
@@ -214,7 +214,7 @@ class GymPlansViewsTest(TestCase):
         """Test creating a plan for non-existent gym."""
         self.authenticate(self.admin_user)
 
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         url = reverse("gym_plans:create", kwargs={"gym_id": non_existent_id})
 
         data = {
@@ -299,7 +299,7 @@ class GymPlansViewsTest(TestCase):
         """Test updating a non-existent plan."""
         self.authenticate(self.admin_user)
 
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         url = reverse(
             "gym_plans:update",
             kwargs={
@@ -416,7 +416,7 @@ class GymPlansViewsTest(TestCase):
         """Test deleting a non-existent plan."""
         self.authenticate(self.admin_user)
 
-        non_existent_id = uuid.uuid4()
+        non_existent_id = uuid.uuid7()
         url = reverse(
             "gym_plans:delete",
             kwargs={
