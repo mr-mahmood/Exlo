@@ -19,3 +19,4 @@ gunicorn
 pywebpush
 python-dateutil
 dj_database_url
+uvicorn

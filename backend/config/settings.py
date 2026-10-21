@@ -117,35 +117,18 @@ else:
     DATABASES = {
         "default": dj_database_url.config(
             default=(
-                f"postgres://{os.getenv('POSTGRES_USER')}:"
+                f"postgresql://{os.getenv('POSTGRES_USER')}:"
                 f"{os.getenv('POSTGRES_PASSWORD')}@"
                 f"{os.getenv('POSTGRES_HOST')}:"
                 f"{os.getenv('POSTGRES_PORT')}/"
                 f"{os.getenv('POSTGRES_DB')}"
             ),
-            conn_max_age=0,  # Disable Django's persistent connections when using pool
-            conn_health_checks=True,
-            ssl_require=False,
+            conn_max_age=0,
+            ssl_require=os.getenv("DB_SSL_REQUIRE", "False").lower() == "true",
         )
     }
 
-    # Add pooling configuration
-    DATABASES["default"]["POOL"] = {  # type: ignore
-        "min_size": 10,  # Minimum connections to keep in pool
-        "max_size": 50,  # Maximum connections in pool
-        "timeout": 30,  # Time to wait for connection (seconds)
-        "max_lifetime": 300,  # Connection max lifetime (seconds)
-    }
-
-    DATABASES["default"]["OPTIONS"] = {
-        "connect_timeout": 10,
-        "keepalives": 1,
-        "keepalives_idle": 60,
-        "keepalives_interval": 30,
-        "keepalives_count": 5,
-        "options": "-c statement_timeout=10s",
-        "client_encoding": "UTF8",
-    }
+    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 
 # ============================================================================
 # Auth
@@ -212,7 +195,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/min",  # Rate limit for unauthenticated users
-        "user": "100/min",  # Rate limit for authenticated users
+        "user": "200/min",  # Rate limit for authenticated users
         "otp_phone": "5/day",
         "otp_ip": "10/day",
     },
@@ -285,12 +268,10 @@ else:
 # Caches
 # ============================================================================
 if DEBUG:
-    CACHES = {
+    CHANNEL_LAYERS = {
         "default": {
-            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-            "LOCATION": "development-cache",
-            "TIMEOUT": 300,
-        }
+            "BACKEND": "channels.layers.InMemoryChannelLayer",
+        },
     }
 else:
     CACHES = {
