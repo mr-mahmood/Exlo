@@ -54,7 +54,8 @@ def main():
         files, total_lines = scan_directory(full_path)
 
         for fpath, lines in files:
-            print(f"{lines:6} lines  |  {fpath}")
+            if lines > 0:
+                print(f"{lines:6} lines  |  {fpath}")
 
         all_lines += total_lines
         print(f"\nTotal lines in {sub}: {total_lines}")

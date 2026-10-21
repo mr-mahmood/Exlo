@@ -16,9 +16,9 @@ class GymPlansAPIView(APIView):
     serializer_class = GymMembershipPlanSerializer
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
-        plans = GymMembershipPlan.objects.get_gym_plans(gym=gym, active_only=True)
+        plans = GymMembershipPlan.objects.get_gym_plans(gym=gym)
 
         serializer = self.serializer_class(
             plans,
@@ -34,7 +34,7 @@ class GymPlansCreateAPIView(APIView):
     serializer_class = GymMembershipPlanSerializer
 
     def post(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         serializer = self.serializer_class(
             data=request.data,
@@ -63,7 +63,7 @@ class GymPlansUpdateAPIView(APIView):
     serializer_class = GymMembershipPlanSerializer
 
     def put(self, request, gym_id, plan_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         plan = GymMembershipPlan.objects.get_plan(
             plan_id=plan_id,
@@ -87,7 +87,7 @@ class GymPlansDeleteAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def delete(self, request, gym_id, plan_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         plan = GymMembershipPlan.objects.get_plan(
             plan_id=plan_id,

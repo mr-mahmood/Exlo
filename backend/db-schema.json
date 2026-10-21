@@ -32,7 +32,7 @@
         },
         {
           "id": "KD6AiobrvI8JQu0kGyF1w",
-          "name": "order_item_id",
+          "name": "order_id",
           "type": "UUID",
           "default": "",
           "check": "",
@@ -132,8 +132,8 @@
       "uniqueConstraints": [],
       "locked": false,
       "collapsed": false,
-      "x": 900,
-      "y": 9120,
+      "x": 2362.046585027845,
+      "y": 8746.897008724376,
       "hidden": false
     },
     {
@@ -329,7 +329,7 @@
           "comment": ""
         },
         {
-          "id": "CxN-GZJ53ltMZuXI9vqPY",
+          "id": "_5gO78FFyKKQAIfWTS9cJ",
           "name": "order_item_id",
           "type": "UUID",
           "default": "",
@@ -338,7 +338,7 @@
           "unique": false,
           "notNull": false,
           "increment": false,
-          "comment": "",
+          "comment": "its for when we charge the seller account with the money of the things they sell so we need to know the order items one by one and put them here so we can say +20,000$ for order item 2 in order 19\nits also have reason=SALE_REVENUE",
           "size": "",
           "values": []
         },
@@ -380,6 +380,30 @@
           "size": "255"
         },
         {
+          "id": "5iT3lnSj80T87Kv_k4OGG",
+          "name": "amount",
+          "type": "DECIMAL",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "should not be negetive itws always a positive number and the entery_type define credit or debit"
+        },
+        {
+          "id": "3_J3NIm7C9rht0h-psT_U",
+          "name": "balance_before",
+          "type": "DECIMAL",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        },
+        {
           "id": "Ayr5nCI6wcpzgOHdxf52I",
           "name": "reason",
           "type": "VARCHAR",
@@ -396,18 +420,6 @@
           "id": "CFHtRxpt-t-qcIkD72Cg_",
           "name": "description",
           "type": "TEXT",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "5iT3lnSj80T87Kv_k4OGG",
-          "name": "amount",
-          "type": "DECIMAL",
           "default": "",
           "check": "",
           "primary": false,
@@ -457,7 +469,7 @@
         },
         {
           "id": "BZwJoP5U5gwytaj0XsLZV",
-          "name": "user_id",
+          "name": "owner_id",
           "type": "UUID",
           "default": "",
           "check": "",
@@ -543,7 +555,7 @@
           "comment": ""
         },
         {
-          "id": "ub0OJSYI2VS5XKoynMqz_",
+          "id": "hcUmZ7O_p4CtybbgJGM5g",
           "name": "track_id",
           "type": "BIGINT",
           "default": "",
@@ -552,7 +564,9 @@
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": ""
+          "comment": "",
+          "size": "",
+          "values": []
         },
         {
           "id": "_HiFH7Xrfw1WFRWtHfioO",
@@ -568,21 +582,8 @@
           "size": "255"
         },
         {
-          "id": "dsljr8nJgnHKNpPXlV0Bf",
-          "name": "res_num",
-          "type": "VARCHAR",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": "",
-          "size": "255"
-        },
-        {
           "id": "VeCjTosx7ipXbI4sBNX5o",
-          "name": "masked_pan",
+          "name": "card_number",
           "type": "VARCHAR",
           "default": "",
           "check": "",
@@ -596,18 +597,6 @@
         {
           "id": "XYL2nsTWpgDo4BFIyhMYV",
           "name": "created_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "7aBZ-oOr4rW2b6MoC7rtk",
-          "name": "verified_at",
           "type": "TIMESTAMP",
           "default": "",
           "check": "",
@@ -758,7 +747,7 @@
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": "PENDING\nSUCCEEDED\nFAILED\nCANCELLED",
+          "comment": "PENDING\nSUCCEEDED\nFAILED\nCANCELLED\nREFUNDED",
           "size": "255"
         },
         {
@@ -832,6 +821,20 @@
           "notNull": true,
           "increment": false,
           "comment": ""
+        },
+        {
+          "id": "utppriqYog9pWOMacCprd",
+          "name": "refunded_at",
+          "type": "TIMESTAMP",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
         }
       ],
       "indices": [],
@@ -1006,6 +1009,20 @@
           "comment": ""
         },
         {
+          "id": "u4VzvqLEjdx-NkZUUyAbK",
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": false,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
           "id": "tZenLcJ4KpYHhFQQrP80G",
           "name": "refundable_until",
           "type": "TIMESTAMP",
@@ -1022,7 +1039,7 @@
       "uniqueConstraints": [],
       "locked": false,
       "collapsed": false,
-      "x": 1640,
+      "x": 1641.727675197063,
       "y": 6760,
       "hidden": false
     },
@@ -1144,18 +1161,6 @@
         {
           "id": "Vfk61HFBc0tSieiMR4nvg",
           "name": "updated_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "0mo8JPNUrzMOQIdWFp6DU",
-          "name": "cancelled_at",
           "type": "TIMESTAMP",
           "default": "",
           "check": "",
@@ -3923,6 +3928,19 @@
           "comment": ""
         },
         {
+          "id": "S9qSL__HBzloQN3wFFzX4",
+          "name": "end_reason",
+          "type": "VARCHAR",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": ""
+        },
+        {
           "id": "_UCv7k6JurBKBjgFMBQ3B",
           "name": "remaining_visits",
           "type": "INTEGER",
@@ -3948,7 +3966,7 @@
         },
         {
           "id": "OxsFmZDDHmkKDDMTd3Ia7",
-          "name": "ends_at",
+          "name": "expires_at",
           "type": "TIMESTAMP",
           "default": "",
           "check": "",
@@ -4070,18 +4088,6 @@
           "comment": ""
         },
         {
-          "id": "yM_g6qEhUuY0u1GYhF_yH",
-          "name": "duration_month",
-          "type": "INTEGER",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
           "id": "GZfosTj1qMupZqB6FNotv",
           "name": "visit_limit",
           "type": "INTEGER",
@@ -4094,9 +4100,9 @@
           "comment": ""
         },
         {
-          "id": "V8-1owuR4AzYorVYOiDgl",
-          "name": "price",
-          "type": "NUMERIC",
+          "id": "SS7HFtwkyOW1zduEoAJqv",
+          "name": "is_active",
+          "type": "BOOLEAN",
           "default": "",
           "check": "",
           "primary": false,
@@ -4106,9 +4112,9 @@
           "comment": ""
         },
         {
-          "id": "SS7HFtwkyOW1zduEoAJqv",
-          "name": "is_active",
-          "type": "BOOLEAN",
+          "id": "V8-1owuR4AzYorVYOiDgl",
+          "name": "price",
+          "type": "NUMERIC",
           "default": "",
           "check": "",
           "primary": false,
@@ -4492,18 +4498,6 @@
         {
           "id": "wjjX-E5e2ej7hnTiKt-P0",
           "name": "is_active",
-          "type": "BOOLEAN",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "KnbEFk7Jkos2-uXmVBTyW",
-          "name": "is_blocked",
           "type": "BOOLEAN",
           "default": "",
           "check": "",
@@ -5197,7 +5191,7 @@
         },
         {
           "id": "x7x1AO-pMRW_sD7f_MAK6",
-          "name": "check_in_method",
+          "name": "method",
           "type": "VARCHAR",
           "default": "",
           "check": "",
@@ -6456,6 +6450,270 @@
       "uniqueConstraints": [],
       "color": "#175e7a",
       "collapsed": false
+    },
+    {
+      "id": "xDI3eMvDISHllNc5HyoH9",
+      "name": "gym_devices",
+      "x": 3582.7386385135924,
+      "y": 1884.8342386030865,
+      "locked": false,
+      "fields": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": true,
+          "unique": false,
+          "unsigned": true,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "id": "dbF-yFkvaS5DJAc50arOS",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "ReCiuT2BVC_bFhZUSEt_4",
+          "name": "gym_id",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "4TfhYof3XU_9NcrEWdyzw",
+          "name": "name",
+          "type": "VARCHAR",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": 255
+        },
+        {
+          "id": "r19L55BZXi8-6s_b16DK7",
+          "name": "token_hash",
+          "type": "VARCHAR",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": 255
+        },
+        {
+          "id": "L0rGOobu0bc0BGvzXB3Nz",
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "BOzfBOIoQSRfS6stxtnRq",
+          "name": "last_activity_at",
+          "type": "TIMESTAMP",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "jp0JPYKntzyItUCymLUEI",
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "IT4qAZBWmkzgfHS9D9Th3",
+          "name": "updated_at",
+          "type": "TIMESTAMP",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        }
+      ],
+      "comment": "",
+      "indices": [],
+      "uniqueConstraints": [],
+      "color": "#175e7a",
+      "collapsed": false
+    },
+    {
+      "id": "7J6gSeA4z77y1DzfPiO1s",
+      "name": "user_nfc_cards",
+      "x": 1717.4793573853008,
+      "y": 583.9749187445365,
+      "locked": false,
+      "fields": [
+        {
+          "name": "id",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": true,
+          "unique": false,
+          "unsigned": true,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "id": "cs7b667YOpijsmGoWQMc5",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "gYoP-DxE4ClBT_pURWLW-",
+          "name": "user_id",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "RMSGUC_1L2lWICOZIvmjv",
+          "name": "uid",
+          "type": "VARCHAR",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": 255
+        },
+        {
+          "id": "vqj8LpRDZTHY5pmM2J5B6",
+          "name": "assigned_by",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "UbK1by6U2EsKj0XPTEZ0P",
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        }
+      ],
+      "comment": "",
+      "indices": [],
+      "uniqueConstraints": [],
+      "color": "#175e7a",
+      "collapsed": false
+    },
+    {
+      "id": "8OZ149tJZf1gWkmAY9kPX",
+      "name": "gym_locks",
+      "x": 4144.536262287696,
+      "y": 1893.973768327097,
+      "locked": false,
+      "fields": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "default": "",
+          "check": "",
+          "primary": true,
+          "unique": false,
+          "unsigned": true,
+          "notNull": true,
+          "increment": true,
+          "comment": "",
+          "id": "tUSaXxcdBQrqaxV7FoVY-"
+        },
+        {
+          "id": "XSvTdfB1d8I8iE7GG1UJt",
+          "name": "gym",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        },
+        {
+          "id": "NA7S_3lB78H3fmRWgHELd",
+          "name": "user",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": false,
+          "increment": false,
+          "comment": "",
+          "size": "",
+          "values": []
+        }
+      ],
+      "comment": "",
+      "indices": [],
+      "uniqueConstraints": [],
+      "color": "#175e7a",
+      "collapsed": false
     }
   ],
   "relationships": [
@@ -7345,18 +7603,18 @@
     },
     {
       "id": "rIQKUZ8EhW1rZ_vrur8x0",
-      "name": "fk_wallet_ledger_payment_id_payment",
-      "startTableId": "hrXIHZfDwPSOaGfJkKnXq",
-      "endTableId": "AUCH7fKnsZXyXrjKfYgRI",
+      "name": "fk_payment_id_wallet_ledger",
+      "startTableId": "AUCH7fKnsZXyXrjKfYgRI",
+      "endTableId": "hrXIHZfDwPSOaGfJkKnXq",
       "fields": [
         {
-          "startFieldId": "7lnXMyhUSUhkwu_b2OJ31",
-          "endFieldId": "ZbMP5aTzAP1yeznHiCcP-"
+          "startFieldId": "ZbMP5aTzAP1yeznHiCcP-",
+          "endFieldId": "7lnXMyhUSUhkwu_b2OJ31"
         }
       ],
-      "startFieldId": "7lnXMyhUSUhkwu_b2OJ31",
-      "endFieldId": "ZbMP5aTzAP1yeznHiCcP-",
-      "cardinality": "many_to_one",
+      "startFieldId": "ZbMP5aTzAP1yeznHiCcP-",
+      "endFieldId": "7lnXMyhUSUhkwu_b2OJ31",
+      "cardinality": "one_to_many",
       "updateConstraint": "No action",
       "deleteConstraint": "No action"
     },
@@ -7408,23 +7666,6 @@
       "startFieldId": "7pGG3m7mqMWqL5D3lyynK",
       "endFieldId": "x1iu1AoaiO0uGN-vgPeKT",
       "cardinality": "one_to_many",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
-      "id": "hRrGZ8HqKbDx4x7OwODLn",
-      "name": "fk_order_item_id_referral_commission",
-      "startTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "endTableId": "eYenza6o9zUC_qsFl11jN",
-      "fields": [
-        {
-          "startFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-          "endFieldId": "KD6AiobrvI8JQu0kGyF1w"
-        }
-      ],
-      "startFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-      "endFieldId": "KD6AiobrvI8JQu0kGyF1w",
-      "cardinality": "one_to_one",
       "updateConstraint": "No action",
       "deleteConstraint": "No action"
     },
@@ -7888,21 +8129,89 @@
       "id": "NWHlNrVB5CtjzmiEgkiFD"
     },
     {
-      "startTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "startFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-      "endTableId": "hrXIHZfDwPSOaGfJkKnXq",
-      "endFieldId": "CxN-GZJ53ltMZuXI9vqPY",
+      "startTableId": "_O74dc6oXcQyjqTwE4AQN",
+      "startFieldId": "LjxihYH4B4pT3J2u8aEHS",
+      "endTableId": "xDI3eMvDISHllNc5HyoH9",
+      "endFieldId": "ReCiuT2BVC_bFhZUSEt_4",
       "cardinality": "one_to_many",
       "fields": [
         {
-          "startFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-          "endFieldId": "CxN-GZJ53ltMZuXI9vqPY"
+          "startFieldId": "LjxihYH4B4pT3J2u8aEHS",
+          "endFieldId": "ReCiuT2BVC_bFhZUSEt_4"
         }
       ],
       "updateConstraint": "No action",
       "deleteConstraint": "No action",
-      "name": "fk_order_item_id_wallet_ledger",
-      "id": "Y2z-9MEhOOt67uTHT3xoM"
+      "name": "fk_gym_id_gym_devices",
+      "id": "3ICnUqga8gDQzy9X6Hceb"
+    },
+    {
+      "startTableId": "KPrG_SJdwjXa8e0r2ci3x",
+      "startFieldId": "7pGG3m7mqMWqL5D3lyynK",
+      "endTableId": "7J6gSeA4z77y1DzfPiO1s",
+      "endFieldId": "gYoP-DxE4ClBT_pURWLW-",
+      "cardinality": "one_to_one",
+      "fields": [
+        {
+          "startFieldId": "7pGG3m7mqMWqL5D3lyynK",
+          "endFieldId": "gYoP-DxE4ClBT_pURWLW-"
+        }
+      ],
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action",
+      "name": "fk_users_id_gym_nfc_cards",
+      "id": "QUtX4yPfIZmsUYT3USj6N"
+    },
+    {
+      "startTableId": "KPrG_SJdwjXa8e0r2ci3x",
+      "startFieldId": "7pGG3m7mqMWqL5D3lyynK",
+      "endTableId": "7J6gSeA4z77y1DzfPiO1s",
+      "endFieldId": "vqj8LpRDZTHY5pmM2J5B6",
+      "cardinality": "one_to_many",
+      "fields": [
+        {
+          "startFieldId": "7pGG3m7mqMWqL5D3lyynK",
+          "endFieldId": "vqj8LpRDZTHY5pmM2J5B6"
+        }
+      ],
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action",
+      "name": "fk_users_id_user_nfc_cards",
+      "id": "L-x5T62d4aoQKXIFJZbOP"
+    },
+    {
+      "startTableId": "Ej5t3Jy1uy6APACLIlRjg",
+      "startFieldId": "uR4LHWP2bpLzdKFesCVOi",
+      "endTableId": "eYenza6o9zUC_qsFl11jN",
+      "endFieldId": "KD6AiobrvI8JQu0kGyF1w",
+      "cardinality": "one_to_one",
+      "fields": [
+        {
+          "startFieldId": "uR4LHWP2bpLzdKFesCVOi",
+          "endFieldId": "KD6AiobrvI8JQu0kGyF1w"
+        }
+      ],
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action",
+      "name": "fk_order_id_referral_commission",
+      "id": "fMx9IMgQTFxFBD8wLVvtf"
+    },
+    {
+      "startTableId": "_O74dc6oXcQyjqTwE4AQN",
+      "startFieldId": "LjxihYH4B4pT3J2u8aEHS",
+      "endTableId": "8OZ149tJZf1gWkmAY9kPX",
+      "endFieldId": "XSvTdfB1d8I8iE7GG1UJt",
+      "cardinality": "one_to_many",
+      "fields": [
+        {
+          "startFieldId": "LjxihYH4B4pT3J2u8aEHS",
+          "endFieldId": "XSvTdfB1d8I8iE7GG1UJt"
+        }
+      ],
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action",
+      "name": "fk_gym_id_gym_locks",
+      "id": "L2JzT8rkfFRm92H2YY04M"
     }
   ],
   "notes": [],

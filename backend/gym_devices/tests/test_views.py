@@ -212,7 +212,7 @@ class GymDevicesListAPIViewTests(GymDevicesViewsBaseTestCase):
             device_type=GymDevice.GymDeviceType.ENTRANCE,
         )
 
-        device.revoke_device()
+        device.deactivate_device()
 
         GymDevice.objects.register_device(
             gym=self.gym,
@@ -810,7 +810,7 @@ class GymDevicesDeActiveAPIViewTests(GymDevicesViewsBaseTestCase):
 
     def _url(self, gym_id=None, device_id=None):
         return reverse(
-            "gym_devices:deactive",
+            "gym_devices:deactivate",
             kwargs={
                 "gym_id": gym_id or self.gym.id,
                 "device_id": device_id or self.device.id,
@@ -949,37 +949,118 @@ class GymDevicesDeActiveAPIViewTests(GymDevicesViewsBaseTestCase):
             status.HTTP_404_NOT_FOUND,
         )
 
-    def test_deactivate_returns_404_for_already_inactive_device(self):
+    def test_deactivate_already_inactive_device_returns_200(self):
+        self._login_admin()
+        self.device.deactivate_device()
+
+        response = self.client.post(self._url())
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.device.refresh_from_db()
+        self.assertFalse(self.device.is_active)
+
+    def test_deactivate_is_idempotent(self):
         self._login_admin()
 
-        self.device.revoke_device()
+        response_1 = self.client.post(self._url())
+        response_2 = self.client.post(self._url())
 
-        response = self.client.post(
-            self._url(),
+        self.assertEqual(response_1.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_2.status_code, status.HTTP_200_OK)
+        self.device.refresh_from_db()
+        self.assertFalse(self.device.is_active)
+
+
+class GymDevicesActivateAPIViewTests(GymDevicesViewsBaseTestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.device, _ = GymDevice.objects.register_device(
+            gym=self.gym,
+            device_type=GymDevice.GymDeviceType.ENTRANCE,
+        )
+        self.device.deactivate_device()
+
+    def _url(self, gym_id=None, device_id=None):
+        return reverse(
+            "gym_devices:activate",
+            kwargs={
+                "gym_id": gym_id or self.gym.id,
+                "device_id": device_id or self.device.id,
+            },
         )
 
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_404_NOT_FOUND,
-        )
+    def test_activate_requires_authentication(self):
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_deactivate_is_idempotent_returns_404_second_time(self):
+    def test_activate_forbidden_for_regular_user(self):
+        self._login_regular()
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_activate_forbidden_for_owner_non_admin(self):
+        self._login_owner()
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_activate_allowed_for_admin(self):
+        self._login_admin()
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.is_active)
+
+    def test_activate_preserves_other_device_fields(self):
+        self._login_admin()
+        original_type = self.device.device_type
+        original_hash = self.device.token_hash
+
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.is_active)
+        self.assertEqual(self.device.device_type, original_type)
+        self.assertEqual(self.device.token_hash, original_hash)
+
+    def test_activate_returns_404_for_nonexistent_device(self):
+        self._login_admin()
+        response = self.client.post(self._url(device_id=uuid.uuid7()))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_activate_returns_404_for_device_of_other_gym(self):
+        self._login_admin()
+        other_device, _ = GymDevice.objects.register_device(
+            gym=self.other_gym,
+            device_type=GymDevice.GymDeviceType.LOCKER,
+        )
+        other_device.deactivate_device()
+
+        response = self.client.post(self._url(device_id=other_device.id))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_activate_returns_404_for_inactive_gym(self):
+        self._login_admin()
+        response = self.client.post(self._url(gym_id=self.inactive_gym.id))
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_activate_already_active_device_returns_200(self):
+        self._login_admin()
+        self.device.activate_device()
+
+        response = self.client.post(self._url())
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.is_active)
+
+    def test_activate_is_idempotent(self):
         self._login_admin()
 
-        response_1 = self.client.post(
-            self._url(),
-        )
+        response_1 = self.client.post(self._url())
+        response_2 = self.client.post(self._url())
 
-        response_2 = self.client.post(
-            self._url(),
-        )
-
-        self.assertEqual(
-            response_1.status_code,
-            status.HTTP_200_OK,
-        )
-
-        self.assertEqual(
-            response_2.status_code,
-            status.HTTP_404_NOT_FOUND,
-        )
+        self.assertEqual(response_1.status_code, status.HTTP_200_OK)
+        self.assertEqual(response_2.status_code, status.HTTP_200_OK)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.is_active)

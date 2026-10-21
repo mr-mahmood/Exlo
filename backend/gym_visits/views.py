@@ -4,21 +4,24 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
-from gym.models import Gym
 from gym_subscriptions.models import GymSubscription
 from core.errors import APIError, GymVisitsError
 from gym_visits.models import GymVisit
 from gym_devices.authentication import DeviceTokenAuthentication
-from gym_devices.permissions import IsGymDevice
+from gym_devices.permissions import IsGymGate
 from users_nfc_cards.models import UserNfcCard
 from users.models import User
+from gym_locks.models import GymLocker
 
 
 class NfcCardCheckInView(APIView):
     authentication_classes = [DeviceTokenAuthentication]
-    permission_classes = [IsGymDevice]
+    permission_classes = [IsGymGate]
 
     def post(self, request, gym_id):
+        device = request.auth
+        gym = device.gym
+
         uid = request.data.get("uid")
 
         card, card_assigned = UserNfcCard.objects.find_or_assign_card(
@@ -33,8 +36,6 @@ class NfcCardCheckInView(APIView):
         user: User = card.user
         user.validate_account_status()
 
-        gym = Gym.objects.get_gym(gym_id)
-
         with transaction.atomic():
             subscription = GymSubscription.objects.consume_visit(
                 subscriber=user,
@@ -48,21 +49,23 @@ class NfcCardCheckInView(APIView):
                 method=GymVisit.Method.NFC,
             )
 
+            GymLocker.objects.assign(gym, user)
+
         # esp32 open gate
         return Response(status=status.HTTP_200_OK)
 
 
 class NfcCardCheckOutView(APIView):
     authentication_classes = [DeviceTokenAuthentication]
-    permission_classes = [IsGymDevice]
+    permission_classes = [IsGymGate]
 
     def post(self, request, gym_id):
+        device = request.auth
+        gym = device.gym
 
         uid = request.data.get("uid")
         user: User = UserNfcCard.objects.find_card(uid=uid).user
         user.validate_account_status()
-
-        gym = Gym.objects.get_gym(gym_id)
 
         visit: GymVisit = GymVisit.objects.filter(
             user=user,
@@ -73,6 +76,8 @@ class NfcCardCheckOutView(APIView):
         if visit is None:
             raise APIError(GymVisitsError.VISIT_NOT_FOUND)
 
-        visit.check_out(method=GymVisit.Method.NFC)
+        with transaction.atomic():
+            GymLocker.objects.remove_assignment(gym, user)
+            visit.check_out(method=GymVisit.Method.NFC)
 
         return Response(status=status.HTTP_200_OK)

@@ -6,12 +6,35 @@ from users.models import User
 from gym.models import Gym
 
 
+class UserGymRoleManager(models.Manager):
+
+    def create_owner(self, user, gym):
+        return self.create(
+            user=user,
+            gym=gym,
+            role=UserGymRole.Role.OWNER,
+        )
+
+    def create_coach(self, user, gym):
+        return self.create(
+            user=user,
+            gym=gym,
+            role=UserGymRole.Role.COACH,
+        )
+
+    def create_staff(self, user, gym):
+        return self.create(
+            user=user,
+            gym=gym,
+            role=UserGymRole.Role.STAFF,
+        )
+
+
 class UserGymRole(models.Model):
     class Role(models.TextChoices):
         OWNER = "OWNER"
-        STAFF = "STAFF"
         COACH = "COACH"
-        ATHLETE = "ATHLETE"
+        STAFF = "STAFF"
 
     id = models.UUIDField(
         primary_key=True,
@@ -36,10 +59,12 @@ class UserGymRole(models.Model):
     role = models.CharField(
         max_length=20,
         choices=Role.choices,
-        default=Role.ATHLETE,
+        default=Role.STAFF,
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    objects: UserGymRoleManager = UserGymRoleManager()
 
     class Meta:
         db_table = "user_gym_role"
@@ -56,19 +81,3 @@ class UserGymRole(models.Model):
 
     def __str__(self):
         return f"{self.user.full_name} is {self.role} at {self.gym.name}"
-
-    @property
-    def is_owner(self) -> bool:
-        return self.role == UserGymRole.Role.OWNER
-
-    @property
-    def is_staff(self) -> bool:
-        return self.role == UserGymRole.Role.STAFF
-
-    @property
-    def is_coach(self) -> bool:
-        return self.role == UserGymRole.Role.COACH
-
-    @property
-    def is_athlete(self) -> bool:
-        return self.role == UserGymRole.Role.ATHLETE

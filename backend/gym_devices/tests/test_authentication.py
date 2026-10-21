@@ -2,10 +2,8 @@
 # type: ignore
 
 import uuid
-
 from django.test import TestCase
 from rest_framework.test import APIRequestFactory
-
 from core.errors import APIError, GymDeviceError
 from gym.models import Gym
 from gym_devices.authentication import DeviceTokenAuthentication
@@ -220,7 +218,7 @@ class DeviceTokenAuthenticationTests(TestCase):
         )
 
     def test_raises_when_device_inactive(self):
-        self.device.revoke_device()
+        self.device.deactivate_device()
 
         request = self._make_request(
             header_value=f"Device {self.raw_token}",
@@ -234,6 +232,20 @@ class DeviceTokenAuthenticationTests(TestCase):
             ctx.exception.error_code,
             GymDeviceError.DEVICE_NOT_FOUND[0],
         )
+
+    def test_authenticates_when_device_active(self):
+        self.device.deactivate_device()
+        self.device.activate_device()
+
+        request = self._make_request(
+            header_value=f"Device {self.raw_token}",
+            gym_id=self.gym.id,
+        )
+
+        result = self.auth.authenticate(request)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result[1], self.device)
 
     def test_raises_when_token_belongs_to_other_gym(self):
         _, other_token = GymDevice.objects.register_device(

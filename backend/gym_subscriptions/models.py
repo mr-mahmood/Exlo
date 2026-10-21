@@ -57,7 +57,7 @@ class GymSubscriptionsManager(models.Manager):
             if subscription is None or not subscription.is_active:
                 raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
-        if subscription.plan.gym_id != gym.id:
+        if subscription.plan.gym.id != gym.id:
             raise APIError(GymSubscriptionError.WRONG_GYM)
 
         subscription.remaining_visits -= 1
@@ -74,7 +74,7 @@ class GymSubscriptionsManager(models.Manager):
         if order_item.item_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
             raise APIError(GymSubscriptionError.INVALID_ORDER_ITEM)
 
-        plan: GymMembershipPlan = order_item.commerce_product.gym_membership_plan
+        plan: GymMembershipPlan = order_item.commerce_product.gym_membership_plan # type: ignore
 
         with transaction.atomic():
             subscriber = User.objects.select_for_update().get(pk=subscriber.pk)

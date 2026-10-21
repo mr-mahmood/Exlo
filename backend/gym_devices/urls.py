@@ -4,7 +4,8 @@ from django.urls import path
 from .views import (
     GymDevicesAPIView,
     GymDevicesCreateAPIView,
-    GymDevicesDeActiveAPIView,
+    GymDevicesDeActivateAPIView,
+    GymDevicesActivateAPIView,
 )
 
 app_name = "gym_devices"
@@ -21,8 +22,13 @@ urlpatterns = [
         name="create",
     ),
     path(
-        "<uuid:gym_id>/devices/<uuid:device_id>/deactive",
-        GymDevicesDeActiveAPIView.as_view(),
-        name="deactive",
+        "<uuid:gym_id>/devices/<uuid:device_id>/deactivate",
+        GymDevicesDeActivateAPIView.as_view(),
+        name="deactivate",
+    ),
+    path(
+        "<uuid:gym_id>/devices/<uuid:device_id>/activate",
+        GymDevicesActivateAPIView.as_view(),
+        name="activate",
     ),
 ]

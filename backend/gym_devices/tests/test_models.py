@@ -61,7 +61,7 @@ class GymDeviceManagerGetDeviceTests(TestCase):
                 self.gym,
             )
 
-    def test_get_device_raises_when_device_inactive(self):
+    def test_get_device_returns_inactive_device(self):
         device = GymDevice.objects.create(
             gym=self.gym,
             device_type=GymDevice.GymDeviceType.ENTRANCE,
@@ -70,11 +70,13 @@ class GymDeviceManagerGetDeviceTests(TestCase):
             is_active=False,
         )
 
-        with self.assertRaises(APIError):
-            GymDevice.objects.get_device(
-                device.id,
-                self.gym,
-            )
+        result = GymDevice.objects.get_device(
+            device.id,
+            self.gym,
+        )
+
+        self.assertEqual(result, device)
+        self.assertFalse(result.is_active)
 
 
 class GymDeviceManagerFindDeviceTests(TestCase):
@@ -302,7 +304,7 @@ class GymDeviceModelTests(TestCase):
     def setUp(self):
         self.gym = Gym.objects.create(name="Gym A")
 
-    def _create_device(self, **kwargs):
+    def _create_device(self, **kwargs) -> GymDevice:
         defaults = {
             "gym": self.gym,
             "device_type": GymDevice.GymDeviceType.ENTRANCE,
@@ -365,36 +367,74 @@ class GymDeviceModelTests(TestCase):
             "gym_device",
         )
 
-    def test_revoke_device_sets_inactive(self):
+    def test_deactivate_device_sets_inactive(self):
         device = self._create_device()
 
-        device.revoke_device()
+        device.deactivate_device()
         device.refresh_from_db()
 
         self.assertFalse(device.is_active)
 
-    def test_revoke_device_only_updates_is_active_and_updated_at(self):
+    def test_deactivate_device_preserves_other_fields(self):
         device = self._create_device()
-
         original_hash = device.token_hash
         original_type = device.device_type
 
-        device.revoke_device()
+        device.deactivate_device()
         device.refresh_from_db()
 
+        self.assertFalse(device.is_active)
         self.assertEqual(device.token_hash, original_hash)
         self.assertEqual(device.device_type, original_type)
-        self.assertFalse(device.is_active)
 
-    def test_revoke_device_is_idempotent(self):
+    def test_deactivate_device_is_idempotent(self):
         device = self._create_device()
 
-        device.revoke_device()
-        device.revoke_device()
-
+        device.deactivate_device()
+        device.deactivate_device()
         device.refresh_from_db()
 
         self.assertFalse(device.is_active)
+
+    def test_activate_device_sets_active(self):
+        device = self._create_device(is_active=False)
+
+        device.activate_device()
+        device.refresh_from_db()
+
+        self.assertTrue(device.is_active)
+
+    def test_activate_device_preserves_other_fields(self):
+        device = self._create_device(is_active=False)
+        original_hash = device.token_hash
+        original_type = device.device_type
+
+        device.activate_device()
+        device.refresh_from_db()
+
+        self.assertTrue(device.is_active)
+        self.assertEqual(device.token_hash, original_hash)
+        self.assertEqual(device.device_type, original_type)
+
+    def test_activate_device_is_idempotent(self):
+        device = self._create_device(is_active=False)
+
+        device.activate_device()
+        device.activate_device()
+        device.refresh_from_db()
+
+        self.assertTrue(device.is_active)
+
+    def test_deactivate_then_activate_device(self):
+        device = self._create_device()
+
+        device.deactivate_device()
+        device.refresh_from_db()
+        self.assertFalse(device.is_active)
+
+        device.activate_device()
+        device.refresh_from_db()
+        self.assertTrue(device.is_active)
 
     def test_gym_protected_on_delete(self):
         self._create_device()

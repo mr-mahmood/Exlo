@@ -7,12 +7,12 @@ app_name = "gym_visits"
 
 urlpatterns = [
     path(
-        "<uuid:gym_id>/visits/nfc/check-in/",
+        "<uuid:gym_id>/visits/check-in/nfc/",
         NfcCardCheckInView.as_view(),
         name="gym-visit-check-in",
     ),
     path(
-        "<uuid:gym_id>/visits/nfc/check-out/",
+        "<uuid:gym_id>/visits/check-out/nfc/",
         NfcCardCheckOutView.as_view(),
         name="gym-visit-check-out",
     ),

@@ -107,9 +107,11 @@ class Gym(models.Model):
         super().save(*args, **kwargs)
 
     def activate(self):
-        self.is_active = True
-        self.save(update_fields=["is_active", "updated_at"])
+        if self.is_active == False:
+            self.is_active = True
+            self.save(update_fields=["is_active", "updated_at"])
 
     def deactivate(self):
-        self.is_active = False
-        self.save(update_fields=["is_active", "updated_at"])
+        if self.is_active == True:
+            self.is_active = False
+            self.save(update_fields=["is_active", "updated_at"])

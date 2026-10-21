@@ -128,8 +128,8 @@ class GymDeviceSerializerTests(TestCase):
 
         self.assertTrue(serializer.data["is_active"])
 
-    def test_is_active_false_after_revoke(self):
-        self.device.revoke_device()
+    def test_is_active_false_after_deactivate(self):
+        self.device.deactivate_device()
         self.device.refresh_from_db()
 
         serializer = GymDeviceSerializer(
@@ -137,6 +137,17 @@ class GymDeviceSerializerTests(TestCase):
         )
 
         self.assertFalse(serializer.data["is_active"])
+
+    def test_is_active_true_after_activate(self):
+        self.device.deactivate_device()
+        self.device.activate_device()
+        self.device.refresh_from_db()
+
+        serializer = GymDeviceSerializer(
+            instance=self.device,
+        )
+
+        self.assertTrue(serializer.data["is_active"])
 
     def test_created_at_and_updated_at_are_present(self):
         serializer = GymDeviceSerializer(

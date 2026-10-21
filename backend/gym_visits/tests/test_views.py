@@ -27,6 +27,7 @@ from gym_subscriptions.models import GymSubscription
 from gym_visits.models import GymVisit
 from users.models import User
 from users_nfc_cards.models import UserNfcCard
+from gym_locks.models import GymLocker
 
 
 class NfcFlowTestBase(TestCase):
@@ -38,6 +39,9 @@ class NfcFlowTestBase(TestCase):
 
         self.gym_a = Gym.objects.create(name="Gym A")
         self.gym_b = Gym.objects.create(name="Gym B")
+
+        GymLocker.objects.add_lockers(gym=self.gym_a, count=10)
+        GymLocker.objects.add_lockers(gym=self.gym_b, count=10)
 
         self.user = User.objects.create_user(
             phone_number="09120000001",
@@ -640,12 +644,20 @@ class CheckInFlowTests(NfcFlowTestBase):
             uid="CARD1",
         )
 
+        self.assertTrue(
+            GymLocker.objects.filter(
+                gym=self.gym_a,
+                assigned_user=self.user,
+                is_active=True,
+            ).exists()
+        )
+
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
         )
 
-        visit = GymVisit.objects.get(
+        visit: GymVisit = GymVisit.objects.get(
             user=self.user,
             gym=self.gym_a,
         )
@@ -659,7 +671,7 @@ class CheckInFlowTests(NfcFlowTestBase):
             GymVisit.Method.NFC,
         )
 
-        sub = GymSubscription.objects.get(
+        sub: GymSubscription = GymSubscription.objects.get(
             subscriber=self.user,
         )
 
@@ -805,6 +817,27 @@ class CheckInFlowTests(NfcFlowTestBase):
             sub.remaining_visits,
             0,
         )
+
+    def test_check_in_rolls_back_when_no_locker_is_available(self):
+        GymLocker.objects.filter(gym=self.gym_a).update(is_active=False)
+
+        response = self.check_in(
+            gym=self.gym_a,
+            token=self.token_a,
+            uid="CARD1",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        self.assertFalse(
+            GymVisit.objects.filter(
+                user=self.user,
+                gym=self.gym_a,
+            ).exists()
+        )
+
+        sub = GymSubscription.objects.get(subscriber=self.user)
+        self.assertEqual(sub.remaining_visits, 10)
 
 
 class CrossGymCheckInTests(NfcFlowTestBase):
@@ -1114,12 +1147,19 @@ class CheckOutFlowTests(NfcFlowTestBase):
             uid="CARD1",
         )
 
+        self.assertFalse(
+            GymLocker.objects.filter(
+                gym=self.gym_a,
+                assigned_user=self.user,
+            ).exists()
+        )
+
         self.assertEqual(
             response.status_code,
             status.HTTP_200_OK,
         )
 
-        visit = GymVisit.objects.get(
+        visit: GymVisit = GymVisit.objects.get(
             user=self.user,
             gym=self.gym_a,
         )

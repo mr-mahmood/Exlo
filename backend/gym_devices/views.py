@@ -16,7 +16,7 @@ class GymDevicesAPIView(APIView):
     pagination_class = CustomPagination
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
         devices = GymDevice.objects.filter(gym=gym).select_related("gym")
 
         paginator = self.pagination_class()
@@ -36,10 +36,7 @@ class GymDevicesCreateAPIView(APIView):
     serializer_class = GymDeviceSerializer
 
     def post(self, request, gym_id):
-        gym = Gym.objects.get_gym(
-            gym_id=gym_id,
-            active_only=True,
-        )
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         serializer = self.serializer_class(
             data=request.data,
@@ -68,17 +65,21 @@ class GymDevicesCreateAPIView(APIView):
         )
 
 
-class GymDevicesDeActiveAPIView(APIView):
+class GymDevicesDeActivateAPIView(APIView):
     permission_classes = [IsAdmin]
 
     def post(self, request, gym_id, device_id):
-        gym = Gym.objects.get_gym(gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id)
+        device = GymDevice.objects.get_device(device_id=device_id, gym=gym)
+        device.deactivate_device()
+        return Response(status=status.HTTP_200_OK)
 
-        device = GymDevice.objects.get_device(
-            device_id=device_id,
-            gym=gym,
-        )
 
-        device.revoke_device()
+class GymDevicesActivateAPIView(APIView):
+    permission_classes = [IsAdmin]
 
+    def post(self, request, gym_id, device_id):
+        gym = Gym.objects.get_gym(gym_id)
+        device = GymDevice.objects.get_device(device_id=device_id, gym=gym)
+        device.activate_device()
         return Response(status=status.HTTP_200_OK)

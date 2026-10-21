@@ -22,7 +22,7 @@ class DeviceTokenAuthentication(authentication.BaseAuthentication):
         if gym_id is None:
             raise APIError(GymDeviceError.INVALID_DEVICE_CREDENTIAL)
 
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         raw_token = header[1].decode()
         device = GymDevice.objects.find_device(gym, raw_token)

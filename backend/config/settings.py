@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "gym_subscriptions",
     "gym_visits",
     "gym_devices",
+    "gym_locks",
     # Commerce apps
     "commerce_products",
     "commerce_orders",

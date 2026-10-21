@@ -14,7 +14,6 @@ class GymDeviceManager(models.Manager):
         device = self.filter(
             id=device_id,
             gym=gym,
-            is_active=True,
         ).first()
         if device is None:
             raise APIError(GymDeviceError.DEVICE_NOT_FOUND)
@@ -99,6 +98,10 @@ class GymDevice(models.Model):
             models.Index(fields=["created_at"]),
         ]
 
-    def revoke_device(self):
+    def activate_device(self):
+        self.is_active = True
+        self.save(update_fields=["is_active", "updated_at"])
+
+    def deactivate_device(self):
         self.is_active = False
         self.save(update_fields=["is_active", "updated_at"])

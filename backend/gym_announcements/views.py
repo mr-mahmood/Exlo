@@ -3,7 +3,7 @@
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
-from gym_auth.permissions import IsAdminOrGymOwner, IsGymMember
+from gym_auth.permissions import IsAdminOrGymOwner
 from gym.models import Gym
 from core.pagination import CustomPagination
 from .models import GymAnnouncement
@@ -11,12 +11,11 @@ from .serializers import GymAnnouncementSerializer
 
 
 class GymAnnouncementAPIView(APIView):
-    permission_classes = [IsGymMember]
     serializer_class = GymAnnouncementSerializer
     pagination_class = CustomPagination
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         announcements = GymAnnouncement.objects.filter(
             gym=gym,
@@ -40,7 +39,7 @@ class GymAnnouncementCreateAPIView(APIView):
     serializer_class = GymAnnouncementSerializer
 
     def post(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id=gym_id)
 
         serializer = self.serializer_class(
             data=request.data,
@@ -66,7 +65,7 @@ class GymAnnouncementUpdateAPIView(APIView):
     serializer_class = GymAnnouncementSerializer
 
     def put(self, request, gym_id, announcement_id):
-        gym = Gym.objects.get_gym(gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id)
 
         announcement = GymAnnouncement.objects.get_announcement(
             announcement_id=announcement_id,
@@ -82,19 +81,14 @@ class GymAnnouncementUpdateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         announcement = serializer.save(author=request.user)
 
-        return Response(
-            {
-                "announcement": serializer.data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response({"announcement": serializer.data}, status=status.HTTP_200_OK)
 
 
 class GymAnnouncementDeleteAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def delete(self, request, gym_id, announcement_id):
-        gym = Gym.objects.get_gym(gym_id, active_only=True)
+        gym = Gym.objects.get_gym(gym_id)
 
         announcement = GymAnnouncement.objects.get_announcement(
             announcement_id=announcement_id,

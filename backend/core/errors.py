@@ -746,9 +746,60 @@ class PaymentError(APIError):
 # PAYMENT GATEWAY
 # ============================================================================
 class PaymentGatewayError(APIError):
-
     GATEWAY_NOT_FOUND = (
         "GAT_001",
         "gateway not found",
         status.HTTP_404_NOT_FOUND,
+    )
+
+
+# ============================================================================
+# User GYM ROLE
+# ============================================================================
+class UserGymRoleError(APIError):
+    ROLE_NOT_FOUND = (
+        "ROLE_001",
+        "Role not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+
+# ============================================================================
+# GYM LOCKER
+# ============================================================================
+class GymLockerError(APIError):
+    USER_ALREADY_ASSIGNED = (
+        "LOCKER_001",
+        "User already has an assigned locker in this gym",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    USER_NOT_ASSIGNED = (
+        "LOCKER_002",
+        "User has no assigned locker in this gym",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    NO_AVAILABLE_LOCKER = (
+        "LOCKER_003",
+        "No available lockers in this gym",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    INVALID_LOCKER_NUMBER = (
+        "LOCKER_004",
+        "Locker number must be positive",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+    LOCKER_NOT_FOUND = (
+        "LOCKER_005",
+        "Locker not found",
+        status.HTTP_404_NOT_FOUND,
+    )
+
+    LOCKER_IS_ASSIGNED = (
+        "LOCKER_006",
+        "Locker have an assinged user to it",
+        status.HTTP_400_BAD_REQUEST,
     )

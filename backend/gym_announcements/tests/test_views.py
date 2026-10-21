@@ -59,10 +59,6 @@ class GymAnnouncementViewsTest(TestCase):
             user=self.gym_owner, gym=self.gym, role=UserGymRole.Role.OWNER
         )
 
-        UserGymRole.objects.create(
-            user=self.gym_member, gym=self.gym, role=UserGymRole.Role.ATHLETE
-        )
-
         # Create test announcements
         self.announcement1 = GymAnnouncement.objects.create(
             gym=self.gym,
@@ -99,16 +95,6 @@ class GymAnnouncementViewsTest(TestCase):
         self.assertEqual(
             response.data["announcements"][0]["title"], "Published Announcement"
         )
-
-    def test_announcement_list_regular_user_no_access(self):
-        """Test that regular users (non-members) cannot view announcements."""
-        self.authenticate(self.regular_user)
-
-        response = self.client.get(
-            reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id})
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_announcement_list_unauthenticated_no_access(self):
         """Test that unauthenticated users cannot view announcements."""
