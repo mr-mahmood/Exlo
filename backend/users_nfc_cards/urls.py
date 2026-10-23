@@ -7,7 +7,7 @@ app_name = "users_nfc_cards"
 
 urlpatterns = [
     path(
-        "<uuid:gym_id>/nfc-card/assign",
+        "<uuid:gym_id>/nfc-card/assign/",
         UserNfcCardAssignRequestView.as_view(),
         name="assign",
     ),

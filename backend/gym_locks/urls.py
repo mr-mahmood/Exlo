@@ -25,12 +25,12 @@ urlpatterns = [
         name="gym_locks-list",
     ),
     path(
-        "<uuid:gym_id>/lockers/<uuid:locker_id>/activate",
+        "<uuid:gym_id>/lockers/<uuid:locker_id>/activate/",
         LockerActivateAPIView.as_view(),
         name="gym_locks-activate",
     ),
     path(
-        "<uuid:gym_id>/lockers/<uuid:locker_id>/deactivate",
+        "<uuid:gym_id>/lockers/<uuid:locker_id>/deactivate/",
         LockerDeActivateAPIView.as_view(),
         name="gym_locks-deactivate",
     ),

@@ -1,5 +1,5 @@
 # gym_locks/tests/test_views.py
-# type: ignore
+
 
 import uuid
 

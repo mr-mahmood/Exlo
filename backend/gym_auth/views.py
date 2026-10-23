@@ -20,7 +20,7 @@ class GymUserRoleListAPIView(APIView):
 
     def get(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id)
-        roles = gym.users.select_related("user").all()  # type: ignore
+        roles = gym.users.select_related("user").all()
 
         paginator = self.pagination_class()
         result_page = paginator.paginate_queryset(roles, request, view=self)

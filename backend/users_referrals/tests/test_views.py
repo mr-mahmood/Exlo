@@ -1,5 +1,5 @@
 # user_referrals/tests/test_views.py
-# type: ignore
+
 
 from django.test import TestCase
 from django.urls import reverse
@@ -90,15 +90,15 @@ class UserReferralPIViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Check that referrals key exists and has correct data
-        self.assertIn("referrals", response.data)  # type: ignore
-        self.assertEqual(len(response.data["referrals"]), 2)  # type: ignore
+        self.assertIn("referrals", response.data)
+        self.assertEqual(len(response.data["referrals"]), 2)
 
         # Verify pagination fields
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
 
         # Verify referral data contains expected fields
-        referral_data = response.data["referrals"][0]  # type: ignore
+        referral_data = response.data["referrals"][0]
         self.assertIn("referred_user", referral_data)
         self.assertIn("referred_at", referral_data)
 
@@ -136,8 +136,10 @@ class UserReferralPIViewTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
+        )
 
     def test_get_referrals_inactive_user(self):
         """Test retrieving referrals for inactive user"""
@@ -152,10 +154,10 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 2)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 2)
 
         # Verify the other user's referral is not included
-        for referral in response.data["referrals"]:  # type: ignore
+        for referral in response.data["referrals"]:
             referred_phone = referral["referred_user"]["phone_number"]
             self.assertNotEqual(referred_phone, "09333333333")
 
@@ -182,15 +184,15 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("referrals", response.data)  # type: ignore
-        self.assertIsInstance(response.data["referrals"], list)  # type: ignore
+        self.assertIn("referrals", response.data)
+        self.assertIsInstance(response.data["referrals"], list)
 
         # Check pagination fields
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
 
-        if len(response.data["referrals"]) > 0:  # type: ignore
-            referral = response.data["referrals"][0]  # type: ignore
+        if len(response.data["referrals"]) > 0:
+            referral = response.data["referrals"][0]
             self.assertIn("referred_user", referral)
             self.assertIn("referred_at", referral)
 
@@ -206,7 +208,7 @@ class UserReferralPIViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        referral = response.data["referrals"][0]  # type: ignore
+        referral = response.data["referrals"][0]
 
         # Should NOT include referrer info
         self.assertNotIn("referrer", referral)
@@ -248,7 +250,7 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 12)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 12)
 
     def test_get_referrals_ordering(self):
         """Test that referrals are ordered by created_at desc"""
@@ -274,7 +276,7 @@ class UserReferralPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Most recent should be first
-        first_referral = response.data["referrals"][0]  # type: ignore
+        first_referral = response.data["referrals"][0]
         self.assertEqual(first_referral["referred_user"]["phone_number"], "09555555555")
 
     def test_get_referrals_with_deleted_user(self):
@@ -300,7 +302,7 @@ class UserReferralPIViewTest(TestCase):
         # Get referrals should not include the deleted one
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 2)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 2)
 
     # ========== PERFORMANCE TESTS ==========
 
@@ -327,7 +329,7 @@ class UserReferralPIViewTest(TestCase):
             response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 22)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 22)
 
         # With pagination, we expect: 1 for count + 1 for data = 2-3 queries
         # The third query might be for pagination or session validation
@@ -408,9 +410,9 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 50)  # type: ignore
-        self.assertIsNotNone(response.data["next"])  # type: ignore
-        self.assertIsNone(response.data["previous"])  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 50)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_pagination_custom_page_size(self):
         """Test that pagination respects custom page_size parameter"""
@@ -431,16 +433,16 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url, {"page_size": 10})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 10)  # type: ignore
-        self.assertIsNotNone(response.data["next"])  # type: ignore
-        self.assertIsNone(response.data["previous"])  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 10)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_pagination_max_page_size(self):
         """Test that pagination respects max_page_size limit of 100"""
         # Create 150 referrals
         for i in range(150):
             referred_user = User.objects.create_user(
-                phone_number=f"099999999{i:02d}",
+                phone_number=f"0999999{i:04d}",
                 first_name=f"User{i}",
                 last_name="Test",
                 gender=User.Gender.MALE,
@@ -455,7 +457,7 @@ class UserReferralPIViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should return max_page_size (100) instead of requested 200
-        self.assertEqual(len(response.data["referrals"]), 100)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 100)
 
     def test_pagination_second_page(self):
         """Test that pagination works for second page"""
@@ -476,10 +478,10 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url, {"page": 2, "page_size": 10})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 10)  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 10)
         # Should have next and previous links
-        self.assertIsNotNone(response.data["next"])  # type: ignore
-        self.assertIsNotNone(response.data["previous"])  # type: ignore
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNotNone(response.data["previous"])
 
     def test_pagination_invalid_page(self):
         """Test that pagination handles invalid page number gracefully"""
@@ -507,9 +509,9 @@ class UserReferralPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["referrals"]), 2)  # type: ignore
-        self.assertIsNone(response.data["next"])  # type: ignore
-        self.assertIsNone(response.data["previous"])  # type: ignore
+        self.assertEqual(len(response.data["referrals"]), 2)
+        self.assertIsNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_pagination_response_structure(self):
         """Test that pagination response has all required fields"""
@@ -532,16 +534,16 @@ class UserReferralPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify response structure
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
-        self.assertIn("referrals", response.data)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("referrals", response.data)
 
         # Verify referrals is a list
-        self.assertIsInstance(response.data["referrals"], list)  # type: ignore
-        self.assertEqual(len(response.data["referrals"]), 10)  # type: ignore
+        self.assertIsInstance(response.data["referrals"], list)
+        self.assertEqual(len(response.data["referrals"]), 10)
 
         # Verify each referral has required fields
-        for referral in response.data["referrals"]:  # type: ignore
+        for referral in response.data["referrals"]:
             self.assertIn("referred_user", referral)
             self.assertIn("referred_at", referral)
             # Verify nested user has required fields
@@ -588,12 +590,12 @@ class UserReferralPIViewIntegrationTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Check the paginated response structure
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
-        self.assertIn("referrals", response.data)  # type: ignore
-        self.assertEqual(len(response.data["referrals"]), 1)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("referrals", response.data)
+        self.assertEqual(len(response.data["referrals"]), 1)
 
-        referral = response.data["referrals"][0]  # type: ignore
+        referral = response.data["referrals"][0]
         self.assertEqual(referral["referred_user"]["phone_number"], "09111111111")
         self.assertEqual(referral["referred_user"]["first_name"], "Alice")
         self.assertEqual(referral["referred_user"]["last_name"], "Johnson")
@@ -603,5 +605,7 @@ class UserReferralPIViewIntegrationTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
+        )

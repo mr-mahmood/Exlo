@@ -1,5 +1,5 @@
 # gym_subscriptions/tests/test_views.py
-# type: ignore
+
 
 import uuid
 from datetime import timedelta

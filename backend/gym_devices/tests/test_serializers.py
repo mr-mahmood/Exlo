@@ -1,5 +1,5 @@
 # gym_devices/tests/test_serializer.py
-# type: ignore
+
 
 from django.conf import settings
 from django.test import TestCase

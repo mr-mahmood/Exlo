@@ -71,7 +71,7 @@ class NfcCardCheckOutView(APIView):
             user=user,
             gym=gym,
             checked_out_at__isnull=True,
-        ).first()  # type: ignore
+        ).first()
 
         if visit is None:
             raise APIError(GymVisitsError.VISIT_NOT_FOUND)

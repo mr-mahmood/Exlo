@@ -98,7 +98,7 @@ class WalletTopUpCallbackAPIView(APIView):
                     raise APIError(PaymentGatewayError.GATEWAY_NOT_FOUND)
 
                 payment: Payment = gateway.payment
-                wallet: Wallet = payment.wallet # type: ignore
+                wallet: Wallet = payment.wallet
 
                 # -------------------------------------------------
                 # Validate the callback against the locked payment.

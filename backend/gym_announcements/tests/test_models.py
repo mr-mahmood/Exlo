@@ -1,5 +1,5 @@
 # gym_announcements/tests/test_models.py
-# type: ignore
+
 
 import uuid
 from django.test import TestCase

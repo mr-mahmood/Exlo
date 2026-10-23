@@ -1,5 +1,5 @@
 # gym_subscriptions/tests/test_serializers.py
-# type: ignore
+
 
 from datetime import timedelta
 from django.test import TestCase

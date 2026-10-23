@@ -74,8 +74,8 @@ class UserMeasurementSerializerTest(TestCase):
             data=self.valid_data, context={"request": None}
         )
         self.assertTrue(serializer.is_valid())
-        self.assertEqual(serializer.validated_data["height_cm"], Decimal("180.5"))  # type: ignore
-        self.assertEqual(serializer.validated_data["weight_kg"], Decimal("75.0"))  # type: ignore
+        self.assertEqual(serializer.validated_data["height_cm"], Decimal("180.5"))
+        self.assertEqual(serializer.validated_data["weight_kg"], Decimal("75.0"))
 
     def test_serializer_with_existing_instance(self):
         """Test serializer with existing measurement instance"""
@@ -85,9 +85,9 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
         updated_measurement = serializer.save()
 
-        self.assertEqual(updated_measurement.height_cm, Decimal("180.5"))  # type: ignore
-        self.assertEqual(updated_measurement.weight_kg, Decimal("75.0"))  # type: ignore
-        self.assertEqual(updated_measurement.measurement_notes, "Updated measurements")  # type: ignore
+        self.assertEqual(updated_measurement.height_cm, Decimal("180.5"))
+        self.assertEqual(updated_measurement.weight_kg, Decimal("75.0"))
+        self.assertEqual(updated_measurement.measurement_notes, "Updated measurements")
 
     def test_serializer_fields(self):
         """Test that serializer has correct fields"""
@@ -118,7 +118,7 @@ class UserMeasurementSerializerTest(TestCase):
             "created_at",
         ]
 
-        self.assertEqual(set(serializer.data.keys()), set(expected_fields))  # type: ignore
+        self.assertEqual(set(serializer.data.keys()), set(expected_fields))
 
     def test_read_only_fields(self):
         """Test that read_only fields are not writable"""
@@ -130,8 +130,8 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # id and created_at should be ignored
-        self.assertNotIn("id", serializer.validated_data)  # type: ignore
-        self.assertNotIn("created_at", serializer.validated_data)  # type: ignore
+        self.assertNotIn("id", serializer.validated_data)
+        self.assertNotIn("created_at", serializer.validated_data)
 
     def test_height_validation(self):
         """Test height validation"""
@@ -160,7 +160,7 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # Test None value (should pass validation)
-        data["height_cm"] = None  # type: ignore
+        data["height_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -191,7 +191,7 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # Test None value (should pass validation)
-        data["weight_kg"] = None  # type: ignore
+        data["weight_kg"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -223,7 +223,7 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # Test None value (should pass validation)
-        data["chest_cm"] = None  # type: ignore
+        data["chest_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -250,7 +250,7 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None value (should pass validation)
-        data["shoulders_cm"] = None  # type: ignore
+        data["shoulders_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -283,8 +283,8 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # Test None values (should pass validation)
-        data["biceps_left_cm"] = None  # type: ignore
-        data["biceps_right_cm"] = None  # type: ignore
+        data["biceps_left_cm"] = None
+        data["biceps_right_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -312,8 +312,8 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None values (should pass validation)
-        data["forearms_left_cm"] = None  # type: ignore
-        data["forearms_right_cm"] = None  # type: ignore
+        data["forearms_left_cm"] = None
+        data["forearms_right_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -340,7 +340,7 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None value (should pass validation)
-        data["waist_cm"] = None  # type: ignore
+        data["waist_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -367,7 +367,7 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None value (should pass validation)
-        data["abdomen_cm"] = None  # type: ignore
+        data["abdomen_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -394,7 +394,7 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None value (should pass validation)
-        data["hips_cm"] = None  # type: ignore
+        data["hips_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -422,8 +422,8 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None values (should pass validation)
-        data["quadriceps_left_cm"] = None  # type: ignore
-        data["quadriceps_right_cm"] = None  # type: ignore
+        data["quadriceps_left_cm"] = None
+        data["quadriceps_right_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -451,8 +451,8 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None values (should pass validation)
-        data["calves_left_cm"] = None  # type: ignore
-        data["calves_right_cm"] = None  # type: ignore
+        data["calves_left_cm"] = None
+        data["calves_right_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -479,7 +479,7 @@ class UserMeasurementSerializerTest(TestCase):
         )
 
         # Test None value (should pass validation)
-        data["glutes_cm"] = None  # type: ignore
+        data["glutes_cm"] = None
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
 
@@ -523,11 +523,11 @@ class UserMeasurementSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # All None values should be preserved
-        self.assertIsNone(serializer.validated_data["height_cm"])  # type: ignore
-        self.assertIsNone(serializer.validated_data["weight_kg"])  # type: ignore
-        self.assertIsNone(serializer.validated_data["chest_cm"])  # type: ignore
+        self.assertIsNone(serializer.validated_data["height_cm"])
+        self.assertIsNone(serializer.validated_data["weight_kg"])
+        self.assertIsNone(serializer.validated_data["chest_cm"])
         self.assertEqual(
-            serializer.validated_data["measurement_notes"], "Empty measurements"  # type: ignore
+            serializer.validated_data["measurement_notes"], "Empty measurements"
         )
 
     def test_serializer_with_boundary_values(self):
@@ -669,8 +669,8 @@ class UserMeasurementSerializerIntegrationTest(TestCase):
 
         serializer = UserMeasurementSerializer(data=data, context={"request": None})
         self.assertTrue(serializer.is_valid())
-        self.assertNotIn("extra_field", serializer.validated_data)  # type: ignore
-        self.assertNotIn("another_extra", serializer.validated_data)  # type: ignore
+        self.assertNotIn("extra_field", serializer.validated_data)
+        self.assertNotIn("another_extra", serializer.validated_data)
 
 
 class MeasurementPhotosSerializerTest(TestCase):
@@ -736,7 +736,7 @@ class MeasurementPhotosSerializerTest(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("type", serializer.errors)
         self.assertEqual(
-            str(serializer.errors["type"][0]), '"INVALID" is not a valid choice.'  # type: ignore
+            str(serializer.errors["type"][0]), '"INVALID" is not a valid choice.'
         )
 
     def test_missing_photo_type(self):
@@ -751,7 +751,7 @@ class MeasurementPhotosSerializerTest(TestCase):
 
         # Check that the error is about the missing type field
         self.assertIn("type", serializer.errors)
-        self.assertEqual(str(serializer.errors["type"][0]), "This field is required.")  # type: ignore
+        self.assertEqual(str(serializer.errors["type"][0]), "This field is required.")
 
     def test_missing_photo_file(self):
         """Test serializer with missing photo file"""
@@ -772,7 +772,7 @@ class MeasurementPhotosSerializerTest(TestCase):
         # Create a large image (over the limit)
         large_image = self.create_test_image(size=(1000, 1000))
         # Make it larger by adding more data
-        large_image.size = settings.MAX_IMAGE_SIZE + 1 # type: ignore
+        large_image.size = settings.MAX_IMAGE_SIZE + 1
 
         data = {
             "type": MeasurementPhotos.PhotoType.FRONT,
@@ -804,7 +804,7 @@ class MeasurementPhotosSerializerTest(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("photo", serializer.errors)
         self.assertEqual(
-            str(serializer.errors["photo"][0]),  # type: ignore
+            str(serializer.errors["photo"][0]),
             "Upload a valid image. The file you uploaded was either not an image or a corrupted image.",
         )
 
@@ -821,7 +821,7 @@ class MeasurementPhotosSerializerTest(TestCase):
         photo = serializer.save(measurements=self.measurement)
 
         # Check that the photo is saved as WebP
-        self.assertTrue(photo.photo.name.endswith(".webp"))  # type: ignore
+        self.assertTrue(photo.photo.name.endswith(".webp"))
 
     def test_serializer_fields(self):
         """Test serializer fields"""
@@ -834,7 +834,7 @@ class MeasurementPhotosSerializerTest(TestCase):
         serializer = MeasurementPhotosSerializer(photo)
         expected_fields = ["id", "type", "photo", "created_at"]
 
-        self.assertEqual(set(serializer.data.keys()), set(expected_fields))  # type: ignore
+        self.assertEqual(set(serializer.data.keys()), set(expected_fields))
 
     def test_read_only_fields(self):
         """Test that read_only fields cannot be written"""
@@ -849,5 +849,5 @@ class MeasurementPhotosSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
 
         # id and created_at should be ignored
-        self.assertNotIn("id", serializer.validated_data)  # type: ignore
-        self.assertNotIn("created_at", serializer.validated_data)  # type: ignore
+        self.assertNotIn("id", serializer.validated_data)
+        self.assertNotIn("created_at", serializer.validated_data)

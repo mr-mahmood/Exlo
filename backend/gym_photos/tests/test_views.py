@@ -1,5 +1,5 @@
 # gym_photos/tests/test_views.py
-# type: ignore
+
 
 import io
 import uuid

@@ -178,7 +178,7 @@ class UserModelTest(TestCase):
 
         for i in range(10):
             data = self.valid_data.copy()
-            data["phone_number"] = f"091234567{89 + i}"
+            data["phone_number"] = f"0912345{i:04d}"
             data["first_name"] = f"User{i}"
             user: User = User.objects.create_user(**data)
             codes.add(user.referral_code)
@@ -219,7 +219,7 @@ class UserModelTest(TestCase):
 
     def test_referral_code_race_condition_handling(self):
         """Test referral code generation handles race conditions"""
-        phones = [f"091234567{89 + i}" for i in range(20)]
+        phones = [f"0912345{i:04d}" for i in range(20)]
 
         for phone in phones:
             data = self.valid_data.copy()
@@ -233,7 +233,7 @@ class UserModelTest(TestCase):
     def test_phone_number_unique_constraint(self):
         """Test phone_number has unique=True constraint"""
         field = User._meta.get_field("phone_number")
-        self.assertTrue(field.unique)  # type: ignore
+        self.assertTrue(field.unique)
 
     def test_referral_code_editable_false(self):
         """Test referral_code has editable=False"""
@@ -243,7 +243,7 @@ class UserModelTest(TestCase):
     def test_referral_code_unique_constraint_in_meta(self):
         """Test referral_code has unique=True constraint in model meta"""
         field = User._meta.get_field("referral_code")
-        self.assertTrue(field.unique)  # type: ignore
+        self.assertTrue(field.unique)
 
     def test_model_db_table(self):
         """Test model uses correct database table name"""

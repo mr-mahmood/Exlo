@@ -40,7 +40,7 @@ class GymMembershipPlanManager(models.Manager):
             raise APIError(GymPlansError.PLAN_NOT_FOUND)
 
     def get_gym_plans(self, gym, active_only=True) -> QuerySet["GymMembershipPlan"]:
-        queryset = self.filter(gym=gym)
+        queryset = self.filter(gym=gym).select_related("gym")
 
         if active_only:
             queryset = queryset.filter(is_active=True)

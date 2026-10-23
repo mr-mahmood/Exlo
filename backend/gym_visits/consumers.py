@@ -8,7 +8,7 @@ class GateConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
 
-        self.device: GymDevice = self.scope["device"]  # type: ignore
+        self.device: GymDevice = self.scope["device"]
         if self.device.device_type != GymDevice.GymDeviceType.ENTRANCE:
             await self.close(code=4403)
             return

@@ -1,5 +1,5 @@
 # user_measurements/tests/test_models.py
-# type: ignore
+
 
 from django.test import TestCase
 from users.models import User
@@ -114,7 +114,7 @@ class MeasurementsModelTest(TestCase):
         measurement = Measurements.objects.create(
             user=self.user,
             height_cm=Decimal("175.55"),
-            weight_kg=Decimal("72.34"), 
+            weight_kg=Decimal("72.34"),
         )
 
         measurement.refresh_from_db()
@@ -378,7 +378,7 @@ class MeasurementPhotosModelTest(TestCase):
             photo=self.create_test_image(),
         )
 
-        measurement_photos = self.measurement.photos.all()  # type: ignore
+        measurement_photos = self.measurement.photos.all()
 
         self.assertEqual(measurement_photos.count(), 2)
         self.assertIn(photo1, measurement_photos)

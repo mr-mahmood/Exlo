@@ -1,5 +1,5 @@
 # gym_plans/tests/test_views.py
-# type: ignore
+
 
 import uuid
 from django.test import TestCase
@@ -110,6 +110,12 @@ class GymPlansViewsTest(TestCase):
         self.assertIn("Basic Monthly", plan_names)
         self.assertIn("Premium Monthly", plan_names)
         self.assertNotIn("Yearly Premium", plan_names)  # Inactive
+
+    def test_list_plans_uses_constant_queries(self):
+        with self.assertNumQueries(2):
+            response = self.client.get(self.list_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_list_plans_gym_not_found(self):
         """Test plan list with non-existent gym."""

@@ -1,5 +1,4 @@
 # user_sessions/tests/test_views.py
-# type: ignore
 
 from django.test import TestCase
 from django.urls import reverse
@@ -62,21 +61,21 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("sessions", response.data)  # type: ignore
-        self.assertEqual(len(response.data["sessions"]), 2)  # type: ignore
+        self.assertIn("sessions", response.data)
+        self.assertEqual(len(response.data["sessions"]), 2)
 
         # Verify pagination fields
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
 
         # Verify session data contains expected fields
-        session_data = response.data["sessions"][0]  # type: ignore
+        session_data = response.data["sessions"][0]
         expected_fields = ["session_id", "ip_address", "user_agent", "last_activity_at"]
         for field in expected_fields:
             self.assertIn(field, session_data)
 
         # Verify all sessions belong to the user
-        for session in response.data["sessions"]:  # type: ignore
+        for session in response.data["sessions"]:
             session_obj = Session.objects.get(session_id=session["session_id"])
             self.assertEqual(session_obj.user, self.user)
 
@@ -104,8 +103,10 @@ class UserSessionPIViewTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
+        )
 
     def test_get_sessions_inactive_user(self):
         """Test retrieving sessions for inactive user"""
@@ -150,7 +151,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])
 
     def test_delete_session_other_users_session(self):
         """Test that user cannot delete another user's session"""
@@ -167,7 +168,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])
 
         # Verify session still exists
         self.assertTrue(
@@ -181,7 +182,7 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.delete(self.url, data={}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])
 
     def test_delete_session_invalid_uuid(self):
         """Test deleting a session with invalid UUID format"""
@@ -190,7 +191,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])
 
     def test_delete_session_unauthenticated(self):
         """Test deleting a session without authentication"""
@@ -199,8 +200,10 @@ class UserSessionPIViewTest(TestCase):
             self.url, data={"session_id": str(self.session1.session_id)}, format="json"
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)  # type: ignore
-        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])  # type: ignore
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
+        )
 
     def test_delete_session_inactive_user(self):
         """Test deleting session for inactive user"""
@@ -212,7 +215,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], "NOT_FOUND")  # type: ignore
+        self.assertEqual(response.data["error_code"], "NOT_FOUND")
 
     # ========== BULK OPERATIONS ==========
 
@@ -261,15 +264,15 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("sessions", response.data)  # type: ignore
-        self.assertIsInstance(response.data["sessions"], list)  # type: ignore
+        self.assertIn("sessions", response.data)
+        self.assertIsInstance(response.data["sessions"], list)
 
         # Check pagination fields
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
 
-        if len(response.data["sessions"]) > 0:  # type: ignore
-            session = response.data["sessions"][0]  # type: ignore
+        if len(response.data["sessions"]) > 0:
+            session = response.data["sessions"][0]
             self.assertIsInstance(session["session_id"], str)
             self.assertIsInstance(session["ip_address"], str)
             self.assertIsInstance(session["user_agent"], str)
@@ -282,7 +285,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data, None)  # Empty response # type: ignore
+        self.assertEqual(response.data, None)  # Empty response
 
     # ========== PAGINATION TESTS ==========
 
@@ -301,9 +304,9 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["sessions"]), 50)  # type: ignore
-        self.assertIsNotNone(response.data["next"])  # type: ignore
-        self.assertIsNone(response.data["previous"])  # type: ignore
+        self.assertEqual(len(response.data["sessions"]), 50)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_pagination_custom_page_size(self):
         """Test that pagination respects custom page_size parameter"""
@@ -320,9 +323,9 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.get(self.url, {"page_size": 10})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["sessions"]), 10)  # type: ignore
-        self.assertIsNotNone(response.data["next"])  # type: ignore
-        self.assertIsNone(response.data["previous"])  # type: ignore
+        self.assertEqual(len(response.data["sessions"]), 10)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_pagination_max_page_size(self):
         """Test that pagination respects max_page_size limit of 100"""
@@ -340,7 +343,7 @@ class UserSessionPIViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # Should return max_page_size (100) instead of requested 200
-        self.assertEqual(len(response.data["sessions"]), 100)  # type: ignore
+        self.assertEqual(len(response.data["sessions"]), 100)
 
     def test_pagination_second_page(self):
         """Test that pagination works for second page"""
@@ -357,10 +360,10 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.get(self.url, {"page": 2, "page_size": 10})
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["sessions"]), 10)  # type: ignore
+        self.assertEqual(len(response.data["sessions"]), 10)
         # Should have next and previous links
-        self.assertIsNotNone(response.data["next"])  # type: ignore
-        self.assertIsNotNone(response.data["previous"])  # type: ignore
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNotNone(response.data["previous"])
 
     def test_pagination_invalid_page(self):
         """Test that pagination handles invalid page number gracefully"""
@@ -384,9 +387,9 @@ class UserSessionPIViewTest(TestCase):
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data["sessions"]), 2)  # type: ignore (from setUp)
-        self.assertIsNone(response.data["next"])  # type: ignore
-        self.assertIsNone(response.data["previous"])  # type: ignore
+        self.assertEqual(len(response.data["sessions"]), 2)
+        self.assertIsNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
 
     def test_pagination_response_structure(self):
         """Test that pagination response has all required fields"""
@@ -405,16 +408,16 @@ class UserSessionPIViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify response structure
-        self.assertIn("next", response.data)  # type: ignore
-        self.assertIn("previous", response.data)  # type: ignore
-        self.assertIn("sessions", response.data)  # type: ignore
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("sessions", response.data)
 
         # Verify sessions is a list
-        self.assertIsInstance(response.data["sessions"], list)  # type: ignore
-        self.assertEqual(len(response.data["sessions"]), 10)  # type: ignore
+        self.assertIsInstance(response.data["sessions"], list)
+        self.assertEqual(len(response.data["sessions"]), 10)
 
         # Verify each session has required fields
-        for session in response.data["sessions"]:  # type: ignore
+        for session in response.data["sessions"]:
             self.assertIn("session_id", session)
             self.assertIn("ip_address", session)
             self.assertIn("user_agent", session)

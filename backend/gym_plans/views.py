@@ -17,7 +17,6 @@ class GymPlansAPIView(APIView):
 
     def get(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id=gym_id)
-
         plans = GymMembershipPlan.objects.get_gym_plans(gym=gym)
 
         serializer = self.serializer_class(
@@ -44,7 +43,7 @@ class GymPlansCreateAPIView(APIView):
 
         plan = GymMembershipPlan.objects.create_plan(
             gym=gym,
-            **serializer.validated_data,  # type: ignore
+            **serializer.validated_data,
         )
 
         return Response(

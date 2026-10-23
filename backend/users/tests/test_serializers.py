@@ -132,21 +132,21 @@ class UserSignupSerializerTest(TestCase):
         data.pop("referral", None)
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertIsNone(serializer.validated_data.get("referral"))  # type: ignore
+        self.assertIsNone(serializer.validated_data.get("referral"))
 
     def test_empty_referral_code(self):
         data = self.valid_data.copy()
         data["referral"] = ""
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertIsNone(serializer.validated_data.get("referral"))  # type: ignore
+        self.assertIsNone(serializer.validated_data.get("referral"))
 
     def test_referral_code_whitespace(self):
         data = self.valid_data.copy()
         data["referral"] = "   "
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertIsNone(serializer.validated_data.get("referral"))  # type: ignore
+        self.assertIsNone(serializer.validated_data.get("referral"))
 
     def test_valid_referral_code(self):
         existing_user = User.objects.create_user(
@@ -160,7 +160,9 @@ class UserSignupSerializerTest(TestCase):
         data["referral"] = existing_user.referral_code
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertEqual(serializer.validated_data["referral"], existing_user.referral_code)  # type: ignore
+        self.assertEqual(
+            serializer.validated_data["referral"], existing_user.referral_code
+        )
 
     def test_invalid_referral_code(self):
         data = self.valid_data.copy()
@@ -180,15 +182,15 @@ class UserSignupSerializerTest(TestCase):
         data["last_name"] = "  Doe  "
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertEqual(serializer.validated_data["first_name"], "John")  # type: ignore
-        self.assertEqual(serializer.validated_data["last_name"], "Doe")  # type: ignore
+        self.assertEqual(serializer.validated_data["first_name"], "John")
+        self.assertEqual(serializer.validated_data["last_name"], "Doe")
 
     def test_phone_with_whitespace(self):
         data = self.valid_data.copy()
         data["phone_number"] = " 09123456789 "
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertEqual(serializer.validated_data["phone_number"], "09123456789")  # type: ignore
+        self.assertEqual(serializer.validated_data["phone_number"], "09123456789")
 
     def test_referral_read_only_fields(self):
         data = self.valid_data.copy()
@@ -239,7 +241,7 @@ class UserSignupSerializerTest(TestCase):
             raise IntegrityError("Duplicate referral code")
 
         try:
-            User.objects.create_user = mock_create_user  # type: ignore
+            User.objects.create_user = mock_create_user
             with self.assertRaises(APIError) as context:
                 serializer.save()
             self.assertEqual(
@@ -277,7 +279,7 @@ class UserSignupSerializerTest(TestCase):
         data["extra_field"] = "should_be_ignored"
         serializer = UserSignupSerializer(data=data)
         self.assertTrue(serializer.is_valid())
-        self.assertNotIn("extra_field", serializer.validated_data)  # type: ignore
+        self.assertNotIn("extra_field", serializer.validated_data)
 
 
 class UserProfileSerializerTest(TestCase):
@@ -296,12 +298,12 @@ class UserProfileSerializerTest(TestCase):
     def test_serialize_user(self):
         serializer = UserProfileSerializer(self.user)
         data = serializer.data
-        self.assertEqual(data["phone_number"], "09123456789")  # type: ignore
-        self.assertEqual(data["first_name"], "John")  # type: ignore
-        self.assertEqual(data["last_name"], "Doe")  # type: ignore
-        self.assertEqual(data["gender"], User.Gender.MALE)  # type: ignore
-        self.assertEqual(data["date_of_birth"], "1990-01-01")  # type: ignore
-        self.assertEqual(data["referral_code"], self.user.referral_code)  # type: ignore
+        self.assertEqual(data["phone_number"], "09123456789")
+        self.assertEqual(data["first_name"], "John")
+        self.assertEqual(data["last_name"], "Doe")
+        self.assertEqual(data["gender"], User.Gender.MALE)
+        self.assertEqual(data["date_of_birth"], "1990-01-01")
+        self.assertEqual(data["referral_code"], self.user.referral_code)
 
     def test_update_user(self):
         data = {
@@ -425,7 +427,7 @@ class UserProfilePictureSerializerTest(TestCase):
         updated_user = cast(User, serializer.save())
 
         # Check that the file is saved as WebP
-        self.assertTrue(updated_user.profile_picture.name.endswith(".webp"))  # type: ignore
+        self.assertTrue(updated_user.profile_picture.name.endswith(".webp"))
 
         # Verify it's a valid WebP image using PIL
         img = Image.open(updated_user.profile_picture)
@@ -443,7 +445,7 @@ class UserProfilePictureSerializerTest(TestCase):
         self.assertTrue(serializer.is_valid())
         updated_user = cast(User, serializer.save())
 
-        self.assertTrue(updated_user.profile_picture.name.endswith(".webp"))  # type: ignore
+        self.assertTrue(updated_user.profile_picture.name.endswith(".webp"))
 
         img = Image.open(updated_user.profile_picture)
         self.assertEqual(img.format, "WEBP")
@@ -462,7 +464,7 @@ class UserProfilePictureSerializerTest(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("profile_picture", serializer.errors)
         self.assertEqual(
-            str(serializer.errors["profile_picture"][0]),  # type: ignore
+            str(serializer.errors["profile_picture"][0]),
             "Upload a valid image. The file you uploaded was either not an image or a corrupted image.",
         )
 
@@ -471,7 +473,7 @@ class UserProfilePictureSerializerTest(TestCase):
         # Create a large file
         large_image = self.create_test_image(size=(2000, 2000))
         # Make it larger by setting size to exceed limit
-        large_image.size = settings.MAX_IMAGE_SIZE + 1 # type: ignore
+        large_image.size = settings.MAX_IMAGE_SIZE + 1
 
         data = {
             "profile_picture": large_image,
@@ -501,6 +503,6 @@ class UserProfilePictureSerializerTest(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("profile_picture", serializer.errors)
         self.assertEqual(
-            str(serializer.errors["profile_picture"][0]),  # type: ignore
+            str(serializer.errors["profile_picture"][0]),
             "Upload a valid image. The file you uploaded was either not an image or a corrupted image.",
         )

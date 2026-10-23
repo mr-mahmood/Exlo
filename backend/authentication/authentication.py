@@ -83,7 +83,7 @@ class RefreshTokenAuthentication(JWTAuthentication):
 
         # 2. Validate refresh token
         try:
-            refresh = RefreshToken(refresh_token)  # type: ignore
+            refresh = RefreshToken(refresh_token)
         except TokenError as e:
             raise APIError(SessionError.SESSION_EXPIRE)
 

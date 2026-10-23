@@ -1,5 +1,5 @@
 # user_referrals/tests/test_models.py
-# type: ignore
+
 
 from django.test import TestCase
 from django.db import IntegrityError

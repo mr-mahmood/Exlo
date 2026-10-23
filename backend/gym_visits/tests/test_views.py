@@ -1,5 +1,5 @@
 # gym_visits/tests/test_views.py
-# type: ignore
+
 
 from datetime import timedelta
 from uuid import uuid7

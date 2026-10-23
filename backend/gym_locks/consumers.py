@@ -7,8 +7,8 @@ from gym_devices.models import GymDevice
 class LockerConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
-        
-        self.device: GymDevice = self.scope["device"]  # type: ignore
+
+        self.device: GymDevice = self.scope["device"]
         if self.device.device_type != GymDevice.GymDeviceType.LOCKER:
             await self.close(code=4403)
             return

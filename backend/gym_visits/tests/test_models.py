@@ -1,5 +1,5 @@
 # gym_visits/tests/test_models.py
-# type: ignore
+
 
 from datetime import timedelta
 import time

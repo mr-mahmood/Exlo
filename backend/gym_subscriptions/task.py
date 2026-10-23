@@ -25,7 +25,7 @@ def sweep_gym_subscriptions():
                     status=GymSubscription.Status.ACTIVE,
                 )
                 .first()
-            )  # type: ignore
+            )
 
             if subscription is None or not subscription.is_expired:
                 continue

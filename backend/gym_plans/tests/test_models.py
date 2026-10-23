@@ -1,5 +1,5 @@
 # gym_plans/tests/test_models.py
-# type: ignore
+
 
 import time
 from django.test import TestCase

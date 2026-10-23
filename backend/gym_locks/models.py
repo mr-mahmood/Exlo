@@ -23,7 +23,7 @@ class GymLockerManager(models.Manager):
             .filter(gym=gym, is_active=True, assigned_user__isnull=True)
             .order_by("updated_at")
             .first()
-        )  # type: ignore
+        )
 
         if locker is None:
             raise APIError(GymLockerError.NO_AVAILABLE_LOCKER)
@@ -37,7 +37,7 @@ class GymLockerManager(models.Manager):
 
         locker: GymLocker = (
             self.select_for_update().filter(gym=gym, assigned_user=user).first()
-        )  # type: ignore
+        )
 
         if locker is None:
             raise APIError(GymLockerError.USER_NOT_ASSIGNED)

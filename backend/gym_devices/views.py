@@ -44,7 +44,7 @@ class GymDevicesCreateAPIView(APIView):
         )
         serializer.is_valid(raise_exception=True)
 
-        device_type = serializer.validated_data["device_type"]  # type: ignore
+        device_type = serializer.validated_data["device_type"]
 
         device, raw_token = GymDevice.objects.register_device(
             gym=gym,

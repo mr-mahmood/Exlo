@@ -1,5 +1,5 @@
 # authentication/tests/test_authentication.py
-# type: ignore
+
 
 from django.test import TestCase
 from django.test.client import RequestFactory
@@ -52,7 +52,7 @@ class AccessTokenAuthenticationTest(TestCase):
         request.COOKIES = {"access_token": self.access_token}
 
         auth = AccessTokenAuthentication()
-        result = auth.authenticate(request)  # type: ignore
+        result = auth.authenticate(request)
 
         # Check result is not None before unpacking
         self.assertIsNotNone(result)
@@ -74,7 +74,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, SessionError.SESSION_NOT_FOUND[0]
@@ -89,7 +89,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.TOKEN_NOT_PROVIDE[0]
@@ -102,7 +102,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.TOKEN_NOT_PROVIDE[0]
@@ -115,7 +115,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
@@ -130,7 +130,7 @@ class AccessTokenAuthenticationTest(TestCase):
         # Get the access token and manually set expiration in payload
         # Set to epoch time (already expired)
         access = refresh.access_token
-        access.payload["exp"] = 1  # type: ignore
+        access.payload["exp"] = 1
 
         expired_token = str(access)
 
@@ -139,7 +139,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
@@ -155,7 +155,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -169,7 +169,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, UserAccountError.USER_ACCOUNT_INACTIVE[0]
@@ -188,7 +188,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, UserAccountError.USER_NOT_EXIST[0]
@@ -201,7 +201,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
@@ -231,7 +231,7 @@ class AccessTokenAuthenticationTest(TestCase):
         request.COOKIES = {"access_token": token}
 
         auth = AccessTokenAuthentication()
-        user, _ = auth.authenticate(request)  # type: ignore
+        user, _ = auth.authenticate(request)
         self.assertEqual(user, other_user)
 
     # ========== EDGE CASES ==========
@@ -247,7 +247,7 @@ class AccessTokenAuthenticationTest(TestCase):
         request.COOKIES = {"access_token": token}
 
         auth = AccessTokenAuthentication()
-        user, _ = auth.authenticate(request)  # type: ignore
+        user, _ = auth.authenticate(request)
 
         self.assertEqual(user, self.user)
 
@@ -261,7 +261,7 @@ class AccessTokenAuthenticationTest(TestCase):
 
         auth = AccessTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.INVALID_ACCESS_TOKEN[0]
@@ -304,7 +304,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         request.COOKIES = {"refresh_token": self.refresh_token}
 
         auth = RefreshTokenAuthentication()
-        user, token = auth.authenticate(request)  # type: ignore
+        user, token = auth.authenticate(request)
 
         self.assertEqual(user, self.user)
         self.assertIsNotNone(token)
@@ -320,7 +320,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, SessionError.SESSION_NOT_FOUND[0]
@@ -335,7 +335,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.TOKEN_NOT_PROVIDE[0]
@@ -348,7 +348,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, AuthenticationError.TOKEN_NOT_PROVIDE[0]
@@ -361,7 +361,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -377,7 +377,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -390,7 +390,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -404,7 +404,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, UserAccountError.USER_ACCOUNT_INACTIVE[0]
@@ -423,7 +423,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(
             context.exception.error_code, UserAccountError.USER_NOT_EXIST[0]
@@ -436,7 +436,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -450,7 +450,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -467,7 +467,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         request.COOKIES = {"refresh_token": token}
 
         auth = RefreshTokenAuthentication()
-        user, _ = auth.authenticate(request)  # type: ignore
+        user, _ = auth.authenticate(request)
 
         self.assertEqual(user, self.user)
 
@@ -480,7 +480,7 @@ class RefreshTokenAuthenticationTest(TestCase):
 
         auth = RefreshTokenAuthentication()
         with self.assertRaises(APIError) as context:
-            auth.authenticate(request)  # type: ignore
+            auth.authenticate(request)
 
         self.assertEqual(context.exception.error_code, SessionError.SESSION_EXPIRE[0])
 
@@ -507,7 +507,7 @@ class RefreshTokenAuthenticationTest(TestCase):
         request.COOKIES = {"refresh_token": token}
 
         auth = RefreshTokenAuthentication()
-        user, _ = auth.authenticate(request)  # type: ignore
+        user, _ = auth.authenticate(request)
         self.assertEqual(user, other_user)
 
 

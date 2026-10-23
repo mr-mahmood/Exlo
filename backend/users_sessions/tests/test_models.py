@@ -1,5 +1,5 @@
 # user_sessions/tests/test_models.py
-# type: ignore
+
 
 from django.test import TestCase, RequestFactory
 from django.utils import timezone

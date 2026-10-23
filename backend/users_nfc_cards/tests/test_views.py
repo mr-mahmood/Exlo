@@ -1,5 +1,5 @@
 # users_nfc_cards/tests/test_views.py
-# type: ignore
+
 
 from django.conf import settings
 from django.core.cache import cache

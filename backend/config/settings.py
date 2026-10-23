@@ -3,13 +3,15 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
-load_dotenv()
-
 # ============================================================================
 # Base
 # ============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
-DEBUG = os.getenv("DEBUG", "False").lower() == "true"
+
+PROJECT_ROOT = BASE_DIR.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 if DEBUG:
@@ -106,29 +108,23 @@ ASGI_APPLICATION = "config.asgi.application"
 # ============================================================================
 import dj_database_url
 
-if DEBUG:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
-else:
-    DATABASES = {
-        "default": dj_database_url.config(
-            default=(
-                f"postgresql://{os.getenv('POSTGRES_USER')}:"
-                f"{os.getenv('POSTGRES_PASSWORD')}@"
-                f"{os.getenv('POSTGRES_HOST')}:"
-                f"{os.getenv('POSTGRES_PORT')}/"
-                f"{os.getenv('POSTGRES_DB')}"
-            ),
-            conn_max_age=0,
-            ssl_require=os.getenv("DB_SSL_REQUIRE", "False").lower() == "true",
-        )
-    }
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost" if DEBUG else "pgbouncer")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432" if DEBUG else "6432")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "exlo")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "exlo")
 
-    DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
+DATABASES = {
+    "default": dj_database_url.config(
+        default=(
+            f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
+            f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+        ),
+        conn_max_age=0,
+        ssl_require=False,
+    )
+}
+DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 
 # ============================================================================
 # Auth
@@ -209,123 +205,71 @@ REST_FRAMEWORK = {
 # ============================================================================
 # JWT Settings
 # ============================================================================
-if DEBUG:
-    SIMPLE_JWT = {
-        "ACCESS_TOKEN_LIFETIME": timedelta(days=5),
-        "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
-        "ROTATE_REFRESH_TOKENS": True,
-        "BLACKLIST_AFTER_ROTATION": True,
-        "AUTH_HEADER_TYPES": ("Bearer",),
-        "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-        "USER_ID_FIELD": "id",
-        "USER_ID_CLAIM": "key_1",
-    }
-else:
-    SIMPLE_JWT = {
-        "ACCESS_TOKEN_LIFETIME": timedelta(
-            hours=int(os.getenv("JWT_ACCESS_HOURS", 1)),
-        ),
-        "REFRESH_TOKEN_LIFETIME": timedelta(
-            days=int(os.getenv("JWT_REFRESH_DAYS", 15)),
-        ),
-        "ROTATE_REFRESH_TOKENS": True,
-        "BLACKLIST_AFTER_ROTATION": True,
-        "AUTH_HEADER_TYPES": ("Bearer",),
-        "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-        "USER_ID_FIELD": "id",
-        "USER_ID_CLAIM": "key_1",
-    }
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(
+        hours=int(os.getenv("JWT_ACCESS_HOURS", 1)),
+    ),
+    "REFRESH_TOKEN_LIFETIME": timedelta(
+        days=int(os.getenv("JWT_REFRESH_DAYS", 15)),
+    ),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "key_1",
+}
 
 # ============================================================================
-# Channels
+# Channels & Caches & Celery
 # ============================================================================
-if DEBUG:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer",
+REDIS_HOST = "localhost" if DEBUG else "redis"
+REDIS_PORT = "6379"
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"],
+            "capacity": 1500,
+            "expiry": 60,
+            "group_expiry": 86400,
         },
-    }
-else:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [
-                    (
-                        f"redis://:{os.getenv('REDIS_PASSWORD')}"
-                        f"@{os.getenv('REDIS_HOST')}:"
-                        f"{os.getenv('REDIS_PORT')}/0"
-                    )
-                ],
-                "capacity": 1500,
-                "expiry": 60,
-                "group_expiry": 86400,
+    },
+}
+
+
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_KWARGS": {
+                "max_connections": 20,
+                "retry_on_timeout": True,
             },
         },
+        "TIMEOUT": 300,
     }
+}
 
-# ============================================================================
-# Caches
-# ============================================================================
-if DEBUG:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer",
-        },
-    }
-else:
-    CACHES = {
-        "default": {
-            "BACKEND": "django_redis.cache.RedisCache",
-            "LOCATION": (
-                f"redis://:{os.getenv('REDIS_PASSWORD')}"
-                f"@{os.getenv('REDIS_HOST')}:"
-                f"{os.getenv('REDIS_PORT')}/1"
-            ),
-            "OPTIONS": {
-                "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "PARSER_CLASS": "redis.connection.HiredisParser",
-                "CONNECTION_POOL_KWARGS": {
-                    "max_connections": 20,
-                    "retry_on_timeout": True,
-                },
-            },
-            "TIMEOUT": 300,
-        }
-    }
 
-# ============================================================================
-# Celery
-# ============================================================================
-if DEBUG:
-    CELERY_TASK_ALWAYS_EAGER = True
-    CELERY_TASK_EAGER_PROPAGATES = True
-    # Use memory broker for development
-    CELERY_BROKER_URL = "memory://"
-    CELERY_RESULT_BACKEND = "cache"
+CELERY_BROKER_URL = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/2"
+CELERY_RESULT_BACKEND = f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/3"
 
-    CELERY_TIMEZONE = TIME_ZONE
-    CELERY_ENABLE_UTC = True
-else:
-    CELERY_BROKER_URL = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/2"
-    CELERY_RESULT_BACKEND = f"redis://:{os.getenv('REDIS_PASSWORD')}@{os.getenv('REDIS_HOST')}:{os.getenv('REDIS_PORT')}/3"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
 
-    # Time limits
-    CELERY_TASK_TIME_LIMIT = 300  # 5 minutes hard limit
-    CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minutes soft limit
-
-    # Worker settings
-    CELERY_WORKER_MAX_TASKS_PER_CHILD = 500  # Prevent memory leaks
-    CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Fair distribution
-    CELERY_TASK_ACKS_LATE = True  # Acknowledge after execution
-
-    # Connection settings
-    CELERY_BROKER_CONNECTION_TIMEOUT = 30
-    CELERY_BROKER_HEARTBEAT = 30
-    CELERY_BROKER_POOL_LIMIT = 10
-
-    CELERY_TIMEZONE = TIME_ZONE
-    CELERY_ENABLE_UTC = True
+CELERY_TASK_TIME_LIMIT = 300
+CELERY_TASK_SOFT_TIME_LIMIT = 240
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 500
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_ACKS_LATE = True
+CELERY_BROKER_CONNECTION_TIMEOUT = 30
+CELERY_BROKER_HEARTBEAT = 30
+CELERY_BROKER_POOL_LIMIT = 10
 
 # ============================================
 # CELERY BEAT

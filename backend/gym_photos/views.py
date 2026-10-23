@@ -20,7 +20,7 @@ class GymPhotosAPIView(APIView):
     def get(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id)
 
-        photos = gym.photos.all()  # type: ignore
+        photos = gym.photos.all()
 
         serializer = self.serializer_class(
             photos,

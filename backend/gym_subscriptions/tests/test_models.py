@@ -1,5 +1,4 @@
 # gym_subscriptions/tests/test_models.py
-# type: ignore
 
 
 from datetime import timedelta

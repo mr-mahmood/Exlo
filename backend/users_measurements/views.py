@@ -139,7 +139,7 @@ class MeasurementPhotosView(APIView):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        photo_type = serializer.validated_data["type"]  # type: ignore
+        photo_type = serializer.validated_data["type"]
 
         old_photo = MeasurementPhotos.objects.filter(
             measurements__id=measurement_id,

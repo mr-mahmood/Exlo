@@ -46,14 +46,14 @@ class GymSubscriptionsManager(models.Manager):
                 status=GymSubscription.Status.ACTIVE,
             )
             .first()
-        )  # type: ignore
+        )
 
         if subscription is None:
             raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
         if subscription.is_expired:
             subscription.expire(reason=subscription.expire_reason)
-            subscription = self._promote_next_for_gym(subscriber, gym)  # type: ignore
+            subscription = self._promote_next_for_gym(subscriber, gym)
             if subscription is None or not subscription.is_active:
                 raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
@@ -74,7 +74,7 @@ class GymSubscriptionsManager(models.Manager):
         if order_item.item_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
             raise APIError(GymSubscriptionError.INVALID_ORDER_ITEM)
 
-        plan: GymMembershipPlan = order_item.commerce_product.gym_membership_plan # type: ignore
+        plan: GymMembershipPlan = order_item.commerce_product.gym_membership_plan
 
         with transaction.atomic():
             subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
@@ -267,7 +267,7 @@ class GymSubscription(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.subscriber_id} - {self.plan_id} [{self.status}]"  # type: ignore
+        return f"{self.subscriber_id} - {self.plan_id} [{self.status}]"
 
     @property
     def is_expired_by_time(self) -> bool:

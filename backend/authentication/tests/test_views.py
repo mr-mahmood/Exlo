@@ -1,5 +1,5 @@
 # authentication/tests/test_views.py
-# type: ignore
+
 
 import time
 from django.test import TestCase
@@ -75,8 +75,8 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["new_user"], False)  # type: ignore
-        self.assertEqual(response.data["user"]["phone_number"], "09123456789")  # type: ignore
+        self.assertEqual(response.data["new_user"], False)
+        self.assertEqual(response.data["user"]["phone_number"], "09123456789")
 
         # Check cookies set
         self.assertIn("access_token", response.cookies)
@@ -95,8 +95,8 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["new_user"], True)  # type: ignore
-        self.assertIsNone(response.data["user"])  # type: ignore
+        self.assertEqual(response.data["new_user"], True)
+        self.assertIsNone(response.data["user"])
 
         # Check cache for signup
         cache_key = f"signup_verified_09123456788"
@@ -200,7 +200,9 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_request_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])  # type: ignore
+        self.assertEqual(
+            response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0]
+        )
 
     # --- LOGIN VERIFY TESTS ---
 
@@ -217,7 +219,9 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])  # type: ignore
+        self.assertEqual(
+            response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
+        )
 
     def test_login_verify_missing_otp(self):
         """Test login verify with missing OTP"""
@@ -225,7 +229,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
 
     def test_login_verify_missing_phone(self):
         """Test login verify with missing phone number"""
@@ -233,7 +237,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
 
     def test_login_verify_existing_user_sets_cookies(self):
         """Test that login verify sets proper cookies for existing user"""
@@ -260,7 +264,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["new_user"], True)  # type: ignore
+        self.assertEqual(response.data["new_user"], True)
 
         # Should NOT have cookies (user not created yet)
         self.assertNotIn("access_token", response.cookies)
@@ -287,7 +291,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], SessionError.SESSION_EXPIRE[0])  # type: ignore
+        self.assertEqual(response.data["error_code"], SessionError.SESSION_EXPIRE[0])
 
     def test_refresh_inactive_user(self):
         """Test refresh for inactive user"""
@@ -305,7 +309,9 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])  # type: ignore
+        self.assertEqual(
+            response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
+        )
 
     def test_refresh_rotates_tokens(self):
         """Test that refresh rotates the token"""
@@ -407,14 +413,14 @@ class AuthenticationViewsTest(TestCase):
                     {"phone_number": phone},
                     REMOTE_ADDR=f"192.168.1.{idx + 10}",
                 )
-                self.assertEqual(response.status_code, status.HTTP_200_OK)  # type: ignore
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
 
             response = client.post(
                 self.login_request_url,
                 {"phone_number": phone},
                 REMOTE_ADDR=f"192.168.1.{idx + 10}",
             )
-            self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)  # type: ignore
+            self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
 
     def test_login_request_throttle_ip(self):
         """Test rate limiting by IP address"""
@@ -464,7 +470,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["new_user"], True)  # type: ignore
+        self.assertEqual(response.data["new_user"], True)
 
         # Check cache for signup
         cache_key = f"signup_verified_09123456788"

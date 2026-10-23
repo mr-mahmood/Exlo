@@ -1,5 +1,5 @@
 # gym_devices/tests/test_authentication.py
-# type: ignore
+
 
 import uuid
 from django.test import TestCase

@@ -1,5 +1,5 @@
 # gym_photos/tests/test_models.py
-# type: ignore
+
 
 import uuid
 from django.test import TestCase
@@ -34,7 +34,7 @@ class GymPhotosModelTest(TestCase):
         gym_photo1 = GymPhotos.objects.create(gym=self.gym, photo=self.photo)
         gym_photo2 = GymPhotos.objects.create(gym=self.gym, photo=self.photo)
 
-        photos = self.gym.photos.all()  # type: ignore
+        photos = self.gym.photos.all()
         self.assertEqual(photos.count(), 2)
         self.assertIn(gym_photo1, photos)
         self.assertIn(gym_photo2, photos)

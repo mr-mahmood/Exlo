@@ -22,12 +22,12 @@ urlpatterns = [
         name="create",
     ),
     path(
-        "<uuid:gym_id>/devices/<uuid:device_id>/deactivate",
+        "<uuid:gym_id>/devices/<uuid:device_id>/deactivate/",
         GymDevicesDeActivateAPIView.as_view(),
         name="deactivate",
     ),
     path(
-        "<uuid:gym_id>/devices/<uuid:device_id>/activate",
+        "<uuid:gym_id>/devices/<uuid:device_id>/activate/",
         GymDevicesActivateAPIView.as_view(),
         name="activate",
     ),

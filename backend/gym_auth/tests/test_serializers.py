@@ -1,5 +1,5 @@
 # gym_auth/tests/test_serializers.py
-# type: ignore
+
 
 from django.test import TestCase
 from gym.models import Gym

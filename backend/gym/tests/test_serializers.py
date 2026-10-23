@@ -1,5 +1,5 @@
 # gym/tests/test_serializers.py
-# type: ignore
+
 
 import uuid
 from django.test import TestCase
