@@ -4,11 +4,7 @@ from rest_framework import serializers
 from commerce_wallet.models import Wallet
 from users.models import User
 from core.errors import APIError, SignUpError
-from users.validators import (
-    validate_name,
-    validate_date_of_birth,
-    validate_phone,
-)
+from users.validators import validate_name, validate_date_of_birth, validate_phone
 from rest_framework import serializers
 from django.conf import settings
 from .models import User

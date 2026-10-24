@@ -1,5 +1,7 @@
-Django
+django
+django-stubs 
 djangorestframework
+djangorestframework-stubs
 djangorestframework-simplejwt
 django-filter
 django-cors-headers
