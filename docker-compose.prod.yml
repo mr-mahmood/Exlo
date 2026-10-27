@@ -1,3 +1,5 @@
+name: exlo_prod
+
 services:
   db:
     image: postgres:17
@@ -7,8 +9,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    command: [ "postgres", "-c", "max_connections=120" ]
+      - db:/var/lib/postgresql/data
+    command: [ "postgres", "-c", "max_connections=100" ]
     healthcheck:
       test:
         - CMD-SHELL
@@ -40,7 +42,7 @@ services:
 
       # Pool configuration
       - POOL_MODE=transaction
-      - MAX_CLIENT_CONN=300
+      - MAX_CLIENT_CONN=200
       - DEFAULT_POOL_SIZE=90
       - RESERVE_POOL_SIZE=10
       - RESERVE_POOL_TIMEOUT=3
@@ -70,9 +72,6 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    environment:
-      POSTGRES_HOST: pgbouncer
-      POSTGRES_PORT: "6432"
     volumes:
       - backend_static:/app/static
       - backend_media:/app/media
@@ -87,14 +86,47 @@ services:
       - sh
       - -c
       - >
-        python manage.py collectstatic --noinput && python manage.py migrate --noinput && uvicorn config.asgi:application --host 0.0.0.0 --port 8000
+        python manage.py collectstatic --noinput && python manage.py migrate --noinput && uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers 12
     ports:
       - "8000:8000"
     networks:
       - exlo_network
 
+  celery:
+    image: mrmahmood/exlo-backend:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - exlo_network
+    command: celery -A config worker --loglevel=info --concurrency=2
+    healthcheck:
+      test: ["CMD", "celery", "-A", "config", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  celery-beat:
+    image: mrmahmood/exlo-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - exlo_network
+    command: celery -A config beat --loglevel=info
+
+
 volumes:
-  postgres_data:
+  db:
   backend_static:
   backend_media:
 

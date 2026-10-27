@@ -6,19 +6,16 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.utils import timezone
-from django.conf import settings
 from django.db import IntegrityError, transaction
 from users.models import User
 from users_referrals.models import Referral
 from core.errors import ReferralError, APIError, UserAccountError, AuthenticationError
-from django.conf import settings
 
 
 class UserReferralPIViewTest(TestCase):
     """Test user referral management views"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         # Create main user (referrer)
@@ -557,7 +554,6 @@ class UserReferralPIViewIntegrationTest(TestCase):
     """Integration tests for UserReferralPIView with actual URL routing"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         self.user = User.objects.create_user(

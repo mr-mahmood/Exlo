@@ -9,25 +9,13 @@ from gym.models import Gym
 class UserGymRoleManager(models.Manager):
 
     def create_owner(self, user, gym):
-        return self.create(
-            user=user,
-            gym=gym,
-            role=UserGymRole.Role.OWNER,
-        )
+        return self.create(user=user, gym=gym, role=UserGymRole.Role.OWNER)
 
     def create_coach(self, user, gym):
-        return self.create(
-            user=user,
-            gym=gym,
-            role=UserGymRole.Role.COACH,
-        )
+        return self.create(user=user, gym=gym, role=UserGymRole.Role.COACH)
 
     def create_staff(self, user, gym):
-        return self.create(
-            user=user,
-            gym=gym,
-            role=UserGymRole.Role.STAFF,
-        )
+        return self.create(user=user, gym=gym, role=UserGymRole.Role.STAFF)
 
 
 class UserGymRole(models.Model):

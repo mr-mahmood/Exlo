@@ -13,6 +13,7 @@ from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymLocker
 from users_nfc_cards.models import UserNfcCard
 from users.models import User
+from core.cache import GYM_LOCKERS, cache_key, get_cache, invalidate_cache
 
 
 class LockerListAPIView(APIView):
@@ -21,19 +22,22 @@ class LockerListAPIView(APIView):
     serializer_class = GymLockerSerializer
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id)
-        lockers = GymLocker.objects.get_gym_lockers(gym)
+        key = cache_key(GYM_LOCKERS, gym_id, request=request)
 
-        paginator = self.pagination_class()
-        result_page = paginator.paginate_queryset(lockers, request, view=self)
+        def build():
+            gym = Gym.objects.get_gym(gym_id)
+            lockers = GymLocker.objects.get_gym_lockers(gym)
+            paginator = self.pagination_class()
+            result_page = paginator.paginate_queryset(lockers, request, view=self)
+            serializer = self.serializer_class(
+                result_page,
+                many=True,
+                context={"request": request},
+            )
+            return paginator.get_paginated_data(serializer.data, "lockers")
 
-        serializer = self.serializer_class(
-            result_page,
-            many=True,
-            context={"request": request},
-        )
-
-        return paginator.get_paginated_response(serializer.data, "lockers")
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class LockerCreateAPIView(APIView):
@@ -43,6 +47,7 @@ class LockerCreateAPIView(APIView):
         count = request.data.get("count")
         gym = Gym.objects.get_gym(gym_id)
         lockers = GymLocker.objects.add_lockers(gym=gym, count=count)
+        invalidate_cache(GYM_LOCKERS, gym.id)
         return Response(status=status.HTTP_201_CREATED)
 
 
@@ -53,6 +58,7 @@ class LockerActivateAPIView(APIView):
         gym = Gym.objects.get_gym(gym_id)
         locker: GymLocker = GymLocker.objects.get_lock(gym, locker_id)
         locker.activate()
+        invalidate_cache(GYM_LOCKERS, gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -63,6 +69,7 @@ class LockerDeActivateAPIView(APIView):
         gym = Gym.objects.get_gym(gym_id)
         locker: GymLocker = GymLocker.objects.get_lock(gym, locker_id)
         locker.deactivate()
+        invalidate_cache(GYM_LOCKERS, gym.id)
         return Response(status=status.HTTP_200_OK)
 
 

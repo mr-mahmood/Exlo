@@ -3,26 +3,21 @@
 
 from datetime import timedelta
 from unittest.mock import patch
-
 from dateutil.relativedelta import relativedelta
 from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
-
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from core.errors import APIError, GymSubscriptionError
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
 from users.models import User
-from django.conf import settings
 from django.db import transaction
 
 
 class GymSubscriptionTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
-
         self.user = User.objects.create_user(
             phone_number="09120000001",
             password="testpassword123",

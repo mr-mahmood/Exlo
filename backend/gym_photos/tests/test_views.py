@@ -13,14 +13,12 @@ from users.models import User
 from gym.models import Gym
 from gym_photos.models import GymPhotos
 from gym_auth.models import UserGymRole
-from django.conf import settings
 
 
 class GymPhotosViewsTest(TestCase):
     """Test cases for GymPhotos views."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         # Create users

@@ -10,13 +10,16 @@ class CustomPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 100
 
+    def get_paginated_data(self, data, result_name):
+        return {
+            "next": self.get_next_link(),
+            "previous": self.get_previous_link(),
+            result_name: data,
+        }
+
     def get_paginated_response(self, data, result_name):
         return Response(
-            {
-                "next": self.get_next_link(),
-                "previous": self.get_previous_link(),
-                f"{result_name}": data,
-            },
+            self.get_paginated_data(data, result_name),
             status=status.HTTP_200_OK,
         )
 
@@ -26,12 +29,15 @@ class LockerPagination(PageNumberPagination):
     page_size_query_param = "page_size"
     max_page_size = 150
 
+    def get_paginated_data(self, data, result_name):
+        return {
+            "next": self.get_next_link(),
+            "previous": self.get_previous_link(),
+            result_name: data,
+        }
+
     def get_paginated_response(self, data, result_name):
         return Response(
-            {
-                "next": self.get_next_link(),
-                "previous": self.get_previous_link(),
-                f"{result_name}": data,
-            },
+            self.get_paginated_data(data, result_name),
             status=status.HTTP_200_OK,
         )

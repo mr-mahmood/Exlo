@@ -1,4 +1,5 @@
 # users/tests/test_serializers.py
+
 from typing import cast
 from django.conf import settings
 from django.test import TestCase
@@ -11,14 +12,12 @@ from core.errors import APIError, UserValidationError, SignUpError, UserAccountE
 from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 import io
-import os
 
 
 class UserSignupSerializerTest(TestCase):
     """Test UserSignupSerializer"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.valid_data = {
             "phone_number": "09123456789",
             "first_name": "John",
@@ -286,7 +285,6 @@ class UserProfileSerializerTest(TestCase):
     """Test UserProfileSerializer"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09123456789",
             first_name="John",
@@ -394,7 +392,6 @@ class UserProfilePictureSerializerTest(TestCase):
     """Test UserProfileSerializer with profile picture handling"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09123456789",
             first_name="John",

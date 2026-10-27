@@ -3,15 +3,12 @@
 
 from datetime import timedelta
 from uuid import uuid7
-
-from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from core.errors import (
     GymDeviceError,
@@ -32,7 +29,6 @@ from gym_locks.models import GymLocker
 
 class NfcFlowTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
         cache.clear()
 
         self.client = APIClient()

@@ -8,6 +8,7 @@ from gym.models import Gym
 from core.pagination import CustomPagination
 from .models import GymAnnouncement
 from .serializers import GymAnnouncementSerializer
+from core.cache import GYM_ANNOUNCEMENTS, cache_key, get_cache, invalidate_cache
 
 
 class GymAnnouncementAPIView(APIView):
@@ -15,23 +16,25 @@ class GymAnnouncementAPIView(APIView):
     pagination_class = CustomPagination
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id)
-
-        announcements = GymAnnouncement.objects.filter(
-            gym=gym,
-            status=GymAnnouncement.Status.PUBLISHED,
-        ).select_related("author")
-
         paginator = self.pagination_class()
-        result_page = paginator.paginate_queryset(announcements, request, view=self)
+        key = cache_key(GYM_ANNOUNCEMENTS, gym_id, request=request)
 
-        serializer = self.serializer_class(
-            result_page,
-            many=True,
-            context={"request": request},
-        )
+        def build():
+            gym = Gym.objects.get_gym(gym_id=gym_id)
+            announcements = GymAnnouncement.objects.filter(
+                gym=gym,
+                status=GymAnnouncement.Status.PUBLISHED,
+            ).select_related("author")
+            result_page = paginator.paginate_queryset(announcements, request, view=self)
+            serializer = self.serializer_class(
+                result_page,
+                many=True,
+                context={"request": request},
+            )
+            return paginator.get_paginated_data(serializer.data, "announcements")
 
-        return paginator.get_paginated_response(serializer.data, "announcements")
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class GymAnnouncementCreateAPIView(APIView):
@@ -46,8 +49,9 @@ class GymAnnouncementCreateAPIView(APIView):
             context={"request": request, "gym": gym},
         )
         serializer.is_valid(raise_exception=True)
-
         announcement = serializer.save(author=request.user)
+
+        invalidate_cache(GYM_ANNOUNCEMENTS, gym.id)
 
         return Response(
             {
@@ -79,7 +83,9 @@ class GymAnnouncementUpdateAPIView(APIView):
             partial=True,
         )
         serializer.is_valid(raise_exception=True)
-        announcement = serializer.save(author=request.user)
+        serializer.save(author=request.user)
+
+        invalidate_cache(GYM_ANNOUNCEMENTS, gym.id)
 
         return Response({"announcement": serializer.data}, status=status.HTTP_200_OK)
 
@@ -94,7 +100,8 @@ class GymAnnouncementDeleteAPIView(APIView):
             announcement_id=announcement_id,
             gym=gym,
         )
-
         announcement.delete()
+
+        invalidate_cache(GYM_ANNOUNCEMENTS, gym.id)
 
         return Response(status=status.HTTP_200_OK)

@@ -9,7 +9,7 @@ from gym_auth.permissions import IsAdminOrGymOwner
 from gym.models import Gym
 from gym.serializers import GymSerializer
 from core.pagination import CustomPagination
-from typing import cast
+from core.cache import GYM_LIST, GYM_DETAIL, cache_key, get_cache, invalidate_cache
 
 
 class GymListAPIView(APIView):
@@ -19,18 +19,21 @@ class GymListAPIView(APIView):
     pagination_class = CustomPagination
 
     def get(self, request):
-        gyms = Gym.objects.filter(is_active=True).prefetch_related("photos")
-
         paginator = self.pagination_class()
-        result_page = paginator.paginate_queryset(gyms, request, view=self)
+        key = cache_key(GYM_LIST, request=request)
 
-        serializer = self.serializer_class(
-            result_page,
-            many=True,
-            context={"request": request},
-        )
+        def build():
+            gyms = Gym.objects.filter(is_active=True).prefetch_related("photos")
+            result_page = paginator.paginate_queryset(gyms, request, view=self)
+            serializer = self.serializer_class(
+                result_page,
+                many=True,
+                context={"request": request},
+            )
+            return paginator.get_paginated_data(serializer.data, "gyms")
 
-        return paginator.get_paginated_response(serializer.data, "gyms")
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class GymDetailAPIView(APIView):
@@ -39,15 +42,15 @@ class GymDetailAPIView(APIView):
     serializer_class = GymSerializer
 
     def get(self, request, gym_id):
+        key = cache_key(GYM_DETAIL, gym_id)
 
-        gym = Gym.objects.get_gym(gym_id)
+        def build():
+            gym = Gym.objects.get_gym(gym_id)
+            serializer = self.serializer_class(gym, context={"request": request})
+            return {"gym": serializer.data}
 
-        serializer = self.serializer_class(
-            gym,
-            context={"request": request},
-        )
-
-        return Response({"gym": serializer.data}, status=status.HTTP_200_OK)
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class GymCreateAPIView(APIView):
@@ -60,16 +63,12 @@ class GymCreateAPIView(APIView):
             context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
+        gym = serializer.save()
 
-        gym = cast(Gym, serializer.save())
+        invalidate_cache(GYM_LIST)
 
         return Response(
-            {
-                "gym": self.serializer_class(
-                    gym,
-                    context={"request": request},
-                ).data,
-            },
+            {"gym": self.serializer_class(gym, context={"request": request}).data},
             status=status.HTTP_201_CREATED,
         )
 
@@ -90,12 +89,10 @@ class GymUpdateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response(
-            {
-                "gym": serializer.data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        invalidate_cache(GYM_DETAIL, gym.id)
+        invalidate_cache(GYM_LIST)
+
+        return Response({"gym": serializer.data}, status=status.HTTP_200_OK)
 
 
 class GymDeleteAPIView(APIView):
@@ -103,8 +100,10 @@ class GymDeleteAPIView(APIView):
 
     def delete(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=False)
-
         gym.deactivate()
+
+        invalidate_cache(GYM_DETAIL, gym.id)
+        invalidate_cache(GYM_LIST)
 
         return Response(status=status.HTTP_200_OK)
 
@@ -114,7 +113,9 @@ class GymRestoreAPIView(APIView):
 
     def post(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=False)
-
         gym.activate()
+
+        invalidate_cache(GYM_DETAIL, gym.id)
+        invalidate_cache(GYM_LIST)
 
         return Response(status=status.HTTP_200_OK)

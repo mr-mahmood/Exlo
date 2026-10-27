@@ -2,13 +2,11 @@
 
 
 import uuid
-
 from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
-
 from core.errors import GymDeviceError
 from gym.models import Gym
 from gym_devices.models import GymDevice
@@ -19,7 +17,6 @@ class GymDevicesViewsBaseTestCase(TestCase):
     """Base setup for gym device view tests."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         self.admin_user = User.objects.create_superuser(

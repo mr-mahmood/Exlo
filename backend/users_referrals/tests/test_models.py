@@ -5,7 +5,6 @@ from django.test import TestCase
 from django.db import IntegrityError
 from users.models import User
 from users_referrals.models import Referral
-from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 from django.db import transaction
@@ -16,7 +15,6 @@ class ReferralModelTest(TestCase):
     """Test Referral model"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.referrer = User.objects.create_user(
             phone_number="09123456788",
             first_name="Referrer",

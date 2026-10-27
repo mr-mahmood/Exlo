@@ -16,7 +16,6 @@ from gym_devices.models import GymDevice, GymDeviceManager
 class GymDeviceManagerGetDeviceTests(TestCase):
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym = Gym.objects.create(name="Gym A")
         self.other_gym = Gym.objects.create(name="Gym B")
 
@@ -82,7 +81,6 @@ class GymDeviceManagerGetDeviceTests(TestCase):
 class GymDeviceManagerFindDeviceTests(TestCase):
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym = Gym.objects.create(name="Gym A")
         self.other_gym = Gym.objects.create(name="Gym B")
 
@@ -223,7 +221,6 @@ class GymDeviceManagerFindDeviceTests(TestCase):
 class GymDeviceManagerRegisterDeviceTests(TestCase):
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym = Gym.objects.create(name="Gym A")
 
     def test_register_entrance_device(self):

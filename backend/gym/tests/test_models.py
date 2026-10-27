@@ -11,7 +11,6 @@ class GymModelTest(TestCase):
     """Test cases for Gym model."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym_data = {
             "name": "Test Gym",
             "province": "Test Province",

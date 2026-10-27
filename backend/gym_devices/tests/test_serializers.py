@@ -1,9 +1,7 @@
 # gym_devices/tests/test_serializer.py
 
 
-from django.conf import settings
 from django.test import TestCase
-
 from core.errors import APIError, GymDeviceError
 from gym.models import Gym
 from gym_devices.models import GymDevice
@@ -13,8 +11,6 @@ from gym_devices.serializers import GymDeviceSerializer
 class GymDeviceSerializerTests(TestCase):
 
     def setUp(self):
-        settings.DEBUG = True
-
         self.gym = Gym.objects.create(
             name="Test Gym",
             is_active=True,

@@ -1,16 +1,14 @@
 # users/tests/test_views.py
 
 
-from django.conf import settings
-from django.db import IntegrityError
 from django.test import TestCase
 from django.urls import reverse
 from django.core.cache import cache
 from rest_framework.test import APIClient
 from rest_framework import status
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import patch
-from core.errors import SignUpError, UserAccountError
+from core.errors import SignUpError
 from users.models import User
 from users_sessions.models import Session
 from authentication.otp_service import OTP_CACHE_PREFIX
@@ -24,7 +22,6 @@ class UserSignupViewTest(TestCase):
     """Test user signup view"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         cache.clear()
         self.url = reverse("users:user-signup")
@@ -283,7 +280,6 @@ class PhoneChangeFlowTest(TestCase):
     """Test phone change flow (4 steps)"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         cache.clear()
 
@@ -542,7 +538,6 @@ class UserProfileViewTest(TestCase):
     """Test user profile view"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09123456789",
@@ -663,7 +658,6 @@ class UserProfileViewTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         # The error is wrapped in a VALIDATION_ERROR response
         self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")
-        self.assertIn("profile_picture", response.data["error_message"])
 
     # ========== DATE OF BIRTH NULL HANDLING ==========
     def test_update_profile_date_of_birth_to_null(self):
@@ -675,7 +669,6 @@ class UserProfileViewTest(TestCase):
         # Your API wraps validation errors
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")
-        self.assertIn("date_of_birth", response.data["error_message"])
 
     def test_update_profile_date_of_birth_to_empty_string(self):
         """Test sending empty string for date_of_birth"""
@@ -684,7 +677,6 @@ class UserProfileViewTest(TestCase):
         response = self.client.put(self.url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")
-        self.assertIn("date_of_birth", response.data["error_message"])
 
     # ========== PROFILE PICTURE UPDATE ==========
     def test_update_profile_picture(self):

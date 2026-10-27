@@ -11,13 +11,14 @@ from users.models import User
 from gym.models import Gym
 from gym_auth.models import UserGymRole
 from django.conf import settings
+from django.core.cache import cache
 
 
 class GymViewsTest(TestCase):
     """Test cases for Gym views (CRUD operations)."""
 
     def setUp(self):
-        settings.DEBUG = True
+        cache.clear()
         self.client = APIClient()
 
         # Create users

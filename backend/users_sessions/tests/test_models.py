@@ -5,14 +5,12 @@ from django.test import TestCase, RequestFactory
 from django.utils import timezone
 from users.models import User
 from users_sessions.models import Session
-from django.conf import settings
 
 
 class SessionModelTest(TestCase):
     """Test Session model"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09123456789",
             first_name="John",

@@ -4,6 +4,14 @@ from datetime import timedelta
 from dotenv import load_dotenv
 
 # ============================================================================
+# Application environment
+# ============================================================================
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+IS_DEVELOPMENT = APP_ENV == "development"
+IS_LOAD_TEST = APP_ENV == "apiloadtest"
+IS_PRODUCTION = APP_ENV == "production"
+
+# ============================================================================
 # Base
 # ============================================================================
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+DEBUG = APP_ENV == "development"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 if DEBUG:
@@ -75,6 +83,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+if not IS_PRODUCTION:
+    MIDDLEWARE.insert(0, "core.middleware.RequestTimingMiddleware")
 
 ROOT_URLCONF = "config.urls"
 
@@ -108,8 +118,8 @@ ASGI_APPLICATION = "config.asgi.application"
 # ============================================================================
 import dj_database_url
 
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost" if DEBUG else "pgbouncer")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432" if DEBUG else "6432")
+POSTGRES_HOST = "localhost" if IS_DEVELOPMENT else "pgbouncer"
+POSTGRES_PORT = "5432" if IS_DEVELOPMENT else "6432"
 POSTGRES_USER = os.getenv("POSTGRES_USER", "exlo")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
 POSTGRES_DB = os.getenv("POSTGRES_DB", "exlo")
@@ -190,10 +200,10 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.UserRateThrottle",  # For authenticated users
     ],
     "DEFAULT_THROTTLE_RATES": {
-        "anon": "100/min",  # Rate limit for unauthenticated users
-        "user": "200/min",  # Rate limit for authenticated users
-        "otp_phone": "5/day",
-        "otp_ip": "10/day",
+        "anon": "100/min" if IS_PRODUCTION else "10000000/day",
+        "user": "200/min" if IS_PRODUCTION else "10000000/day",
+        "otp_phone": "5/day" if IS_PRODUCTION else "10000000/day",
+        "otp_ip": "10/day" if IS_PRODUCTION else "100000000/day",
     },
     "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
     # Date format
@@ -223,7 +233,7 @@ SIMPLE_JWT = {
 # ============================================================================
 # Channels & Caches & Celery
 # ============================================================================
-REDIS_HOST = "localhost" if DEBUG else "redis"
+REDIS_HOST = "localhost" if IS_DEVELOPMENT else "redis"
 REDIS_PORT = "6379"
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 
@@ -246,9 +256,10 @@ CACHES = {
         "LOCATION": f"redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "CONNECTION_POOL_CLASS": "redis.BlockingConnectionPool",
             "CONNECTION_POOL_KWARGS": {
-                "max_connections": 20,
-                "retry_on_timeout": True,
+                "max_connections": 150,
+                "timeout": 1,
             },
         },
         "TIMEOUT": 300,
@@ -290,36 +301,7 @@ CELERY_BEAT_SCHEDULE = {
 # ============================================================================
 # Cookies & CORS
 # ============================================================================
-if DEBUG:
-    # Development settings (localhost)
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SECURE = False  # Allow HTTP on localhost
-    SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_DOMAIN = None  # localhost doesn't need domain
-    CSRF_COOKIE_SECURE = False  # Allow HTTP on localhost
-    CSRF_COOKIE_SAMESITE = "Lax"
-    CSRF_COOKIE_DOMAIN = None
-
-    # CORS/CSRF for localhost
-    CSRF_TRUSTED_ORIGINS = [
-        "http://localhost",
-        "http://127.0.0.1",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    CORS_ALLOWED_ORIGINS = [
-        "http://localhost",
-        "http://127.0.0.1",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
-    CORS_ALLOW_CREDENTIALS = True
-
-else:
+if IS_PRODUCTION:
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
@@ -350,6 +332,34 @@ else:
 
     SECURE_BROWSER_XSS_FILTER = True
     X_FRAME_OPTIONS = "DENY"
+else:
+    # Development settings (localhost)
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SECURE = False  # Allow HTTP on localhost
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_DOMAIN = None  # localhost doesn't need domain
+    CSRF_COOKIE_SECURE = False  # Allow HTTP on localhost
+    CSRF_COOKIE_SAMESITE = "Lax"
+    CSRF_COOKIE_DOMAIN = None
+
+    # CORS/CSRF for localhost
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost",
+        "http://127.0.0.1",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    CORS_ALLOW_CREDENTIALS = True
 
 # ============================================================================
 # File Upload
@@ -379,9 +389,6 @@ SMSIR_API_KEY = os.getenv("SMSIR_API_KEY")
 # ============================================================================
 # Logging
 # ============================================================================
-LOG_DIR = BASE_DIR / "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
-
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -389,15 +396,12 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
         },
-        "file": {
-            "class": "logging.FileHandler",
-            "filename": BASE_DIR / "logs" / "django.log",
-        },
     },
     "loggers": {
         "django": {
-            "handlers": ["console", "file"],
+            "handlers": ["console"],
             "level": "INFO",
+            "propagate": False,
         },
     },
 }

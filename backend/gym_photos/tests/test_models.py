@@ -6,14 +6,12 @@ from django.test import TestCase
 from gym.models import Gym
 from django.core.files.uploadedfile import SimpleUploadedFile
 from gym_photos.models import GymPhotos
-from django.conf import settings
 
 
 class GymPhotosModelTest(TestCase):
     """Test cases for GymPhotos model."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym = Gym.objects.create(name="Test Gym")
         self.photo_content = b"fake image content"
         self.photo = SimpleUploadedFile(

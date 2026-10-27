@@ -13,7 +13,6 @@ class GymSerializerTest(TestCase):
     """Test cases for GymSerializer."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym_data = {
             "name": "Test Gym",
             "province": "Test Province",

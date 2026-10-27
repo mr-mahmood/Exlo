@@ -23,7 +23,6 @@ class AuthenticationViewsTest(TestCase):
     """Test authentication views"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         cache.clear()
 
@@ -509,7 +508,6 @@ class AuthenticationViewsWithBearerTransportTest(TestCase):
     """Test authentication views with X-Auth-Transport: bearer header"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         cache.clear()
 

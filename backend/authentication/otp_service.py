@@ -11,10 +11,10 @@ OTP_EXPIRY_SECONDS = 120
 def generate_otp(phone_number: str):
 
     # Generate secure OTP
-    if settings.DEBUG:
-        otp_code = "123456"
-    else:
+    if settings.IS_PRODUCTION:
         otp_code = str(secrets.randbelow(900000) + 100000)
+    else:
+        otp_code = "123456"
 
     # Hash the OTP before storing
     hashed_otp = hash_secret(otp_code)
@@ -24,7 +24,7 @@ def generate_otp(phone_number: str):
     cache.set(cache_key, hashed_otp, OTP_EXPIRY_SECONDS)
 
     # Send OTP via SMS
-    if not settings.DEBUG:
+    if settings.IS_PRODUCTION:
         from core.sms_task import send_sms_verification_task
 
         send_sms_verification_task.delay(phone_number, otp_code)

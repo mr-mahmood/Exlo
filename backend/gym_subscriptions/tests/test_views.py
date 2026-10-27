@@ -3,7 +3,6 @@
 
 import uuid
 from datetime import timedelta
-from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -19,7 +18,6 @@ from users.models import User
 
 class SubscriptionViewTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         self.user = User.objects.create_user(

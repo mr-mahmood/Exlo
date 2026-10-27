@@ -8,6 +8,7 @@ from gym_auth.permissions import IsAdminOrGymOwner
 from gym.models import Gym
 from gym_plans.serializers import GymMembershipPlanSerializer
 from gym_plans.models import GymMembershipPlan
+from core.cache import GYM_PLANS, cache_key, get_cache, invalidate_cache
 
 
 class GymPlansAPIView(APIView):
@@ -16,16 +17,18 @@ class GymPlansAPIView(APIView):
     serializer_class = GymMembershipPlanSerializer
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id=gym_id)
-        plans = GymMembershipPlan.objects.get_gym_plans(gym=gym)
+        key = cache_key(GYM_PLANS, gym_id)
 
-        serializer = self.serializer_class(
-            plans,
-            many=True,
-            context={"request": request},
-        )
+        def build():
+            gym = Gym.objects.get_gym(gym_id=gym_id)
+            plans = GymMembershipPlan.objects.get_gym_plans(gym=gym)
+            serializer = self.serializer_class(
+                plans, many=True, context={"request": request}
+            )
+            return {"plans": serializer.data}
 
-        return Response({"plans": serializer.data}, status=status.HTTP_200_OK)
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class GymPlansCreateAPIView(APIView):
@@ -45,6 +48,8 @@ class GymPlansCreateAPIView(APIView):
             gym=gym,
             **serializer.validated_data,
         )
+
+        invalidate_cache(GYM_PLANS, gym.id)
 
         return Response(
             {
@@ -79,7 +84,14 @@ class GymPlansUpdateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        return Response({"plan": serializer.data}, status=status.HTTP_200_OK)
+        invalidate_cache(GYM_PLANS, gym.id)
+
+        return Response(
+            {
+                "plan": serializer.data,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class GymPlansDeleteAPIView(APIView):
@@ -95,4 +107,7 @@ class GymPlansDeleteAPIView(APIView):
         )
 
         plan.soft_delete()
+
+        invalidate_cache(GYM_PLANS, gym.id)
+
         return Response(status=status.HTTP_200_OK)

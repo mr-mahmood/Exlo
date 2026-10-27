@@ -10,12 +10,10 @@ from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
 from gym_subscriptions.serializers import GymSubscriptionReadSerializer
 from users.models import User
-from django.conf import settings
 
 
 class GymSubscriptionSerializerTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09120000001",
             password="testpassword123",

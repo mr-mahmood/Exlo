@@ -14,15 +14,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from PIL import Image
 import io
 from django.core.files.storage import default_storage
-from django.conf import settings
 
 
 class UserMeasurementsListViewTest(TestCase):
     """Test suite for UserMeasurementsListView"""
 
     def setUp(self):
-        """Set up test data"""
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09024698787",
@@ -310,8 +307,6 @@ class UserMeasurementDetailViewTest(TestCase):
     """Test suite for UserMeasurementDetailView"""
 
     def setUp(self):
-        """Set up test data"""
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09024698787",
@@ -643,8 +638,6 @@ class UserMeasurementsViewIntegrationTest(TestCase):
     """Integration tests for measurements views"""
 
     def setUp(self):
-        """Set up test data"""
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09024698787",
@@ -836,7 +829,6 @@ class MeasurementPhotosViewTest(TestCase):
     """Test suite for MeasurementPhotosView"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09024698787",
@@ -1019,7 +1011,6 @@ class MeasurementPhotoDetailViewTest(TestCase):
     """Test suite for MeasurementPhotoDetailView"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09024698787",
@@ -1195,7 +1186,6 @@ class MeasurementPhotosIntegrationTest(TestCase):
     """Integration tests for measurement photos"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
         self.user = User.objects.create_user(
             phone_number="09024698787",

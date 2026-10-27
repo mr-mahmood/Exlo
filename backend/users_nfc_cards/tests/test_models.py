@@ -1,12 +1,9 @@
 # users_nfc_cards/tests/test_models.py
 
 from unittest.mock import patch
-
-from django.conf import settings
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.test import TestCase
-
 from core.errors import APIError, UserNfcCardError
 from users.models import User
 from users_nfc_cards.models import UserNfcCard, UserNfcCardManager
@@ -14,7 +11,6 @@ from users_nfc_cards.models import UserNfcCard, UserNfcCardManager
 
 class UserNfcCardTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
         cache.clear()
 
         self.user = User.objects.create_user(

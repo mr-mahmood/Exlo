@@ -1,12 +1,9 @@
 # users_nfc_cards/tests/test_permissions.py
 
 from datetime import timedelta
-
-from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
-
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from gym.models import Gym
 from gym_auth.models import UserGymRole
@@ -18,7 +15,6 @@ from users_nfc_cards.permissions import CanAssignUserNfcCard
 
 class PermissionTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
 
         self.gym_a = Gym.objects.create(name="Gym A")
         self.gym_b = Gym.objects.create(name="Gym B")

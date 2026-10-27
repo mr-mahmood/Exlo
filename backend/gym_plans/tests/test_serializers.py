@@ -6,17 +6,13 @@ from django.test import TestCase
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
 from gym_plans.serializers import GymMembershipPlanSerializer
-from commerce_products.models import CommerceProduct
 from core.errors import APIError, GymPlansError
-from django.conf import settings
 
 
 class GymMembershipPlanSerializerTest(TestCase):
     """Test cases for GymMembershipPlanSerializer."""
 
     def setUp(self):
-        settings.DEBUG = True
-
         self.gym = Gym.objects.create(
             name="Test Gym",
             province="Test Province",

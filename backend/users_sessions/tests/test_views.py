@@ -6,7 +6,6 @@ from rest_framework.test import APIClient
 from rest_framework import status
 import uuid
 from django.utils import timezone
-from django.conf import settings
 from users.models import User
 from users_sessions.models import Session
 from core.errors import SessionError, AuthenticationError
@@ -16,7 +15,6 @@ class UserSessionPIViewTest(TestCase):
     """Test user session management views"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         # Create main user

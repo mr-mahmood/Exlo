@@ -1,3 +1,5 @@
+# authentication/permissions.py
+
 from rest_framework.permissions import BasePermission
 from users.models import User
 
@@ -5,9 +7,7 @@ from users.models import User
 class IsUserActive(BasePermission):
     def has_permission(self, request, view):
         return bool(
-            request.user
-            and request.user.is_authenticated
-            and request.user.is_active
+            request.user and request.user.is_authenticated and request.user.is_active
         )
 
 

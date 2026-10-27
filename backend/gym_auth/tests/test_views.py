@@ -2,15 +2,14 @@
 
 
 import uuid
-
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
-
 from gym.models import Gym
 from gym_auth.models import UserGymRole
 from users.models import User
+from django.core.cache import cache
 
 
 class GymAuthViewsTest(TestCase):
@@ -219,6 +218,8 @@ class GymAuthViewsTest(TestCase):
                 user=user,
                 gym=self.gym,
             )
+
+        cache.clear()
 
         # The query count should remain constant.
         with self.assertNumQueries(3):

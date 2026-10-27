@@ -11,6 +11,7 @@ from gym.models import Gym
 from .models import UserGymRole
 from .serializers import UserGymRoleSerializer
 from core.errors import APIError, UserGymRoleError
+from core.cache import GYM_USERS, cache_key, get_cache, invalidate_cache
 
 
 class GymUserRoleListAPIView(APIView):
@@ -19,19 +20,22 @@ class GymUserRoleListAPIView(APIView):
     pagination_class = CustomPagination
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id)
-        roles = gym.users.select_related("user").all()
+        key = cache_key(GYM_USERS, gym_id, request=request)
 
-        paginator = self.pagination_class()
-        result_page = paginator.paginate_queryset(roles, request, view=self)
+        def build():
+            gym = Gym.objects.get_gym(gym_id)
+            roles = gym.users.select_related("user").all()
+            paginator = self.pagination_class()
+            result_page = paginator.paginate_queryset(roles, request, view=self)
+            serializer = self.serializer_class(
+                result_page,
+                many=True,
+                context={"request": request},
+            )
+            return paginator.get_paginated_data(serializer.data, "users")
 
-        serializer = self.serializer_class(
-            result_page,
-            many=True,
-            context={"request": request},
-        )
-
-        return paginator.get_paginated_response(serializer.data, "users")
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class GymOwnerCreateAPIView(APIView):
@@ -42,6 +46,7 @@ class GymOwnerCreateAPIView(APIView):
         user = User.objects.get_user(user_id)
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_owner(user, gym)
+        invalidate_cache(GYM_USERS, gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -53,6 +58,7 @@ class GymCoachCreateAPIView(APIView):
         user = User.objects.get_user(user_id)
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_coach(user, gym)
+        invalidate_cache(GYM_USERS, gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -64,6 +70,7 @@ class GymStaffCreateAPIView(APIView):
         user = User.objects.get_user(user_id)
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_staff(user, gym)
+        invalidate_cache(GYM_USERS, gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -71,15 +78,11 @@ class GymRoleDeleteAPIView(APIView):
     permission_classes = [IsAdmin]
 
     def delete(self, request, gym_id, role_id):
-        role = UserGymRole.objects.filter(
-            id=role_id,
-            gym_id=gym_id,
-        ).first()
-
+        role = UserGymRole.objects.filter(id=role_id, gym_id=gym_id).first()
         if role is None:
             raise APIError(UserGymRoleError.ROLE_NOT_FOUND)
-
         role.delete()
+        invalidate_cache(GYM_USERS, gym_id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -92,9 +95,8 @@ class GymStaffRoleDeleteAPIView(APIView):
             gym_id=gym_id,
             role__in=[UserGymRole.Role.COACH, UserGymRole.Role.STAFF],
         ).first()
-
         if role is None:
             raise APIError(UserGymRoleError.ROLE_NOT_FOUND)
-
         role.delete()
+        invalidate_cache(GYM_USERS, gym_id)
         return Response(status=status.HTTP_200_OK)

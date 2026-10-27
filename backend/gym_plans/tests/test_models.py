@@ -7,14 +7,12 @@ from django.utils import timezone
 from gym.models import Gym
 from commerce_products.models import CommerceProduct
 from gym_plans.models import GymMembershipPlan
-from django.conf import settings
 
 
 class GymMembershipPlanModelTest(TestCase):
     """Test cases for GymMembershipPlan model."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.gym = Gym.objects.create(
             name="Test Gym",
             province="Test Province",

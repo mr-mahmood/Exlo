@@ -20,7 +20,6 @@ class AccessTokenAuthenticationTest(TestCase):
     """Test AccessTokenAuthentication"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.factory = RequestFactory()
         self.user = User.objects.create_user(
             phone_number="09123456789",
@@ -272,7 +271,6 @@ class RefreshTokenAuthenticationTest(TestCase):
     """Test RefreshTokenAuthentication"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.factory = RequestFactory()
         self.user = User.objects.create_user(
             phone_number="09123456789",
@@ -516,7 +514,6 @@ class AccessTokenAuthenticationWithBearerTransportTest(TestCase):
     """Test AccessTokenAuthentication with X-Auth-Transport: bearer header"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.factory = RequestFactory()
         self.user = User.objects.create_user(
             phone_number="09123456789",
@@ -757,7 +754,6 @@ class RefreshTokenAuthenticationWithBearerTransportTest(TestCase):
     """Test RefreshTokenAuthentication with X-Auth-Transport: bearer header"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.factory = RequestFactory()
         self.user = User.objects.create_user(
             phone_number="09123456789",
@@ -977,7 +973,6 @@ class AuthTransportUtilsTest(TestCase):
     """Test auth transport utility functions"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.factory = RequestFactory()
 
     def test_is_bearer_transport_with_bearer_header(self):

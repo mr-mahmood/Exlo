@@ -9,6 +9,7 @@ from users.models import User
 from gym_plans.models import GymMembershipPlan
 from commerce_orders.models import OrderItem
 from core.errors import APIError, GymSubscriptionError
+from core.cache import USER_SUBSCRIPTIONS, USER_SUBSCRIPTION, invalidate_cache
 
 
 class GymSubscriptionsManager(models.Manager):
@@ -67,6 +68,8 @@ class GymSubscriptionsManager(models.Manager):
             subscription.expire(reason=subscription.expire_reason)
             self._promote_next_for_gym(subscriber, gym)
 
+        invalidate_cache(USER_SUBSCRIPTIONS, subscriber.id)
+        invalidate_cache(USER_SUBSCRIPTION, subscriber.id, subscription.id)
         return subscription
 
     # This function caller must prefetch the product chain, before calling this function
@@ -91,6 +94,8 @@ class GymSubscriptionsManager(models.Manager):
             if not self._has_active_subscription(subscriber):
                 self._activate_subscription(subscription)
 
+            invalidate_cache(USER_SUBSCRIPTIONS, subscriber.id)
+            invalidate_cache(USER_SUBSCRIPTION, subscriber.id, subscription.id)
             return subscription
 
     def cancel_subscription(self, subscription):
@@ -109,7 +114,8 @@ class GymSubscriptionsManager(models.Manager):
 
             subscription.cancel()
             self._promote_next_any(subscriber)
-
+            invalidate_cache(USER_SUBSCRIPTIONS, subscriber.id)
+            invalidate_cache(USER_SUBSCRIPTION, subscriber.id, subscription.id)
             return subscription
 
     def _promote_next_for_gym(self, subscriber, gym) -> "GymSubscription | None":

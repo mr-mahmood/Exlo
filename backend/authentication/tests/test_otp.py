@@ -10,7 +10,6 @@ class OTPServiceTest(TestCase):
     """Test OTP service"""
 
     def setUp(self):
-        settings.DEBUG = True
         cache.clear()
 
     def test_generate_otp_success(self):

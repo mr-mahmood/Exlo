@@ -18,7 +18,6 @@ class GymAnnouncementViewsTest(TestCase):
     """Test cases for GymAnnouncement views."""
 
     def setUp(self):
-        settings.DEBUG = True
         self.client = APIClient()
 
         # Create users

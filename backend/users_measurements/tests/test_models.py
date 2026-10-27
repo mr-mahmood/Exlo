@@ -9,14 +9,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from decimal import Decimal
 from PIL import Image
 import io
-from django.conf import settings
 
 
 class MeasurementsModelTest(TestCase):
     """Test suite for the Measurements model"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09024698787",
             first_name="Test",
@@ -236,7 +234,6 @@ class MeasurementsModelEdgeCasesTest(TestCase):
     """Test edge cases for the Measurements model"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.user: User = User.objects.create_user(
             phone_number="09456326565",
             first_name="Test3",
@@ -299,7 +296,6 @@ class MeasurementPhotosModelTest(TestCase):
     """Test suite for MeasurementPhotos model"""
 
     def setUp(self):
-        settings.DEBUG = True
         self.user = User.objects.create_user(
             phone_number="09024698787",
             first_name="Test",

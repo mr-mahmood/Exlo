@@ -1,18 +1,16 @@
 # users/tests/test_models.py
+
 from django.test import TestCase
 from django.db import IntegrityError
-from datetime import date, timedelta
+from datetime import date
 from users.models import User
 from core.errors import APIError, UserAccountError
-from django.conf import settings
 
 
 class UserModelTest(TestCase):
     """Test User model"""
 
     def setUp(self):
-        settings.DEBUG = True
-        """Set up test data"""
         self.valid_data = {
             "phone_number": "09123456789",
             "first_name": "John",

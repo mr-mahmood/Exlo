@@ -10,6 +10,14 @@ from gym.models import Gym
 from core.errors import APIError, GymError
 from .models import GymPhotos
 from .serializers import GymPhotoSerializer
+from core.cache import (
+    GYM_PHOTOS,
+    GYM_DETAIL,
+    GYM_LIST,
+    cache_key,
+    get_cache,
+    invalidate_cache,
+)
 
 
 class GymPhotosAPIView(APIView):
@@ -18,22 +26,20 @@ class GymPhotosAPIView(APIView):
     serializer_class = GymPhotoSerializer
 
     def get(self, request, gym_id):
-        gym = Gym.objects.get_gym(gym_id)
+        key = cache_key(GYM_PHOTOS, gym_id)
 
-        photos = gym.photos.all()
+        def build():
+            gym = Gym.objects.get_gym(gym_id)
+            photos = gym.photos.all()
+            serializer = self.serializer_class(
+                photos,
+                many=True,
+                context={"request": request},
+            )
+            return {"gym_photos": serializer.data}
 
-        serializer = self.serializer_class(
-            photos,
-            many=True,
-            context={"request": request},
-        )
-
-        return Response(
-            {
-                "gym_photos": serializer.data,
-            },
-            status=status.HTTP_200_OK,
-        )
+        data = get_cache(key, build)
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class GymPhotoCreateAPIView(APIView):
@@ -51,18 +57,20 @@ class GymPhotoCreateAPIView(APIView):
         with transaction.atomic():
             for file in files:
                 data = {"photo": file}
+
                 serializer = self.serializer_class(
                     data=data,
-                    context={
-                        "request": request,
-                        "gym": gym,
-                    },
+                    context={"request": request, "gym": gym},
                 )
 
                 if not serializer.is_valid():
                     raise APIError(GymError.PHOTO_UPLOAD_FAILED)
 
                 serializer.save()
+
+            invalidate_cache(GYM_PHOTOS, gym.id)
+            invalidate_cache(GYM_DETAIL, gym.id)
+            invalidate_cache(GYM_LIST)
 
         return Response(status=status.HTTP_201_CREATED)
 
@@ -76,9 +84,12 @@ class GymPhotoDeleteAPIView(APIView):
 
         try:
             queryset = GymPhotos.objects.select_related("gym")
+
             if gym:
                 queryset = queryset.filter(gym=gym)
+
             photo = queryset.get(id=photo_id)
+
         except GymPhotos.DoesNotExist:
             raise APIError(GymError.PHOTO_NOT_FOUND)
 
@@ -86,5 +97,9 @@ class GymPhotoDeleteAPIView(APIView):
             photo.photo.delete(save=False)
 
         photo.delete()
+
+        invalidate_cache(GYM_PHOTOS, gym.id)
+        invalidate_cache(GYM_DETAIL, gym.id)
+        invalidate_cache(GYM_LIST)
 
         return Response(status=status.HTTP_200_OK)

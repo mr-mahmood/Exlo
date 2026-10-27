@@ -14,8 +14,6 @@ class GymAnnouncementModelTest(TestCase):
     """Test cases for GymAnnouncement model."""
 
     def setUp(self):
-        settings.DEBUG = True
-
         # Create a user (author)
         self.author = User.objects.create_user(
             phone_number="09121234567",

@@ -1,14 +1,12 @@
 # users_nfc_cards/tests/test_views.py
 
 
-from django.conf import settings
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from gym.models import Gym
 from gym_auth.models import UserGymRole
@@ -19,7 +17,6 @@ from users.models import User
 
 class ViewTestBase(TestCase):
     def setUp(self):
-        settings.DEBUG = True
 
         cache.clear()
 
