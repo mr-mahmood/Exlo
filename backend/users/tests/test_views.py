@@ -547,9 +547,61 @@ class UserProfileViewTest(TestCase):
             date_of_birth=date(1990, 1, 1),
         )
         self.url = reverse("users:dashboard")
+        self.update_url = reverse("users:profile-update")
         self.client.force_authenticate(user=self.user)
 
     # ========== GET TESTS ==========
+    def test_profile_routes_reject_unrelated_methods(self):
+        self.assertEqual(self.url, "/api/users/profile/")
+        self.assertEqual(self.update_url, "/api/users/profile/update/")
+        for url, methods in [
+            (self.url, ["post", "put", "patch", "delete"]),
+            (self.update_url, ["get", "post", "patch", "delete"]),
+        ]:
+            for method in methods:
+                with self.subTest(url=url, method=method):
+                    response = getattr(self.client, method)(
+                        url, {"first_name": "Changed"}, format="json"
+                    )
+                    self.assertEqual(
+                        response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+                    )
+                    self.assertEqual(
+                        response.json()["error_code"], "METHOD_NOT_ALLOWED"
+                    )
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "John")
+
+    def test_profile_routes_keep_head_and_options(self):
+        response = self.client.head(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.content, b"")
+        for url in [self.url, self.update_url]:
+            with self.subTest(url=url):
+                response = self.client.options(url)
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_profile_update_rendered_response(self):
+        response = self.client.put(
+            self.update_url, {"first_name": "Jane"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertIsNone(payload["error_code"])
+        self.assertEqual(payload["data"]["user"]["first_name"], "Jane")
+        self.assertEqual(payload["data"]["user"]["last_name"], "Doe")
+
+    def test_profile_update_inactive_user(self):
+        self.user.is_active = False
+        self.user.save()
+        response = self.client.put(
+            self.update_url, {"first_name": "Changed"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "John")
+
     def test_get_profile_success(self):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -584,7 +636,7 @@ class UserProfileViewTest(TestCase):
             "gender": User.Gender.FEMALE,
             "date_of_birth": date(1995, 5, 5),
         }
-        response = self.client.put(self.url, data)
+        response = self.client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         user_data = response.data["user"]
         self.assertEqual(user_data["first_name"], "Jane")
@@ -599,7 +651,7 @@ class UserProfileViewTest(TestCase):
 
     def test_update_profile_partial(self):
         data = {"first_name": "Jane"}
-        response = self.client.put(self.url, data)
+        response = self.client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "Jane")
@@ -611,7 +663,7 @@ class UserProfileViewTest(TestCase):
             "first_name": "Jane",
             "last_name": "Smith",
         }
-        response = self.client.put(self.url, data)
+        response = self.client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "Jane")
@@ -619,7 +671,7 @@ class UserProfileViewTest(TestCase):
 
     def test_update_profile_phone_number_read_only(self):
         data = {"phone_number": "09999999999"}
-        response = self.client.put(self.url, data)
+        response = self.client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertEqual(self.user.phone_number, "09123456789")
@@ -627,7 +679,7 @@ class UserProfileViewTest(TestCase):
     # ========== VALIDATION (single representative) ==========
     def test_update_profile_invalid_first_name(self):
         data = {"first_name": "Jo"}
-        response = self.client.put(self.url, data)
+        response = self.client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], "VAL-002")
 
@@ -635,7 +687,7 @@ class UserProfileViewTest(TestCase):
     def test_update_profile_unauthenticated(self):
         client = APIClient()
         data = {"first_name": "Jane"}
-        response = client.put(self.url, data)
+        response = client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
             response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
@@ -654,7 +706,7 @@ class UserProfileViewTest(TestCase):
             "profile_picture": invalid_file,
         }
 
-        response = self.client.put(self.url, data, format="multipart")
+        response = self.client.put(self.update_url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         # The error is wrapped in a VALIDATION_ERROR response
         self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")
@@ -664,7 +716,7 @@ class UserProfileViewTest(TestCase):
         """Test explicitly setting date_of_birth to null"""
         data = {"date_of_birth": None}
 
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
 
         # Your API wraps validation errors
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -674,7 +726,7 @@ class UserProfileViewTest(TestCase):
         """Test sending empty string for date_of_birth"""
         data = {"date_of_birth": ""}
 
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")
 
@@ -694,7 +746,7 @@ class UserProfileViewTest(TestCase):
             "profile_picture": image_file,
         }
 
-        response = self.client.put(self.url, data, format="multipart")
+        response = self.client.put(self.update_url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify the profile picture was updated
@@ -723,7 +775,7 @@ class UserProfileViewTest(TestCase):
             "profile_picture": image_file,
         }
 
-        response = self.client.put(self.url, data, format="multipart")
+        response = self.client.put(self.update_url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify the profile picture was converted to WebP
@@ -750,7 +802,7 @@ class UserProfileViewTest(TestCase):
             "profile_picture": image_file,
         }
 
-        response = self.client.put(self.url, data, format="multipart")
+        response = self.client.put(self.update_url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # WebP should remain WebP

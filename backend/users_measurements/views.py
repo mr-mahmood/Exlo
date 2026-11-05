@@ -13,7 +13,7 @@ from .models import Measurements, MeasurementPhotos
 from core.pagination import CustomPagination
 
 
-class UserMeasurementsListView(APIView):
+class UserMeasurementsListAPIView(APIView):
     serializer_class = UserMeasurementSerializer
     pagination_class = CustomPagination
 
@@ -37,6 +37,10 @@ class UserMeasurementsListView(APIView):
 
         return paginator.get_paginated_response(serializer.data, "measurements")
 
+
+class UserMeasurementCreateAPIView(APIView):
+    serializer_class = UserMeasurementSerializer
+
     def post(self, request):
         user: User = request.user
 
@@ -53,7 +57,7 @@ class UserMeasurementsListView(APIView):
         )
 
 
-class UserMeasurementDetailView(APIView):
+class UserMeasurementDetailAPIView(APIView):
     serializer_class = UserMeasurementSerializer
 
     def get(self, request, measurement_id):
@@ -69,6 +73,10 @@ class UserMeasurementDetailView(APIView):
 
         serializer = self.serializer_class(measurement, context={"request": request})
         return Response({"measurements": serializer.data}, status=status.HTTP_200_OK)
+
+
+class UserMeasurementUpdateAPIView(APIView):
+    serializer_class = UserMeasurementSerializer
 
     def put(self, request, measurement_id):
         user: User = request.user
@@ -90,6 +98,9 @@ class UserMeasurementDetailView(APIView):
 
         return Response({"measurement": serializer.data}, status=status.HTTP_200_OK)
 
+
+class UserMeasurementDeleteAPIView(APIView):
+
     def delete(self, request, measurement_id):
         user: User = request.user
 
@@ -102,7 +113,7 @@ class UserMeasurementDetailView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class MeasurementPhotosView(APIView):
+class MeasurementPhotoListAPIView(APIView):
     serializer_class = MeasurementPhotosSerializer
     pagination_class = CustomPagination
 
@@ -124,6 +135,10 @@ class MeasurementPhotosView(APIView):
         )
 
         return Response({"photos": serializer.data}, status=status.HTTP_200_OK)
+
+
+class MeasurementPhotoCreateAPIView(APIView):
+    serializer_class = MeasurementPhotosSerializer
 
     def post(self, request, measurement_id):
         user: User = request.user
@@ -161,7 +176,7 @@ class MeasurementPhotosView(APIView):
         )
 
 
-class MeasurementPhotoDetailView(APIView):
+class MeasurementPhotoDetailAPIView(APIView):
     serializer_class = MeasurementPhotosSerializer
 
     def get(self, request, measurement_id, photo_id):
@@ -184,6 +199,9 @@ class MeasurementPhotoDetailView(APIView):
             {"photo": serializer.data},
             status=status.HTTP_200_OK,
         )
+
+
+class MeasurementPhotoDeleteAPIView(APIView):
 
     def delete(self, request, measurement_id, photo_id):
         user: User = request.user

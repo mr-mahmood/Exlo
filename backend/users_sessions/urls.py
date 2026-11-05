@@ -1,12 +1,17 @@
 from django.urls import path, include
-from .views import UserSessionPIView
+from .views import UserSessionListAPIView, UserSessionDeleteAPIView
 
 app_name = "user_sessions"
 
 urlpatterns = [
     path(
         "",
-        UserSessionPIView.as_view(),
+        UserSessionListAPIView.as_view(),
         name="user-sessions",
+    ),
+    path(
+        "delete/",
+        UserSessionDeleteAPIView.as_view(),
+        name="user-session-delete",
     ),
 ]

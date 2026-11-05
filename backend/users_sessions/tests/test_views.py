@@ -9,6 +9,7 @@ from django.utils import timezone
 from users.models import User
 from users_sessions.models import Session
 from core.errors import SessionError, AuthenticationError
+from authentication.token_services import create_tokens_for_user
 
 
 class UserSessionPIViewTest(TestCase):
@@ -35,6 +36,7 @@ class UserSessionPIViewTest(TestCase):
 
         self.client.force_authenticate(user=self.user)
         self.url = reverse("user_sessions:user-sessions")
+        self.delete_url = reverse("user_sessions:user-session-delete")
 
         # Create test sessions
         self.session1 = Session.objects.create(
@@ -53,6 +55,71 @@ class UserSessionPIViewTest(TestCase):
         )
 
     # ========== GET TESTS ==========
+
+    def test_session_routes_reject_unrelated_methods(self):
+        self.assertEqual(self.url, "/api/sessions/")
+        self.assertEqual(self.delete_url, "/api/sessions/delete/")
+        for url, methods in [
+            (self.url, ["post", "put", "patch", "delete"]),
+            (self.delete_url, ["get", "post", "put", "patch"]),
+        ]:
+            for method in methods:
+                with self.subTest(url=url, method=method):
+                    response = getattr(self.client, method)(
+                        url, {"session_id": str(self.session1.session_id)}, format="json"
+                    )
+                    self.assertEqual(
+                        response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+                    )
+                    self.assertEqual(
+                        response.json()["error_code"], "METHOD_NOT_ALLOWED"
+                    )
+        self.assertEqual(Session.objects.filter(user=self.user).count(), 2)
+
+    def test_delete_session_revokes_cookie_and_bearer_tokens(self):
+        for transport in ["cookie", "bearer"]:
+            with self.subTest(transport=transport):
+                session = Session.objects.create(
+                    user=self.user,
+                    ip_address="127.0.0.1",
+                    user_agent="Session revocation test",
+                    last_activity_at=timezone.now(),
+                )
+                access, refresh = create_tokens_for_user(self.user, session)
+                client = APIClient()
+                if transport == "cookie":
+                    client.cookies["access_token"] = access
+                    client.cookies["refresh_token"] = refresh
+                else:
+                    client.credentials(
+                        HTTP_X_AUTH_TRANSPORT="bearer",
+                        HTTP_AUTHORIZATION=f"Bearer {access}",
+                    )
+                response = client.delete(
+                    self.delete_url,
+                    {"session_id": str(session.session_id)},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    response.json(), {"success": True, "data": None, "error_code": None}
+                )
+                self.assertFalse(Session.objects.filter(pk=session.pk).exists())
+                response = client.get(self.url)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    response.data["error_code"], SessionError.SESSION_EXPIRE[0]
+                )
+                if transport == "bearer":
+                    client.credentials(
+                        HTTP_X_AUTH_TRANSPORT="bearer",
+                        HTTP_AUTHORIZATION=f"Bearer {refresh}",
+                    )
+                response = client.post(reverse("authentication:refresh"))
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    response.data["error_code"], SessionError.SESSION_EXPIRE[0]
+                )
 
     def test_get_sessions_success(self):
         """Test retrieving user sessions successfully"""
@@ -121,7 +188,7 @@ class UserSessionPIViewTest(TestCase):
         session_id = str(self.session1.session_id)
 
         response = self.client.delete(
-            self.url, data={"session_id": session_id}, format="json"
+            self.delete_url, data={"session_id": session_id}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -145,7 +212,7 @@ class UserSessionPIViewTest(TestCase):
         non_existent_session_id = uuid.uuid7()
 
         response = self.client.delete(
-            self.url, data={"session_id": str(non_existent_session_id)}, format="json"
+            self.delete_url, data={"session_id": str(non_existent_session_id)}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -162,7 +229,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         response = self.client.delete(
-            self.url, data={"session_id": str(other_session.session_id)}, format="json"
+            self.delete_url, data={"session_id": str(other_session.session_id)}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -177,7 +244,7 @@ class UserSessionPIViewTest(TestCase):
 
     def test_delete_session_missing_session_id(self):
         """Test deleting a session without providing session_id"""
-        response = self.client.delete(self.url, data={}, format="json")
+        response = self.client.delete(self.delete_url, data={}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.data["error_code"], SessionError.SESSION_NOT_FOUND[0])
@@ -185,7 +252,7 @@ class UserSessionPIViewTest(TestCase):
     def test_delete_session_invalid_uuid(self):
         """Test deleting a session with invalid UUID format"""
         response = self.client.delete(
-            self.url, data={"session_id": "invalid-uuid-format"}, format="json"
+            self.delete_url, data={"session_id": "invalid-uuid-format"}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -195,7 +262,7 @@ class UserSessionPIViewTest(TestCase):
         """Test deleting a session without authentication"""
         client = APIClient()
         response = client.delete(
-            self.url, data={"session_id": str(self.session1.session_id)}, format="json"
+            self.delete_url, data={"session_id": str(self.session1.session_id)}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -209,7 +276,7 @@ class UserSessionPIViewTest(TestCase):
         self.user.save()
 
         response = self.client.delete(
-            self.url, data={"session_id": str(self.session1.session_id)}, format="json"
+            self.delete_url, data={"session_id": str(self.session1.session_id)}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -223,7 +290,7 @@ class UserSessionPIViewTest(TestCase):
 
         for session_id in session_ids:
             response = self.client.delete(
-                self.url, data={"session_id": session_id}, format="json"
+                self.delete_url, data={"session_id": session_id}, format="json"
             )
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -241,7 +308,7 @@ class UserSessionPIViewTest(TestCase):
         )
 
         response = self.client.delete(
-            self.url,
+            self.delete_url,
             data={"session_id": str(current_session.session_id)},
             format="json",
         )
@@ -279,7 +346,7 @@ class UserSessionPIViewTest(TestCase):
     def test_delete_session_response_format(self):
         """Test that DELETE response has correct format"""
         response = self.client.delete(
-            self.url, data={"session_id": str(self.session1.session_id)}, format="json"
+            self.delete_url, data={"session_id": str(self.session1.session_id)}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)

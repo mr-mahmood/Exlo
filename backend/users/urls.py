@@ -1,7 +1,8 @@
 from django.urls import path, include
 from users.views import (
     UserSignupAPIView,
-    UserProfilePIView,
+    UserProfileDetailAPIView,
+    UserProfileUpdateAPIView,
     PhoneChangeOldRequestAPIView,
     PhoneChangeOldVerifyAPIView,
     PhoneChangeNewRequestAPIView,
@@ -18,8 +19,13 @@ urlpatterns = [
     ),
     path(
         "profile/",
-        UserProfilePIView.as_view(),
+        UserProfileDetailAPIView.as_view(),
         name="dashboard",
+    ),
+    path(
+        "profile/update/",
+        UserProfileUpdateAPIView.as_view(),
+        name="profile-update",
     ),
     path(
         "phone-change/old/request/",

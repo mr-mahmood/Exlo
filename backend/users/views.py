@@ -249,7 +249,7 @@ class PhoneChangeNewVerifyAPIView(APIView):
         )
 
 
-class UserProfilePIView(APIView):
+class UserProfileDetailAPIView(APIView):
     serializer_class = UserProfileSerializer
 
     def get(self, request):
@@ -260,6 +260,10 @@ class UserProfilePIView(APIView):
             {"user": serializer.data},
             status=status.HTTP_200_OK,
         )
+
+
+class UserProfileUpdateAPIView(APIView):
+    serializer_class = UserProfileSerializer
 
     def put(self, request):
         user: User = request.user

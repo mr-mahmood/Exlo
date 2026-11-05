@@ -27,6 +27,7 @@ class UserMeasurementsListViewTest(TestCase):
             last_name="User",
         )
         self.url = reverse("user_measurements:list")
+        self.create_url = reverse("user_measurements:create")
 
         # Create some measurements
         self.measurement1 = Measurements.objects.create(
@@ -115,7 +116,7 @@ class UserMeasurementsListViewTest(TestCase):
             "measurement_notes": "New measurement",
         }
 
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("measurement", response.data)
@@ -135,7 +136,7 @@ class UserMeasurementsListViewTest(TestCase):
             "height_cm": "185.0",
             "weight_kg": "80.0",
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         # The API returns 400 for unauthenticated requests
         self.assertIn(
             response.status_code,
@@ -150,7 +151,7 @@ class UserMeasurementsListViewTest(TestCase):
             "weight_kg": "80.0",
         }
 
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error_code", response.data)
         self.assertEqual(
@@ -166,7 +167,7 @@ class UserMeasurementsListViewTest(TestCase):
             "weight_kg": "70.0",
         }
 
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("measurement", response.data)
@@ -183,7 +184,7 @@ class UserMeasurementsListViewTest(TestCase):
             "extra_field": "ignored",
         }
 
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertNotIn("extra_field", response.data["measurement"])
@@ -193,7 +194,7 @@ class UserMeasurementsListViewTest(TestCase):
     def test_post_measurement_with_empty_data(self):
         """Test POST with empty data - should return 400 Bad Request"""
         self.client.force_authenticate(user=self.user)
-        response = self.client.post(self.url, {}, format="json")
+        response = self.client.post(self.create_url, {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error_code", response.data)
         self.assertEqual(
@@ -223,7 +224,7 @@ class UserMeasurementsListViewTest(TestCase):
             "glutes_cm": None,
             "measurement_notes": "",
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIsNone(response.data["measurement"]["height_cm"])
         self.assertIsNone(response.data["measurement"]["weight_kg"])
@@ -242,7 +243,7 @@ class UserMeasurementsListViewTest(TestCase):
             "biceps_right_cm": "10.0",  # Minimum
             "waist_cm": "40.0",  # Minimum
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["measurement"]["height_cm"], "50.0")
         self.assertEqual(response.data["measurement"]["weight_kg"], "20.0")
@@ -257,7 +258,7 @@ class UserMeasurementsListViewTest(TestCase):
             "biceps_right_cm": "100.0",  # Maximum
             "waist_cm": "250.0",  # Maximum
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["measurement"]["height_cm"], "300.0")
         self.assertEqual(response.data["measurement"]["weight_kg"], "500.0")
@@ -274,7 +275,7 @@ class UserMeasurementsListViewTest(TestCase):
             "biceps_right_cm": "10.1",
             "waist_cm": "40.1",
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_post_measurement_just_below_maximum_values(self):
@@ -289,7 +290,7 @@ class UserMeasurementsListViewTest(TestCase):
             "biceps_right_cm": "99.9",
             "waist_cm": "249.9",
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
     def test_post_measurement_with_string_values(self):
@@ -299,7 +300,7 @@ class UserMeasurementsListViewTest(TestCase):
             "height_cm": "abc",
             "weight_kg": "xyz",
         }
-        response = self.client.post(self.url, data, format="json")
+        response = self.client.post(self.create_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
@@ -332,6 +333,12 @@ class UserMeasurementDetailViewTest(TestCase):
 
         self.url = reverse(
             "user_measurements:detail", kwargs={"measurement_id": self.measurement.id}
+        )
+        self.delete_url = reverse(
+            "user_measurements:delete", kwargs={"measurement_id": self.measurement.id}
+        )
+        self.update_url = reverse(
+            "user_measurements:update", kwargs={"measurement_id": self.measurement.id}
         )
 
     def test_get_measurement_authenticated(self):
@@ -397,7 +404,7 @@ class UserMeasurementDetailViewTest(TestCase):
             "measurement_notes": "Updated measurement",
         }
 
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("measurement", response.data)
@@ -419,7 +426,7 @@ class UserMeasurementDetailViewTest(TestCase):
             "height_cm": "180.0",
             "weight_kg": "75.5",
         }
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
         # The API returns 400 for unauthenticated requests
         self.assertIn(
             response.status_code,
@@ -434,7 +441,7 @@ class UserMeasurementDetailViewTest(TestCase):
             "weight_kg": "75.5",
         }
 
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("error_code", response.data)
@@ -451,7 +458,7 @@ class UserMeasurementDetailViewTest(TestCase):
             # weight_kg is not provided, should remain unchanged
         }
 
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["measurement"]["height_cm"], "182.0")
@@ -473,7 +480,7 @@ class UserMeasurementDetailViewTest(TestCase):
             "weight_kg": "75.5",
         }
 
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error_code", response.data)
@@ -485,7 +492,7 @@ class UserMeasurementDetailViewTest(TestCase):
     def test_delete_measurement_authenticated(self):
         """Test DELETE measurement with authenticated user"""
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(self.url)
+        response = self.client.delete(self.delete_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data)
@@ -496,7 +503,7 @@ class UserMeasurementDetailViewTest(TestCase):
 
     def test_delete_measurement_unauthenticated(self):
         """Test DELETE measurement without authentication"""
-        response = self.client.delete(self.url)
+        response = self.client.delete(self.delete_url)
         # The API returns 400 for unauthenticated requests
         self.assertIn(
             response.status_code,
@@ -506,7 +513,7 @@ class UserMeasurementDetailViewTest(TestCase):
     def test_delete_measurement_not_owner(self):
         """Test DELETE measurement that belongs to another user"""
         self.client.force_authenticate(user=self.other_user)
-        response = self.client.delete(self.url)
+        response = self.client.delete(self.delete_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("error_code", response.data)
@@ -521,11 +528,11 @@ class UserMeasurementDetailViewTest(TestCase):
     def test_delete_measurement_not_found(self):
         """Test DELETE measurement with non-existent ID"""
         self.client.force_authenticate(user=self.user)
-        non_existent_url = reverse(
-            "user_measurements:detail",
+        delete_url = reverse(
+            "user_measurements:delete",
             kwargs={"measurement_id": "00000000-0000-0000-0000-000000000000"},
         )
-        response = self.client.delete(non_existent_url)
+        response = self.client.delete(delete_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("error_code", response.data)
@@ -539,7 +546,7 @@ class UserMeasurementDetailViewTest(TestCase):
     def test_put_measurement_with_empty_data(self):
         """Test PUT with empty data (partial update with empty data)"""
         self.client.force_authenticate(user=self.user)
-        response = self.client.put(self.url, {}, format="json")
+        response = self.client.put(self.update_url, {}, format="json")
         # Since partial=True, empty data should be accepted
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -552,7 +559,7 @@ class UserMeasurementDetailViewTest(TestCase):
             "chest_cm": None,
             "measurement_notes": "",
         }
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIsNone(response.data["measurement"]["height_cm"])
         self.assertIsNone(response.data["measurement"]["weight_kg"])
@@ -563,10 +570,13 @@ class UserMeasurementDetailViewTest(TestCase):
         url = reverse(
             "user_measurements:detail", kwargs={"measurement_id": measurement.id}
         )
+        delete_url = reverse(
+            "user_measurements:delete", kwargs={"measurement_id": measurement.id}
+        )
 
         # Delete the measurement
         self.client.force_authenticate(user=self.user)
-        self.client.delete(url)
+        self.client.delete(delete_url)
 
         # Try to get it again
         response = self.client.get(url)
@@ -608,7 +618,7 @@ class UserMeasurementDetailViewTest(TestCase):
             "glutes_cm": None,
             "measurement_notes": "",
         }
-        response = self.client.put(self.url, data, format="json")
+        response = self.client.put(self.update_url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify all fields are None
@@ -622,10 +632,10 @@ class UserMeasurementDetailViewTest(TestCase):
         """Test deleting a measurement that's already deleted"""
         self.client.force_authenticate(user=self.user)
         # Delete once
-        self.client.delete(self.url)
+        self.client.delete(self.delete_url)
 
         # Try to delete again
-        response = self.client.delete(self.url)
+        response = self.client.delete(self.delete_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("error_code", response.data)
         self.assertEqual(
@@ -646,6 +656,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
         )
         self.client.force_authenticate(user=self.user)
         self.list_url = reverse("user_measurements:list")
+        self.create_url = reverse("user_measurements:create")
 
     def test_full_crud_flow(self):
         """Test complete CRUD flow for measurements"""
@@ -656,7 +667,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
             "chest_cm": "100.0",
             "measurement_notes": "Initial measurement",
         }
-        response = self.client.post(self.list_url, create_data, format="json")
+        response = self.client.post(self.create_url, create_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         measurement_id = response.data["measurement"]["id"]
 
@@ -673,6 +684,12 @@ class UserMeasurementsViewIntegrationTest(TestCase):
         detail_url = reverse(
             "user_measurements:detail", kwargs={"measurement_id": measurement_id}
         )
+        delete_url = reverse(
+            "user_measurements:delete", kwargs={"measurement_id": measurement_id}
+        )
+        update_url = reverse(
+            "user_measurements:update", kwargs={"measurement_id": measurement_id}
+        )
         response = self.client.get(detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
@@ -686,7 +703,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
             "weight_kg": "75.0",
             "measurement_notes": "Updated measurement",
         }
-        response = self.client.put(detail_url, update_data, format="json")
+        response = self.client.put(update_url, update_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             response.data["measurement"]["measurement_notes"],
@@ -694,7 +711,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
         )
 
         # 5. Delete measurement
-        response = self.client.delete(detail_url)
+        response = self.client.delete(delete_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # 6. Verify deletion
@@ -747,7 +764,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
             "height_cm": "175.0",
             "weight_kg": "70.0",
         }
-        response = self.client.post(self.list_url, create_data, format="json")
+        response = self.client.post(self.create_url, create_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("measurement", response.data)
 
@@ -777,11 +794,11 @@ class UserMeasurementsViewIntegrationTest(TestCase):
             "weight_kg": "65.0",
             "measurement_notes": "First version",
         }
-        response = self.client.post(self.list_url, create_data, format="json")
+        response = self.client.post(self.create_url, create_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         measurement_id = response.data["measurement"]["id"]
-        detail_url = reverse(
-            "user_measurements:detail", kwargs={"measurement_id": measurement_id}
+        update_url = reverse(
+            "user_measurements:update", kwargs={"measurement_id": measurement_id}
         )
 
         # Update multiple times
@@ -791,7 +808,7 @@ class UserMeasurementsViewIntegrationTest(TestCase):
                 "weight_kg": str(65.0 + i),
                 "measurement_notes": f"Version {i+2}",
             }
-            response = self.client.put(detail_url, update_data, format="json")
+            response = self.client.put(update_url, update_data, format="json")
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
             # Verify update by fetching from database
@@ -806,22 +823,25 @@ class UserMeasurementsViewIntegrationTest(TestCase):
             "weight_kg": "65.0",
         }
 
-        response = self.client.post(self.list_url, create_data, format="json")
+        response = self.client.post(self.create_url, create_data, format="json")
         measurement_id = response.data["measurement"]["id"]
-        detail_url = reverse(
-            "user_measurements:detail", kwargs={"measurement_id": measurement_id}
+        delete_url = reverse(
+            "user_measurements:delete", kwargs={"measurement_id": measurement_id}
+        )
+        update_url = reverse(
+            "user_measurements:update", kwargs={"measurement_id": measurement_id}
         )
 
         # Update and delete in sequence
         update_data = {"height_cm": "180.0"}
-        response = self.client.put(detail_url, update_data, format="json")
+        response = self.client.put(update_url, update_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        response = self.client.delete(detail_url)
+        response = self.client.delete(delete_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Try to update after delete
-        response = self.client.put(detail_url, update_data, format="json")
+        response = self.client.put(update_url, update_data, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
@@ -850,6 +870,10 @@ class MeasurementPhotosViewTest(TestCase):
 
         self.photos_url = reverse(
             "user_measurements:photos-list",
+            kwargs={"measurement_id": self.measurement.id},
+        )
+        self.photo_create_url = reverse(
+            "user_measurements:photo-create",
             kwargs={"measurement_id": self.measurement.id},
         )
 
@@ -933,7 +957,7 @@ class MeasurementPhotosViewTest(TestCase):
             "photo": self.test_image,
         }
 
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("photo", response.data)
@@ -951,7 +975,7 @@ class MeasurementPhotosViewTest(TestCase):
             "type": MeasurementPhotos.PhotoType.FRONT,
             "photo": self.test_image,
         }
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
         self.assertIn(
             response.status_code,
             [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED],
@@ -964,7 +988,7 @@ class MeasurementPhotosViewTest(TestCase):
             "type": MeasurementPhotos.PhotoType.FRONT,
             "photo": self.test_image,
         }
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_post_duplicate_photo_type(self):
@@ -981,7 +1005,7 @@ class MeasurementPhotosViewTest(TestCase):
             "type": MeasurementPhotos.PhotoType.FRONT,
             "photo": self.create_test_image(),
         }
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error_code", response.data)
@@ -997,7 +1021,7 @@ class MeasurementPhotosViewTest(TestCase):
             "type": "INVALID",
             "photo": self.test_image,
         }
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error_code", response.data)
@@ -1044,6 +1068,10 @@ class MeasurementPhotoDetailViewTest(TestCase):
             "user_measurements:photo-detail",
             kwargs={"measurement_id": self.measurement.id, "photo_id": self.photo.id},
         )
+        self.photo_delete_url = reverse(
+            "user_measurements:photo-delete",
+            kwargs={"measurement_id": self.measurement.id, "photo_id": self.photo.id},
+        )
 
     def create_test_image(self):
         """Create a test image"""
@@ -1054,6 +1082,77 @@ class MeasurementPhotoDetailViewTest(TestCase):
         return SimpleUploadedFile(
             "test.jpg", image_bytes.read(), content_type="image/jpeg"
         )
+
+    def test_operation_routes_reject_unrelated_methods(self):
+        self.client.force_authenticate(user=self.user)
+        measurement_path = f"/api/measurements/{self.measurement.id}/"
+        photo_path = f"{measurement_path}photos/{self.photo.id}/"
+        measurement_kwargs = {"measurement_id": self.measurement.id}
+        photo_kwargs = {**measurement_kwargs, "photo_id": self.photo.id}
+        cases = [
+            ("list", {}, "/api/measurements/", "get"),
+            ("create", {}, "/api/measurements/create/", "post"),
+            ("detail", measurement_kwargs, measurement_path, "get"),
+            ("update", measurement_kwargs, f"{measurement_path}update/", "put"),
+            ("delete", measurement_kwargs, f"{measurement_path}delete/", "delete"),
+            ("photos-list", measurement_kwargs, f"{measurement_path}photos/", "get"),
+            (
+                "photo-create",
+                measurement_kwargs,
+                f"{measurement_path}photos/create/",
+                "post",
+            ),
+            ("photo-detail", photo_kwargs, photo_path, "get"),
+            ("photo-delete", photo_kwargs, f"{photo_path}delete/", "delete"),
+        ]
+        for name, kwargs, expected_url, allowed_method in cases:
+            url = reverse(f"user_measurements:{name}", kwargs=kwargs)
+            self.assertEqual(url, expected_url)
+            for method in ["get", "post", "put", "patch", "delete"]:
+                if method == allowed_method:
+                    continue
+                with self.subTest(route=name, method=method):
+                    response = getattr(self.client, method)(url, {}, format="json")
+                    self.assertEqual(
+                        response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
+                    )
+                    self.assertEqual(
+                        response.json()["error_code"], "METHOD_NOT_ALLOWED"
+                    )
+            with self.subTest(route=name, method="options"):
+                self.assertEqual(self.client.options(url).status_code, status.HTTP_200_OK)
+            if allowed_method == "get":
+                with self.subTest(route=name, method="head"):
+                    response = self.client.head(url)
+                    self.assertEqual(response.status_code, status.HTTP_200_OK)
+                    self.assertEqual(response.content, b"")
+        self.assertTrue(Measurements.objects.filter(pk=self.measurement.pk).exists())
+        self.assertTrue(MeasurementPhotos.objects.filter(pk=self.photo.pk).exists())
+
+    def test_action_routes_require_active_user(self):
+        measurement_kwargs = {"measurement_id": self.measurement.id}
+        photo_kwargs = {**measurement_kwargs, "photo_id": self.photo.id}
+        routes = [
+            ("create", {}, "post"),
+            ("update", measurement_kwargs, "put"),
+            ("delete", measurement_kwargs, "delete"),
+            ("photo-create", measurement_kwargs, "post"),
+            ("photo-delete", photo_kwargs, "delete"),
+        ]
+        for user, expected_status in [
+            (None, status.HTTP_400_BAD_REQUEST),
+            (self.user, status.HTTP_404_NOT_FOUND),
+        ]:
+            self.user.is_active = False
+            self.user.save()
+            self.client.force_authenticate(user=user)
+            for name, kwargs, method in routes:
+                with self.subTest(route=name, authenticated=user is not None):
+                    url = reverse(f"user_measurements:{name}", kwargs=kwargs)
+                    response = getattr(self.client, method)(url, {}, format="json")
+                    self.assertEqual(response.status_code, expected_status)
+        self.assertEqual(Measurements.objects.filter(user=self.user).count(), 1)
+        self.assertTrue(MeasurementPhotos.objects.filter(pk=self.photo.pk).exists())
 
     def test_get_photo_authenticated(self):
         """Test GET photo with authenticated user"""
@@ -1105,7 +1204,7 @@ class MeasurementPhotoDetailViewTest(TestCase):
     def test_delete_photo_authenticated(self):
         """Test DELETE photo with authenticated user"""
         self.client.force_authenticate(user=self.user)
-        response = self.client.delete(self.detail_url)
+        response = self.client.delete(self.photo_delete_url)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -1115,7 +1214,7 @@ class MeasurementPhotoDetailViewTest(TestCase):
 
     def test_delete_photo_unauthenticated(self):
         """Test DELETE photo without authentication"""
-        response = self.client.delete(self.detail_url)
+        response = self.client.delete(self.photo_delete_url)
         self.assertIn(
             response.status_code,
             [status.HTTP_400_BAD_REQUEST, status.HTTP_401_UNAUTHORIZED],
@@ -1124,7 +1223,7 @@ class MeasurementPhotoDetailViewTest(TestCase):
     def test_delete_photo_not_owner(self):
         """Test DELETE photo owned by another user"""
         self.client.force_authenticate(user=self.other_user)
-        response = self.client.delete(self.detail_url)
+        response = self.client.delete(self.photo_delete_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("error_code", response.data)
@@ -1135,14 +1234,14 @@ class MeasurementPhotoDetailViewTest(TestCase):
     def test_delete_photo_not_found(self):
         """Test DELETE photo with non-existent ID"""
         self.client.force_authenticate(user=self.user)
-        invalid_url = reverse(
-            "user_measurements:photo-detail",
+        photo_delete_url = reverse(
+            "user_measurements:photo-delete",
             kwargs={
                 "measurement_id": self.measurement.id,
                 "photo_id": "00000000-0000-0000-0000-000000000000",
             },
         )
-        response = self.client.delete(invalid_url)
+        response = self.client.delete(photo_delete_url)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn("error_code", response.data)
@@ -1161,7 +1260,7 @@ class MeasurementPhotoDetailViewTest(TestCase):
         self.assertTrue(default_storage.exists(file_path))
 
         # Delete the photo
-        self.client.delete(self.detail_url)
+        self.client.delete(self.photo_delete_url)
 
         # Verify file is deleted
         self.assertFalse(default_storage.exists(file_path))
@@ -1171,7 +1270,7 @@ class MeasurementPhotoDetailViewTest(TestCase):
         self.client.force_authenticate(user=self.user)
 
         # Delete the photo
-        self.client.delete(self.detail_url)
+        self.client.delete(self.photo_delete_url)
 
         # Try to get it again
         response = self.client.get(self.detail_url)
@@ -1204,6 +1303,10 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "user_measurements:photos-list",
             kwargs={"measurement_id": self.measurement.id},
         )
+        self.photo_create_url = reverse(
+            "user_measurements:photo-create",
+            kwargs={"measurement_id": self.measurement.id},
+        )
 
     def create_test_image(self, format="JPEG"):
         """Create a test image"""
@@ -1224,7 +1327,7 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "type": MeasurementPhotos.PhotoType.FRONT,
             "photo": self.create_test_image(),
         }
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         photo_id = response.data["photo"]["id"]
 
@@ -1239,12 +1342,16 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "user_measurements:photo-detail",
             kwargs={"measurement_id": self.measurement.id, "photo_id": photo_id},
         )
+        photo_delete_url = reverse(
+            "user_measurements:photo-delete",
+            kwargs={"measurement_id": self.measurement.id, "photo_id": photo_id},
+        )
         response = self.client.get(detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["photo"]["id"], photo_id)
 
         # 4. Delete photo
-        response = self.client.delete(detail_url)
+        response = self.client.delete(photo_delete_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # 5. Verify deletion
@@ -1258,7 +1365,7 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "type": MeasurementPhotos.PhotoType.FRONT,
             "photo": self.create_test_image(),
         }
-        response = self.client.post(self.photos_url, data1, format="multipart")
+        response = self.client.post(self.photo_create_url, data1, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Create back photo
@@ -1266,7 +1373,7 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "type": MeasurementPhotos.PhotoType.BACK,
             "photo": self.create_test_image(),
         }
-        response = self.client.post(self.photos_url, data2, format="multipart")
+        response = self.client.post(self.photo_create_url, data2, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Create side photo
@@ -1274,7 +1381,7 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "type": MeasurementPhotos.PhotoType.SIDE,
             "photo": self.create_test_image(),
         }
-        response = self.client.post(self.photos_url, data3, format="multipart")
+        response = self.client.post(self.photo_create_url, data3, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Verify all three exist
@@ -1293,14 +1400,14 @@ class MeasurementPhotosIntegrationTest(TestCase):
             "type": MeasurementPhotos.PhotoType.FRONT,
             "photo": self.create_test_image(),
         }
-        response = self.client.post(self.photos_url, data, format="multipart")
+        response = self.client.post(self.photo_create_url, data, format="multipart")
         photo_id = response.data["photo"]["id"]
 
         # Delete the measurement
-        measurement_url = reverse(
-            "user_measurements:detail", kwargs={"measurement_id": self.measurement.id}
+        delete_url = reverse(
+            "user_measurements:delete", kwargs={"measurement_id": self.measurement.id}
         )
-        response = self.client.delete(measurement_url)
+        response = self.client.delete(delete_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # Verify photo is deleted

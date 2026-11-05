@@ -141,7 +141,6 @@ DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
 # ============================================================================
 AUTH_USER_MODEL = "users.User"
 AUTHENTICATION_BACKENDS = [
-    "authentication.authentication.OTPAuthBackend",
     "django.contrib.auth.backends.ModelBackend",
 ]
 

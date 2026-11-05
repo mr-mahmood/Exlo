@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from core.pagination import CustomPagination
 
 
-class UserSessionPIView(APIView):
+class UserSessionListAPIView(APIView):
     serializer_class = UserSessionSerializer
     pagination_class = CustomPagination
 
@@ -29,6 +29,9 @@ class UserSessionPIView(APIView):
         )
 
         return paginator.get_paginated_response(serializer.data, "sessions")
+
+
+class UserSessionDeleteAPIView(APIView):
 
     def delete(self, request):
         """Delete User requested session"""
