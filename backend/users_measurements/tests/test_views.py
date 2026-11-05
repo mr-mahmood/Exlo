@@ -2,6 +2,7 @@
 
 
 from django.test import TestCase
+from django.db import transaction
 from decimal import Decimal
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -1245,10 +1246,30 @@ class MeasurementPhotoDetailViewTest(TestCase):
         self.assertTrue(default_storage.exists(file_path))
 
         # Delete the photo
-        self.client.delete(self.photo_delete_url)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(self.photo_delete_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertTrue(default_storage.exists(file_path))
 
         # Verify file is deleted
         self.assertFalse(default_storage.exists(file_path))
+
+    def test_delete_photo_rollback_preserves_file(self):
+        self.client.force_authenticate(user=self.user)
+        storage = self.photo.photo.storage
+        name = self.photo.photo.name
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with self.assertRaisesMessage(RuntimeError, "rollback photo deletion"):
+                with transaction.atomic():
+                    response = self.client.delete(self.photo_delete_url)
+                    self.assertEqual(response.status_code, status.HTTP_200_OK)
+                    self.assertTrue(storage.exists(name))
+                    raise RuntimeError("rollback photo deletion")
+
+        self.assertEqual(callbacks, [])
+        self.assertTrue(MeasurementPhotos.objects.filter(pk=self.photo.pk).exists())
+        self.assertTrue(storage.exists(name))
 
     def test_get_photo_after_deletion(self):
         """Test getting a photo after it's deleted"""
@@ -1379,22 +1400,76 @@ class MeasurementPhotosIntegrationTest(TestCase):
         self.assertIn("SIDE", types)
 
     def test_delete_measurement_cascades_to_photos(self):
-        """Test that deleting measurement also deletes its photos"""
-        # Create a photo
-        data = {
-            "type": MeasurementPhotos.PhotoType.FRONT,
-            "photo": self.create_test_image(),
-        }
-        response = self.client.post(self.photo_create_url, data, format="multipart")
-        photo_id = response.data["photo"]["id"]
+        """Delete photo rows immediately and their files after commit."""
+        photo_ids = []
+        files = []
+        for photo_type in MeasurementPhotos.PhotoType:
+            response = self.client.post(
+                self.photo_create_url,
+                {"type": photo_type, "photo": self.create_test_image()},
+                format="multipart",
+            )
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            photo = MeasurementPhotos.objects.get(pk=response.data["photo"]["id"])
+            photo_ids.append(photo.pk)
+            files.append((photo.photo.storage, photo.photo.name))
 
-        # Delete the measurement
         delete_url = reverse(
             "user_measurements:delete", kwargs={"measurement_id": self.measurement.id}
         )
-        response = self.client.delete(delete_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(delete_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(
+                response.json(), {"success": True, "data": None, "error_code": None}
+            )
+            self.assertFalse(
+                Measurements.objects.filter(pk=self.measurement.pk).exists()
+            )
+            self.assertFalse(MeasurementPhotos.objects.filter(pk__in=photo_ids).exists())
+            for storage, name in files:
+                self.assertTrue(storage.exists(name))
 
-        # Verify photo is deleted
-        with self.assertRaises(MeasurementPhotos.DoesNotExist):
-            MeasurementPhotos.objects.get(id=photo_id)
+        for storage, name in files:
+            self.assertFalse(storage.exists(name))
+
+    def test_measurement_deletion_preserves_other_users_photos(self):
+        own_photo = MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.create_test_image(),
+        )
+        other_user = User.objects.create_user(
+            phone_number="09876543210", first_name="Other", last_name="User"
+        )
+        other_measurement = Measurements.objects.create(user=other_user)
+        other_photo = MeasurementPhotos.objects.create(
+            measurements=other_measurement,
+            type=MeasurementPhotos.PhotoType.FRONT,
+            photo=self.create_test_image(),
+        )
+        storage = own_photo.photo.storage
+        own_name = own_photo.photo.name
+        other_name = other_photo.photo.name
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(
+                reverse(
+                    "user_measurements:delete",
+                    kwargs={"measurement_id": self.measurement.pk},
+                )
+            )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(storage.exists(own_name))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(
+                reverse(
+                    "user_measurements:delete",
+                    kwargs={"measurement_id": other_measurement.pk},
+                )
+            )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Measurements.objects.filter(pk=other_measurement.pk).exists())
+        self.assertTrue(MeasurementPhotos.objects.filter(pk=other_photo.pk).exists())
+        self.assertTrue(storage.exists(other_name))

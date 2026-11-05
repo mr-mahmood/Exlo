@@ -215,11 +215,6 @@ class MeasurementPhotoDeleteAPIView(APIView):
         except MeasurementPhotos.DoesNotExist:
             raise APIError(MeasurementsError.PHOTO_NOT_FOUND)
 
-        # Delete the physical file
-        if photo.photo:
-            photo.photo.delete(save=False)
-
-        # Delete the database record
         photo.delete()
 
         return Response(

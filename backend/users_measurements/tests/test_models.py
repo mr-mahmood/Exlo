@@ -2,6 +2,8 @@
 
 
 from django.test import TestCase
+from django.db import transaction
+from unittest.mock import patch
 from users.models import User
 import uuid
 from users_measurements.models import Measurements, MeasurementPhotos
@@ -320,6 +322,13 @@ class MeasurementPhotosModelTest(TestCase):
             "test.jpg", image_bytes.read(), content_type="image/jpeg"
         )
 
+    def _create_photo(self, photo_type=MeasurementPhotos.PhotoType.FRONT):
+        return MeasurementPhotos.objects.create(
+            measurements=self.measurement,
+            type=photo_type,
+            photo=self.create_test_image(),
+        )
+
     def test_create_measurement_photo(self):
         """Test creating a photo for a measurement"""
         photo = MeasurementPhotos.objects.create(
@@ -388,11 +397,104 @@ class MeasurementPhotosModelTest(TestCase):
             photo=self.test_image,
         )
         photo_id = photo.id
+        storage = photo.photo.storage
+        name = photo.photo.name
 
-        self.measurement.delete()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.measurement.delete()
+            self.assertTrue(storage.exists(name))
 
         with self.assertRaises(MeasurementPhotos.DoesNotExist):
             MeasurementPhotos.objects.get(id=photo_id)
+        self.assertFalse(storage.exists(name))
+
+    def test_queryset_deletion_removes_photo_files(self):
+        photo = self._create_photo()
+        storage = photo.photo.storage
+        name = photo.photo.name
+
+        with self.captureOnCommitCallbacks(execute=True):
+            Measurements.objects.filter(pk=self.measurement.pk).delete()
+
+        self.assertFalse(MeasurementPhotos.objects.filter(pk=photo.pk).exists())
+        self.assertFalse(storage.exists(name))
+
+    def test_user_cascade_removes_photo_files(self):
+        photo = self._create_photo()
+        storage = photo.photo.storage
+        name = photo.photo.name
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.user.delete()
+
+        self.assertFalse(Measurements.objects.filter(pk=self.measurement.pk).exists())
+        self.assertFalse(MeasurementPhotos.objects.filter(pk=photo.pk).exists())
+        self.assertFalse(storage.exists(name))
+
+    def test_measurement_deletion_rollback_preserves_photos(self):
+        photo = self._create_photo()
+        storage = photo.photo.storage
+        name = photo.photo.name
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with self.assertRaisesMessage(
+                RuntimeError, "rollback measurement deletion"
+            ):
+                with transaction.atomic():
+                    Measurements.objects.filter(pk=self.measurement.pk).delete()
+                    self.assertTrue(storage.exists(name))
+                    raise RuntimeError("rollback measurement deletion")
+
+        self.assertEqual(callbacks, [])
+        self.assertTrue(Measurements.objects.filter(pk=self.measurement.pk).exists())
+        self.assertTrue(MeasurementPhotos.objects.filter(pk=photo.pk).exists())
+        self.assertTrue(storage.exists(name))
+
+    def test_cleanup_handles_empty_and_missing_files(self):
+        for photo_type, name in (
+            (MeasurementPhotos.PhotoType.FRONT, None),
+            (MeasurementPhotos.PhotoType.BACK, ""),
+            (
+                MeasurementPhotos.PhotoType.SIDE,
+                f"measurement_photos/{uuid.uuid7().hex}.webp",
+            ),
+        ):
+            MeasurementPhotos.objects.create(
+                measurements=self.measurement, type=photo_type, photo=name
+            )
+
+        with self.assertNoLogs("django.test", level="ERROR"):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.measurement.delete()
+
+        self.assertFalse(MeasurementPhotos.objects.exists())
+
+    def test_cleanup_failure_does_not_prevent_other_file_deletions(self):
+        photos = [
+            self._create_photo(photo_type) for photo_type in MeasurementPhotos.PhotoType
+        ]
+        storage = photos[0].photo.storage
+        names = [photo.photo.name for photo in photos]
+        delete_file = storage.delete
+        failed_names = []
+
+        def fail_first_deletion(name):
+            if not failed_names:
+                failed_names.append(name)
+                raise OSError("storage unavailable")
+            delete_file(name)
+
+        with patch.object(storage, "delete", side_effect=fail_first_deletion):
+            with self.assertLogs("django.test", level="ERROR") as logs:
+                with self.captureOnCommitCallbacks(execute=True):
+                    self.measurement.delete()
+
+        self.assertFalse(Measurements.objects.exists())
+        self.assertFalse(MeasurementPhotos.objects.exists())
+        self.assertEqual(len(failed_names), 1)
+        for name in names:
+            self.assertEqual(storage.exists(name), name == failed_names[0])
+        self.assertIn("storage unavailable", "\n".join(logs.output))
 
     def test_db_table_name(self):
         """Test the database table name"""
