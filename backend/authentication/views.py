@@ -5,17 +5,17 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from users.validators import validate_phone
-from core.errors import APIError, AuthenticationError, OTPError, SessionError
+from core.errors import APIError, OTPError, SessionError
 from users.models import User
 from users.serializers import UserProfileSerializer
 from users_sessions.models import Session
 from .token_services import create_tokens_for_user, refresh_tokens
-from .utils import attach_auth_tokens, is_bearer_transport
+from .utils import make_cookie
 from .authentication import RefreshTokenAuthentication
 from .otp_service import generate_otp, verify_otp
 from django.conf import settings
-from django.core.cache import cache
 from .throttles import OTPPhoneThrottle, OTPIPThrottle
+from .signup_verification import issue_signup_token
 
 
 class LoginRequestApiView(APIView):
@@ -76,27 +76,17 @@ class LoginVerifyApiView(APIView):
                 status=status.HTTP_200_OK,
             )
 
-            attach_auth_tokens(
-                response,
-                request,
-                access,
-                refresh,
-            )
-
+            make_cookie(response, {"access_token": access, "refresh_token": refresh})
             return response
 
         except User.DoesNotExist:
             # Signup flow
-            cache_key = f"signup_verified_{phone_number}"
-            cache.set(cache_key, {"phone_number": phone_number}, timeout=600)
-
-            return Response(
-                {
-                    "user": None,
-                    "new_user": True,
-                },
+            response = Response(
+                {"user": None, "new_user": True},
                 status=status.HTTP_200_OK,
             )
+            issue_signup_token(phone_number, response)
+            return response
 
 
 class RefreshAPIView(APIView):
@@ -113,11 +103,9 @@ class RefreshAPIView(APIView):
 
         response = Response(status=status.HTTP_200_OK)
 
-        attach_auth_tokens(
+        make_cookie(
             response,
-            request,
-            new_access,
-            str(new_refresh),
+            {"access_token": new_access, "refresh_token": str(new_refresh)},
         )
 
         return response
@@ -145,16 +133,15 @@ class LogoutAPIView(APIView):
         # Clear cookies
         response = Response(status=status.HTTP_200_OK)
 
-        if not is_bearer_transport(request):
-            response.delete_cookie(
-                "access_token",
-                path="/",
-                domain=settings.SESSION_COOKIE_DOMAIN,
-            )
-            response.delete_cookie(
-                "refresh_token",
-                path="/",
-                domain=settings.SESSION_COOKIE_DOMAIN,
-            )
+        response.delete_cookie(
+            "access_token",
+            path="/",
+            domain=settings.SESSION_COOKIE_DOMAIN,
+        )
+        response.delete_cookie(
+            "refresh_token",
+            path="/",
+            domain=settings.SESSION_COOKIE_DOMAIN,
+        )
 
         return response

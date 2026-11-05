@@ -45,6 +45,4 @@ class UserSessionDeleteAPIView(APIView):
 
         session.delete()
 
-        return Response(
-            status=status.HTTP_200_OK,
-        )
+        return Response(status=status.HTTP_200_OK)

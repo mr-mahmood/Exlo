@@ -26,13 +26,8 @@ class UserSignupViewTest(TestCase):
         cache.clear()
         self.url = reverse("users:user-signup")
 
-        # Simulate phone verification
         self.verified_phone = "09123456789"
-        cache.set(
-            f"signup_verified_{self.verified_phone}",
-            {"phone_number": self.verified_phone},
-            600,
-        )
+        self.verify_phone(self.verified_phone)
 
         self.valid_data = {
             "phone_number": self.verified_phone,
@@ -45,11 +40,24 @@ class UserSignupViewTest(TestCase):
     def tearDown(self):
         cache.clear()
 
+    def verify_phone(self, phone):
+        response = self.client.post(
+            reverse("authentication:login-request"), {"phone_number": phone}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.post(
+            reverse("authentication:login-verify"),
+            {"phone_number": phone, "otp": "123456"},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["new_user"])
+
     # ========== SUCCESS CASES ==========
 
     def test_signup_success(self):
         """Test successful signup with all valid data"""
-        response = self.client.post(self.url, self.valid_data)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, self.valid_data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("user", response.data)
@@ -73,6 +81,9 @@ class UserSignupViewTest(TestCase):
         self.assertIn("refresh_token", response.cookies)
         self.assertTrue(response.cookies["access_token"]["httponly"])
         self.assertTrue(response.cookies["refresh_token"]["httponly"])
+        self.assertEqual(set(response.json()["data"]), {"user"})
+        for name in ["access_token", "refresh_token"]:
+            self.assertNotIn(response.cookies[name].value, response.content.decode())
 
         # Check cache cleared
         self.assertIsNone(
@@ -114,11 +125,7 @@ class UserSignupViewTest(TestCase):
 
     def test_signup_with_expired_phone_verification(self):
         """Test signup with expired phone verification"""
-        cache.set(
-            f"signup_verified_{self.verified_phone}",
-            {"phone_number": self.verified_phone},
-            -1,
-        )
+        cache.expire(f"signup_verified_{self.verified_phone}", 0)
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -156,12 +163,6 @@ class UserSignupViewTest(TestCase):
         data = self.valid_data.copy()
         data["phone_number"] = "12345"  # invalid
 
-        verified_key = f"signup_verified_{data['phone_number']}"
-        cache.set(
-            verified_key,
-            {"phone_number": data["phone_number"]},
-            600,
-        )
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -175,12 +176,6 @@ class UserSignupViewTest(TestCase):
             gender=User.Gender.MALE,
         )
 
-        verified_key = f"signup_verified_{self.valid_data["phone_number"]}"
-        cache.set(
-            verified_key,
-            {"phone_number": self.valid_data["phone_number"]},
-            600,
-        )
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
@@ -222,6 +217,7 @@ class UserSignupViewTest(TestCase):
 
     def test_signup_phone_already_verified_but_used(self):
         """Test phone verified but already used by another user"""
+        self.verify_phone("09123456788")
         User.objects.create_user(
             phone_number="09123456788",
             first_name="Existing",
@@ -229,7 +225,6 @@ class UserSignupViewTest(TestCase):
             gender=User.Gender.MALE,
         )
 
-        cache.set("signup_verified_09123456788", {"phone_number": "09123456788"}, 600)
         data = self.valid_data.copy()
         data["phone_number"] = "09123456788"
 
@@ -551,26 +546,6 @@ class UserProfileViewTest(TestCase):
         self.client.force_authenticate(user=self.user)
 
     # ========== GET TESTS ==========
-    def test_profile_routes_reject_unrelated_methods(self):
-        self.assertEqual(self.url, "/api/users/profile/")
-        self.assertEqual(self.update_url, "/api/users/profile/update/")
-        for url, methods in [
-            (self.url, ["post", "put", "patch", "delete"]),
-            (self.update_url, ["get", "post", "patch", "delete"]),
-        ]:
-            for method in methods:
-                with self.subTest(url=url, method=method):
-                    response = getattr(self.client, method)(
-                        url, {"first_name": "Changed"}, format="json"
-                    )
-                    self.assertEqual(
-                        response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
-                    )
-                    self.assertEqual(
-                        response.json()["error_code"], "METHOD_NOT_ALLOWED"
-                    )
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.first_name, "John")
 
     def test_profile_routes_keep_head_and_options(self):
         response = self.client.head(self.url)

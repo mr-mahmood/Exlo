@@ -1,8 +1,7 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from .utils import is_bearer_transport
-from core.errors import APIError, AuthenticationError, UserAccountError, SessionError
+from core.errors import APIError, AuthenticationError, SessionError
 from users_sessions.models import Session
 from users.models import User
 
@@ -18,15 +17,7 @@ class AccessTokenAuthentication(JWTAuthentication):
 
     def authenticate(self, request):
 
-        access_token = None
-        if is_bearer_transport(request):
-            header = self.get_header(request)
-            if header:
-                raw_token = self.get_raw_token(header)
-                if raw_token:
-                    access_token = raw_token
-        else:
-            access_token = request.COOKIES.get("access_token")
+        access_token = request.COOKIES.get("access_token")
 
         if not access_token:
             raise APIError(AuthenticationError.TOKEN_NOT_PROVIDE)
@@ -68,15 +59,7 @@ class RefreshTokenAuthentication(JWTAuthentication):
 
     def authenticate(self, request):
 
-        refresh_token = None
-        if is_bearer_transport(request):
-            header = self.get_header(request)
-            if header:
-                raw_token = self.get_raw_token(header)
-                if raw_token:
-                    refresh_token = raw_token
-        else:
-            refresh_token = request.COOKIES.get("refresh_token")
+        refresh_token = request.COOKIES.get("refresh_token")
 
         if not refresh_token:
             raise APIError(AuthenticationError.TOKEN_NOT_PROVIDE)

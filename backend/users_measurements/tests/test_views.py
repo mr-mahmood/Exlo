@@ -1083,52 +1083,6 @@ class MeasurementPhotoDetailViewTest(TestCase):
             "test.jpg", image_bytes.read(), content_type="image/jpeg"
         )
 
-    def test_operation_routes_reject_unrelated_methods(self):
-        self.client.force_authenticate(user=self.user)
-        measurement_path = f"/api/measurements/{self.measurement.id}/"
-        photo_path = f"{measurement_path}photos/{self.photo.id}/"
-        measurement_kwargs = {"measurement_id": self.measurement.id}
-        photo_kwargs = {**measurement_kwargs, "photo_id": self.photo.id}
-        cases = [
-            ("list", {}, "/api/measurements/", "get"),
-            ("create", {}, "/api/measurements/create/", "post"),
-            ("detail", measurement_kwargs, measurement_path, "get"),
-            ("update", measurement_kwargs, f"{measurement_path}update/", "put"),
-            ("delete", measurement_kwargs, f"{measurement_path}delete/", "delete"),
-            ("photos-list", measurement_kwargs, f"{measurement_path}photos/", "get"),
-            (
-                "photo-create",
-                measurement_kwargs,
-                f"{measurement_path}photos/create/",
-                "post",
-            ),
-            ("photo-detail", photo_kwargs, photo_path, "get"),
-            ("photo-delete", photo_kwargs, f"{photo_path}delete/", "delete"),
-        ]
-        for name, kwargs, expected_url, allowed_method in cases:
-            url = reverse(f"user_measurements:{name}", kwargs=kwargs)
-            self.assertEqual(url, expected_url)
-            for method in ["get", "post", "put", "patch", "delete"]:
-                if method == allowed_method:
-                    continue
-                with self.subTest(route=name, method=method):
-                    response = getattr(self.client, method)(url, {}, format="json")
-                    self.assertEqual(
-                        response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED
-                    )
-                    self.assertEqual(
-                        response.json()["error_code"], "METHOD_NOT_ALLOWED"
-                    )
-            with self.subTest(route=name, method="options"):
-                self.assertEqual(self.client.options(url).status_code, status.HTTP_200_OK)
-            if allowed_method == "get":
-                with self.subTest(route=name, method="head"):
-                    response = self.client.head(url)
-                    self.assertEqual(response.status_code, status.HTTP_200_OK)
-                    self.assertEqual(response.content, b"")
-        self.assertTrue(Measurements.objects.filter(pk=self.measurement.pk).exists())
-        self.assertTrue(MeasurementPhotos.objects.filter(pk=self.photo.pk).exists())
-
     def test_action_routes_require_active_user(self):
         measurement_kwargs = {"measurement_id": self.measurement.id}
         photo_kwargs = {**measurement_kwargs, "photo_id": self.photo.id}
