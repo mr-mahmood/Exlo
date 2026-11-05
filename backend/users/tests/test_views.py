@@ -7,6 +7,7 @@ from threading import Barrier
 from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, close_old_connections, connections, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -1095,6 +1096,22 @@ class UserProfileViewTest(TestCase):
         self.update_url = reverse("users:profile-update")
         self.client.force_authenticate(user=self.user)
 
+    def _upload_profile_picture(self, user=None):
+        user = user or self.user
+        client = APIClient()
+        client.force_authenticate(user=user)
+        image_bytes = io.BytesIO()
+        Image.new("RGB", (16, 16), color="red").save(image_bytes, format="PNG")
+        image_file = SimpleUploadedFile(
+            "profile.png", image_bytes.getvalue(), content_type="image/png"
+        )
+        response = client.put(
+            self.update_url, {"profile_picture": image_file}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        return user.profile_picture.name
+
     # ========== GET TESTS ==========
 
     def test_profile_routes_keep_head_and_options(self):
@@ -1256,6 +1273,172 @@ class UserProfileViewTest(TestCase):
         self.assertEqual(response.data["error_code"], "VALIDATION_ERROR")
 
     # ========== PROFILE PICTURE UPDATE ==========
+    def test_reset_profile_picture_to_default(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.put(
+                self.update_url, {"profile_picture": None}, format="json"
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.user.refresh_from_db()
+            self.assertEqual(
+                self.user.profile_picture.name,
+                "profile_pics/default_profile_image.png",
+            )
+            self.assertTrue(storage.exists(previous_name))
+
+        self.assertFalse(storage.exists(previous_name))
+        payload = response.json()
+        self.assertTrue(payload["success"])
+        self.assertIsNone(payload["error_code"])
+        self.assertEqual(
+            payload["data"]["user"]["profile_picture"],
+            "http://testserver/media/profile_pics/default_profile_image.png",
+        )
+
+    def test_omitted_profile_picture_preserves_upload(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.put(
+                self.update_url, {"first_name": "Jane"}, format="json"
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Jane")
+        self.assertEqual(self.user.profile_picture.name, previous_name)
+        self.assertTrue(storage.exists(previous_name))
+
+    def test_repeated_picture_resets_preserve_shared_default(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+        default_name = "profile_pics/default_profile_image.png"
+        if not storage.exists(default_name):
+            storage.save(default_name, ContentFile(b"shared default image"))
+            self.addCleanup(storage.delete, default_name)
+
+        for attempt in range(2):
+            with self.subTest(attempt=attempt):
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.client.put(
+                        self.update_url, {"profile_picture": None}, format="json"
+                    )
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.profile_picture.name, default_name)
+                self.assertTrue(storage.exists(default_name))
+                self.assertFalse(storage.exists(previous_name))
+
+    def test_invalid_picture_reset_preserves_upload(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.put(
+                self.update_url,
+                {"profile_picture": None, "first_name": "Jo"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "John")
+        self.assertEqual(self.user.profile_picture.name, previous_name)
+        self.assertTrue(storage.exists(previous_name))
+
+    def test_picture_reset_only_changes_authenticated_user(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+        other_user = User.objects.create_user(
+            phone_number="09123456788",
+            first_name="Other",
+            last_name="User",
+            gender=User.Gender.FEMALE,
+        )
+        other_picture_name = self._upload_profile_picture(other_user)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.put(
+                self.update_url,
+                {"profile_picture": None, "id": str(other_user.id)},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertEqual(
+            self.user.profile_picture.name, "profile_pics/default_profile_image.png"
+        )
+        self.assertFalse(storage.exists(previous_name))
+        other_user.refresh_from_db()
+        self.assertEqual(other_user.profile_picture.name, other_picture_name)
+        self.assertTrue(storage.exists(other_picture_name))
+
+    def test_picture_reset_requires_active_authenticated_user(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+
+        for client, expected_status in (
+            (APIClient(), status.HTTP_400_BAD_REQUEST),
+            (self.client, status.HTTP_404_NOT_FOUND),
+        ):
+            with self.subTest(expected_status=expected_status):
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = client.put(
+                        self.update_url, {"profile_picture": None}, format="json"
+                    )
+
+                self.assertEqual(response.status_code, expected_status)
+                self.user.refresh_from_db()
+                self.assertEqual(self.user.profile_picture.name, previous_name)
+                self.assertTrue(storage.exists(previous_name))
+
+    def test_picture_cleanup_failure_does_not_fail_reset(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+
+        with patch.object(
+            storage, "delete", side_effect=OSError("storage unavailable")
+        ):
+            with self.assertLogs("django.test", level="ERROR") as logs:
+                with self.captureOnCommitCallbacks(execute=True):
+                    response = self.client.put(
+                        self.update_url, {"profile_picture": None}, format="json"
+                    )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.json()["success"])
+        self.user.refresh_from_db()
+        self.assertEqual(
+            self.user.profile_picture.name, "profile_pics/default_profile_image.png"
+        )
+        self.assertTrue(storage.exists(previous_name))
+        self.assertIn("storage unavailable", "\n".join(logs.output))
+
+    def test_picture_cleanup_preserves_subsequent_upload(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.put(
+                self.update_url, {"profile_picture": None}, format="json"
+            )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            new_name = self._upload_profile_picture()
+            self.assertTrue(storage.exists(previous_name))
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile_picture.name, new_name)
+        self.assertTrue(storage.exists(new_name))
+        self.assertFalse(storage.exists(previous_name))
+
     def test_update_profile_picture(self):
         # Create a valid image file
         image = Image.new("RGB", (100, 100), color="red")

@@ -147,12 +147,21 @@ class UserProfileSerializer(serializers.ModelSerializer):
         return value
 
     def update(self, instance: User, validated_data):
-        profile_picture = validated_data.pop("profile_picture", None)
+        profile_picture = validated_data.pop("profile_picture", serializers.empty)
+        previous_picture = None
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
-        if profile_picture:
+        if profile_picture is None:
+            default_picture = instance._meta.get_field("profile_picture").get_default()
+            if (
+                instance.profile_picture
+                and instance.profile_picture.name != default_picture
+            ):
+                previous_picture = instance.profile_picture
+            instance.profile_picture = default_picture
+        elif profile_picture is not serializers.empty:
             converted_image = self.convert_to_webp(profile_picture)
             instance.profile_picture.save(
                 converted_image.name,
@@ -161,6 +170,16 @@ class UserProfileSerializer(serializers.ModelSerializer):
             )
 
         instance.save()
+
+        if previous_picture:
+            storage = previous_picture.storage
+            name = previous_picture.name
+
+            def delete_previous_picture():
+                storage.delete(name)
+
+            transaction.on_commit(delete_previous_picture, robust=True)
+
         return instance
 
     def convert_to_webp(self, image_file):

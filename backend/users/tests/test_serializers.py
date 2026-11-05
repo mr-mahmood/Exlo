@@ -1,9 +1,10 @@
 # users/tests/test_serializers.py
 
 from typing import cast
+from unittest.mock import patch
 from django.conf import settings
 from django.test import TestCase
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from datetime import date, timedelta
 from rest_framework.exceptions import ValidationError as DRFValidationError
 from users.serializers import UserSignupSerializer, UserProfileSerializer
@@ -412,6 +413,74 @@ class UserProfilePictureSerializerTest(TestCase):
         return SimpleUploadedFile(
             f"test.{ext}", image_bytes.read(), content_type=f"image/{ext}"
         )
+
+    def _upload_profile_picture(self):
+        serializer = UserProfileSerializer(
+            self.user, data={"profile_picture": self.test_image}, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return self.user.profile_picture.name
+
+    def test_reset_profile_picture_rollback_preserves_upload(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with self.assertRaisesMessage(RuntimeError, "rollback profile reset"):
+                with transaction.atomic():
+                    serializer = UserProfileSerializer(
+                        self.user, data={"profile_picture": None}, partial=True
+                    )
+                    serializer.is_valid(raise_exception=True)
+                    serializer.save()
+                    self.assertTrue(storage.exists(previous_name))
+                    raise RuntimeError("rollback profile reset")
+
+        self.assertEqual(callbacks, [])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile_picture.name, previous_name)
+        self.assertTrue(storage.exists(previous_name))
+
+    def test_reset_profile_picture_save_failure_preserves_upload(self):
+        previous_name = self._upload_profile_picture()
+        storage = self.user.profile_picture.storage
+        serializer = UserProfileSerializer(
+            self.user, data={"profile_picture": None}, partial=True
+        )
+        serializer.is_valid(raise_exception=True)
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            with patch.object(
+                self.user, "save", side_effect=IntegrityError("save failed")
+            ):
+                with self.assertRaisesMessage(IntegrityError, "save failed"):
+                    serializer.save()
+
+        self.assertEqual(callbacks, [])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.profile_picture.name, previous_name)
+        self.assertTrue(storage.exists(previous_name))
+
+    def test_reset_profile_picture_without_existing_file(self):
+        for previous_value in (None, ""):
+            with self.subTest(previous_value=previous_value):
+                self.user.profile_picture = previous_value
+                self.user.save(update_fields=["profile_picture"])
+                serializer = UserProfileSerializer(
+                    self.user, data={"profile_picture": None}, partial=True
+                )
+                serializer.is_valid(raise_exception=True)
+
+                with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                    serializer.save()
+
+                self.assertEqual(callbacks, [])
+                self.user.refresh_from_db()
+                self.assertEqual(
+                    self.user.profile_picture.name,
+                    "profile_pics/default_profile_image.png",
+                )
 
     def test_update_profile_picture_converts_to_webp(self):
         """Test that profile picture is converted to WebP on update"""
