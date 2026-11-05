@@ -2,7 +2,8 @@
 
 
 import time
-from django.test import TestCase
+from django.db import DataError, IntegrityError
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from gym.models import Gym
 from commerce_products.models import CommerceProduct
@@ -291,3 +292,49 @@ class GymMembershipPlanModelTest(TestCase):
         plan.save()
 
         self.assertGreater(plan.updated_at, original_updated)
+
+
+class GymMembershipPlanCreationTransactionTests(TransactionTestCase):
+    def setUp(self):
+        self.gym = Gym.objects.create(
+            name="Test Gym", province="Tehran", city="Tehran", address="Address"
+        )
+        self.create_plan()
+
+    def create_plan(self, **overrides):
+        return GymMembershipPlan.objects.create_plan(
+            **{
+                "gym": self.gym,
+                "name": "Test Plan",
+                "description": "Test Description",
+                "duration_months": 1,
+                "visit_limit": 10,
+                "price": 29,
+                **overrides,
+            }
+        )
+
+    def assert_failed_creation_is_atomic(self, error, **overrides):
+        products = set(CommerceProduct.objects.values_list("pk", flat=True))
+        plans = set(GymMembershipPlan.objects.values_list("pk", flat=True))
+        # Autocommit exposes orphan products that an outer test transaction would hide.
+        with self.assertRaises(error):
+            self.create_plan(**overrides)
+        self.assertEqual(
+            set(CommerceProduct.objects.values_list("pk", flat=True)), products
+        )
+        self.assertEqual(
+            set(GymMembershipPlan.objects.values_list("pk", flat=True)), plans
+        )
+
+    def test_oversized_duration_does_not_leave_orphan_product(self):
+        self.assert_failed_creation_is_atomic(DataError, duration_months=2_147_483_648)
+
+    def test_other_plan_insert_failures_do_not_leave_orphan_products(self):
+        for error, overrides in (
+            (DataError, {"visit_limit": 2_147_483_648}),
+            (DataError, {"price": 9_223_372_036_854_775_808}),
+            (IntegrityError, {"gym": None}),
+        ):
+            with self.subTest(overrides=overrides):
+                self.assert_failed_creation_is_atomic(error, **overrides)

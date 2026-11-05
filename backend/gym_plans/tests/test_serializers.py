@@ -285,3 +285,84 @@ class GymMembershipPlanSerializerTest(TestCase):
             context.exception.error_code,
             GymPlansError.INVALID_VISIT_LIMIT[0],
         )
+
+    def test_serializer_rejects_numbers_above_storage_limits(self):
+        for field, overflow in (
+            ("duration_months", 2_147_483_648),
+            ("visit_limit", 2_147_483_648),
+            ("price", 9_223_372_036_854_775_808),
+        ):
+            for value in (overflow, str(overflow)):
+                with self.subTest(field=field, value=value):
+                    data = {
+                        "name": "Test Plan",
+                        "description": "Test Description",
+                        "duration_months": 1,
+                        "visit_limit": 10,
+                        "price": 29,
+                        field: value,
+                    }
+                    serializer = GymMembershipPlanSerializer(data=data)
+                    with self.assertNumQueries(0):
+                        self.assertFalse(serializer.is_valid())
+                    self.assertIn(field, serializer.errors)
+
+    def test_serializer_accepts_numeric_boundaries(self):
+        for values in (
+            {"duration_months": 1, "visit_limit": 1, "price": 1},
+            {
+                "duration_months": 2_147_483_647,
+                "visit_limit": 2_147_483_647,
+                "price": 9_223_372_036_854_775_807,
+            },
+        ):
+            with self.subTest(values=values):
+                serializer = GymMembershipPlanSerializer(
+                    data={"name": "Boundary Plan", "description": "Boundary", **values}
+                )
+                self.assertTrue(serializer.is_valid(), serializer.errors)
+                for field, value in values.items():
+                    self.assertEqual(serializer.validated_data[field], value)
+
+    def test_numeric_fields_remain_required_and_non_nullable(self):
+        data = {
+            "name": "Test Plan",
+            "description": "Test Description",
+            "duration_months": 1,
+            "visit_limit": 10,
+            "price": 29,
+        }
+        for field in ("duration_months", "visit_limit", "price"):
+            with self.subTest(field=field, case="missing"):
+                missing = {
+                    name: value for name, value in data.items() if name != field
+                }
+                serializer = GymMembershipPlanSerializer(data=missing)
+                self.assertFalse(serializer.is_valid())
+                self.assertIn(field, serializer.errors)
+            with self.subTest(field=field, case="null"):
+                serializer = GymMembershipPlanSerializer(data={**data, field: None})
+                self.assertFalse(serializer.is_valid())
+                self.assertIn(field, serializer.errors)
+
+    def test_non_positive_numbers_keep_existing_error_codes(self):
+        for field, error_code in (
+            ("duration_months", "PLAN_002"),
+            ("visit_limit", "PLAN_003"),
+            ("price", "PLAN_004"),
+        ):
+            for value in (0, -1):
+                with self.subTest(field=field, value=value):
+                    serializer = GymMembershipPlanSerializer(
+                        data={
+                            "name": "Test Plan",
+                            "description": "Test Description",
+                            "duration_months": 1,
+                            "visit_limit": 10,
+                            "price": 29,
+                            field: value,
+                        }
+                    )
+                    with self.assertRaises(APIError) as raised:
+                        serializer.is_valid(raise_exception=True)
+                    self.assertEqual(raised.exception.error_code, error_code)

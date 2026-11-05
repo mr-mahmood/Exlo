@@ -2,6 +2,8 @@
 
 
 import uuid
+from django.core.cache import cache
+from django.db import transaction
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -10,6 +12,8 @@ from users.models import User
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
 from gym_auth.models import UserGymRole
+from commerce_products.models import CommerceProduct
+from core.cache import GYM_PLANS, cache_key
 
 class GymPlansViewsTest(TestCase):
     """Test cases for GymPlans views."""
@@ -139,6 +143,81 @@ class GymPlansViewsTest(TestCase):
 
     # ==================== CREATE TESTS ====================
 
+    def test_create_rejects_numbers_above_storage_limits(self):
+        self.authenticate(self.gym_owner)
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.assertEqual(self.client.get(self.list_url).status_code, 200)
+        key = cache_key(GYM_PLANS, self.gym.pk)
+        warmed = cache.get(key)
+        self.assertIsNotNone(warmed)
+        products = set(CommerceProduct.objects.values_list("pk", flat=True))
+        plans = set(GymMembershipPlan.objects.values_list("pk", flat=True))
+
+        for field, value in (
+            ("duration_months", 2_147_483_648),
+            ("visit_limit", 2_147_483_648),
+            ("price", 9_223_372_036_854_775_808),
+        ):
+            with self.subTest(field=field):
+                with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                    with transaction.atomic():
+                        response = self.client.post(
+                            self.create_url,
+                            {
+                                "name": "Rejected Plan",
+                                "description": "Rejected",
+                                "duration_months": 1,
+                                "visit_limit": 10,
+                                "price": 29,
+                                field: value,
+                            },
+                            format="json",
+                        )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                payload = response.json()
+                self.assertFalse(payload["success"])
+                self.assertIsNone(payload["data"])
+                self.assertEqual(payload["error_code"], "VALIDATION_ERROR")
+                self.assertEqual(
+                    set(CommerceProduct.objects.values_list("pk", flat=True)), products
+                )
+                self.assertEqual(
+                    set(GymMembershipPlan.objects.values_list("pk", flat=True)), plans
+                )
+                self.assertEqual(callbacks, [])
+                self.assertEqual(cache_key(GYM_PLANS, self.gym.pk), key)
+                self.assertEqual(cache.get(key), warmed)
+
+    def test_create_accepts_numeric_storage_boundaries(self):
+        self.authenticate(self.gym_owner)
+        for values in (
+            {"duration_months": 1, "visit_limit": 1, "price": 1},
+            {
+                "duration_months": 2_147_483_647,
+                "visit_limit": 2_147_483_647,
+                "price": 9_223_372_036_854_775_807,
+            },
+        ):
+            with self.subTest(values=values):
+                response = self.client.post(
+                    self.create_url,
+                    {"name": "Boundary Plan", "description": "Boundary", **values},
+                    format="json",
+                )
+                self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+                payload = response.json()["data"]["plan"]
+                plan = GymMembershipPlan.objects.get(pk=payload["id"])
+                for field, value in values.items():
+                    self.assertEqual(getattr(plan, field), value)
+                    self.assertEqual(payload[field], value)
+                self.assertTrue(
+                    CommerceProduct.objects.filter(
+                        pk=plan.pk,
+                        product_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
+                    ).exists()
+                )
+
     def test_create_plan_admin(self):
         """Test that admin can create a plan."""
         self.authenticate(self.admin_user)
@@ -229,6 +308,35 @@ class GymPlansViewsTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     # ==================== UPDATE TESTS ====================
+
+    def test_update_rejects_numbers_above_storage_limits(self):
+        self.authenticate(self.gym_owner)
+        original = GymMembershipPlan.objects.values().get(pk=self.plan1.pk)
+        products = set(CommerceProduct.objects.values_list("pk", flat=True))
+        url = reverse(
+            "gym_plans:update",
+            kwargs={"gym_id": self.gym.pk, "plan_id": self.plan1.pk},
+        )
+        for field, value in (
+            ("duration_months", 2_147_483_648),
+            ("visit_limit", 2_147_483_648),
+            ("price", 9_223_372_036_854_775_808),
+        ):
+            with self.subTest(field=field):
+                with self.captureOnCommitCallbacks(execute=True) as callbacks:
+                    with transaction.atomic():
+                        response = self.client.put(
+                            url, {field: value, "name": "Rejected"}, format="json"
+                        )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(response.json()["error_code"], "VALIDATION_ERROR")
+                self.assertEqual(
+                    GymMembershipPlan.objects.values().get(pk=self.plan1.pk), original
+                )
+                self.assertEqual(
+                    set(CommerceProduct.objects.values_list("pk", flat=True)), products
+                )
+                self.assertEqual(callbacks, [])
 
     def test_update_plan_admin(self):
         """Test that admin can update a plan."""

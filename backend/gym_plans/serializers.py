@@ -8,9 +8,6 @@ from gym.serializers import GymBasicSerializer
 
 class GymMembershipPlanSerializer(serializers.ModelSerializer):
     gym = GymBasicSerializer(read_only=True)
-    duration_months = serializers.IntegerField(required=True, allow_null=False)
-    visit_limit = serializers.IntegerField(required=True, allow_null=False)
-    price = serializers.IntegerField(required=True, allow_null=False)
 
     class Meta:
         model = GymMembershipPlan
@@ -28,6 +25,16 @@ class GymMembershipPlanSerializer(serializers.ModelSerializer):
             "id",
             "gym",
         ]
+        # Keep model maxima and existing errors for nonpositive values.
+        extra_kwargs = {
+            "duration_months": {
+                "required": True,
+                "allow_null": False,
+                "min_value": None,
+            },
+            "visit_limit": {"required": True, "allow_null": False, "min_value": None},
+            "price": {"required": True, "allow_null": False, "min_value": None},
+        }
 
     def validate_duration_months(self, value):
         if value <= 0:

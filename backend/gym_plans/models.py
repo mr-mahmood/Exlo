@@ -1,6 +1,6 @@
 # gym_plans/models.py
 
-from django.db import models
+from django.db import models, transaction
 from django.db.models import QuerySet
 from django.utils import timezone
 from commerce_products.models import CommerceProduct
@@ -9,6 +9,7 @@ from gym.models import Gym
 
 class GymMembershipPlanManager(models.Manager):
 
+    @transaction.atomic
     def create_plan(self, **extra_fields) -> "GymMembershipPlan":
         # Create commerce product first
         commerce_product = CommerceProduct.objects.create(
