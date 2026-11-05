@@ -2,7 +2,10 @@
 
 
 import uuid
-from django.test import TestCase
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from django.db import connections
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -10,6 +13,7 @@ from gym.models import Gym
 from gym_auth.models import UserGymRole
 from users.models import User
 from django.core.cache import cache
+from core.cache import GYM_USERS, cache_key
 
 
 class GymAuthViewsTest(TestCase):
@@ -228,6 +232,93 @@ class GymAuthViewsTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     # ==================== OWNER CREATE TESTS ====================
+
+    def assert_duplicate_role_rejected(self, url, existing_role, actor):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.authenticate(actor)
+        self.assertEqual(self.client.get(self.list_url).status_code, 200)
+        key = cache_key(GYM_USERS, self.gym.pk)
+        warmed = cache.get(key)
+        self.assertIsNotNone(warmed)
+        original = list(UserGymRole.objects.order_by("pk").values())
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            response = self.client.post(url, {"user": str(existing_role.user_id)})
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        payload = response.json()
+        self.assertFalse(payload["success"])
+        self.assertIsNone(payload["data"])
+        self.assertEqual(payload["error_code"], "ROLE_002")
+        self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), original)
+        self.assertEqual(callbacks, [])
+        self.assertEqual(cache_key(GYM_USERS, self.gym.pk), key)
+        self.assertEqual(cache.get(key), warmed)
+
+    def test_duplicate_owner_returns_api_error(self):
+        self.assert_duplicate_role_rejected(
+            self.owner_create_url, self.owner_role, self.admin_user
+        )
+
+    def test_duplicate_coach_returns_api_error(self):
+        self.assert_duplicate_role_rejected(
+            self.coach_create_url, self.coach_role, self.gym_owner
+        )
+
+    def test_duplicate_staff_returns_api_error(self):
+        self.assert_duplicate_role_rejected(
+            self.staff_create_url, self.staff_role, self.gym_owner
+        )
+
+    def test_create_different_roles_for_same_user_and_gym(self):
+        self.authenticate(self.admin_user)
+        for url in (self.coach_create_url, self.staff_create_url):
+            with self.subTest(url=url):
+                response = self.client.post(url, {"user": str(self.gym_owner.pk)})
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.assertEqual(
+            set(
+                UserGymRole.objects.filter(user=self.gym_owner, gym=self.gym)
+                .values_list("role", flat=True)
+            ),
+            {"OWNER", "COACH", "STAFF"},
+        )
+
+    def test_create_same_roles_in_different_gym(self):
+        self.authenticate(self.admin_user)
+        for role, route in (
+            (self.owner_role, "gym_auth:gym-owner-create"),
+            (self.coach_role, "gym_auth:gym-coach-create"),
+            (self.staff_role, "gym_auth:gym-staff-create"),
+        ):
+            with self.subTest(role=role.role):
+                response = self.client.post(
+                    reverse(route, kwargs={"gym_id": self.other_gym.pk}),
+                    {"user": str(role.user_id)},
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    UserGymRole.objects.filter(
+                        user_id=role.user_id, role=role.role
+                    ).count(),
+                    2,
+                )
+
+    def test_duplicate_roles_do_not_bypass_permissions(self):
+        self.authenticate(self.regular_user)
+        original = list(UserGymRole.objects.order_by("pk").values())
+        for url, role in (
+            (self.owner_create_url, self.owner_role),
+            (self.coach_create_url, self.coach_role),
+            (self.staff_create_url, self.staff_role),
+        ):
+            with self.subTest(role=role.role):
+                response = self.client.post(url, {"user": str(role.user_id)})
+                self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+                self.assertNotEqual(response.json()["error_code"], "ROLE_002")
+        self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), original)
 
     def test_create_owner_admin(self):
         """Test that an admin can assign an owner."""
@@ -626,3 +717,52 @@ class GymAuthViewsTest(TestCase):
                 id=self.staff_role.id,
             ).exists()
         )
+
+
+class GymRoleCreationConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.admin = User.objects.create_superuser(
+            phone_number="09120000001", password="adminpass123"
+        )
+        self.target = User.objects.create_user(phone_number="09120000002")
+        self.gym = Gym.objects.create(
+            name="Test Gym", province="Tehran", city="Tehran", address="Address"
+        )
+
+    def test_concurrent_duplicate_requests_create_one_role(self):
+        for role, route in (
+            ("OWNER", "gym_auth:gym-owner-create"),
+            ("COACH", "gym_auth:gym-coach-create"),
+            ("STAFF", "gym_auth:gym-staff-create"),
+        ):
+            with self.subTest(role=role):
+                barrier = Barrier(2)
+                url = reverse(route, kwargs={"gym_id": self.gym.pk})
+
+                def create_role():
+                    client = APIClient()
+                    client.force_authenticate(user=self.admin)
+                    try:
+                        barrier.wait(timeout=10)
+                        response = client.post(url, {"user": str(self.target.pk)})
+                        return response.status_code, response.json()
+                    finally:
+                        connections.close_all()
+
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = [executor.submit(create_role) for _ in range(2)]
+                    responses = [future.result(timeout=15) for future in futures]
+
+                self.assertEqual(sorted(code for code, _ in responses), [200, 400])
+                failure = next(payload for code, payload in responses if code == 400)
+                self.assertFalse(failure["success"])
+                self.assertIsNone(failure["data"])
+                self.assertEqual(failure["error_code"], "ROLE_002")
+                self.assertEqual(
+                    UserGymRole.objects.filter(
+                        user=self.target, gym=self.gym, role=role
+                    ).count(),
+                    1,
+                )

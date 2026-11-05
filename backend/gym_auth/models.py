@@ -4,18 +4,25 @@ import uuid
 from django.db import models
 from users.models import User
 from gym.models import Gym
+from core.errors import APIError, UserGymRoleError
 
 
 class UserGymRoleManager(models.Manager):
 
     def create_owner(self, user, gym):
-        return self.create(user=user, gym=gym, role=UserGymRole.Role.OWNER)
+        return self._create_role(user, gym, UserGymRole.Role.OWNER)
 
     def create_coach(self, user, gym):
-        return self.create(user=user, gym=gym, role=UserGymRole.Role.COACH)
+        return self._create_role(user, gym, UserGymRole.Role.COACH)
 
     def create_staff(self, user, gym):
-        return self.create(user=user, gym=gym, role=UserGymRole.Role.STAFF)
+        return self._create_role(user, gym, UserGymRole.Role.STAFF)
+
+    def _create_role(self, user, gym, role):
+        assignment, created = self.get_or_create(user=user, gym=gym, role=role)
+        if not created:
+            raise APIError(UserGymRoleError.ROLE_ALREADY_EXISTS)
+        return assignment
 
 
 class UserGymRole(models.Model):

@@ -769,6 +769,12 @@ class UserGymRoleError(APIError):
         status.HTTP_404_NOT_FOUND,
     )
 
+    ROLE_ALREADY_EXISTS = (
+        "ROLE_002",
+        "User already has this role in this gym.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
 
 # ============================================================================
 # GYM LOCKER

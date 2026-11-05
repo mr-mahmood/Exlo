@@ -10,6 +10,7 @@ from django.db.models.deletion import ProtectedError
 from gym.models import Gym
 from gym_auth.models import UserGymRole
 from users.models import User
+from core.errors import APIError
 
 
 class UserGymRoleModelTests(TestCase):
@@ -131,9 +132,11 @@ class UserGymRoleModelTests(TestCase):
 
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                UserGymRole.objects.create_owner(
+                # Raw inserts must still be protected by the database constraint.
+                UserGymRole.objects.create(
                     user=self.user,
                     gym=self.gym,
+                    role=UserGymRole.Role.OWNER,
                 )
 
     def test_same_role_is_allowed_for_different_gyms(self):
@@ -161,6 +164,39 @@ class UserGymRoleModelTests(TestCase):
             ).count(),
             2,
         )
+
+    def test_creation_helpers_report_duplicate_roles(self):
+        for create_role in (
+            UserGymRole.objects.create_owner,
+            UserGymRole.objects.create_coach,
+            UserGymRole.objects.create_staff,
+        ):
+            with self.subTest(helper=create_role.__name__):
+                original = create_role(user=self.user, gym=self.gym)
+                with self.assertRaises(APIError) as raised:
+                    with transaction.atomic():
+                        create_role(user=self.user, gym=self.gym)
+
+                self.assertEqual(raised.exception.error_code, "ROLE_002")
+                self.assertEqual(raised.exception.status_code, 400)
+                self.assertEqual(
+                    UserGymRole.objects.get(
+                        user=self.user, gym=self.gym, role=original.role
+                    ).pk,
+                    original.pk,
+                )
+
+    def test_creation_helpers_preserve_unrelated_integrity_errors(self):
+        for create_role in (
+            UserGymRole.objects.create_owner,
+            UserGymRole.objects.create_coach,
+            UserGymRole.objects.create_staff,
+        ):
+            with self.subTest(helper=create_role.__name__):
+                with self.assertRaises(IntegrityError):
+                    with transaction.atomic():
+                        create_role(user=None, gym=self.gym)
+        self.assertFalse(UserGymRole.objects.exists())
 
     def test_user_deletion_is_protected(self):
         UserGymRole.objects.create_owner(
