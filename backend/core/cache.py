@@ -5,6 +5,7 @@ from typing import TypeVar
 from urllib.parse import urlencode
 from django.core.cache import cache
 from django.db import transaction
+
 T = TypeVar("T")
 
 
@@ -141,6 +142,52 @@ def invalidate_cache(namespace: str, *ids) -> None:
         invalidate(GYM_PHOTOS, gym.id)
     """
     transaction.on_commit(lambda: _bump_version(namespace, *ids))
+
+
+def invalidate_gym_caches(gym_id) -> None:
+    invalidate_cache(GYM_LIST)
+    invalidate_cache(GYM_DETAIL, gym_id)
+    invalidate_cache(GYM_PLANS, gym_id)
+    invalidate_cache(GYM_PHOTOS, gym_id)
+    invalidate_cache(GYM_ANNOUNCEMENTS, gym_id)
+    invalidate_cache(GYM_USERS, gym_id)
+    invalidate_cache(GYM_DEVICES, gym_id)
+    invalidate_cache(GYM_LOCKERS, gym_id)
+
+
+def invalidate_gym_list_cache() -> None:
+    invalidate_cache(GYM_LIST)
+
+
+def invalidate_gym_plan_caches(gym_id) -> None:
+    invalidate_cache(GYM_PLANS, gym_id)
+
+
+def invalidate_gym_photo_caches(gym_id) -> None:
+    invalidate_cache(GYM_PHOTOS, gym_id)
+    invalidate_cache(GYM_DETAIL, gym_id)
+    invalidate_cache(GYM_LIST)
+
+
+def invalidate_gym_announcement_caches(gym_id) -> None:
+    invalidate_cache(GYM_ANNOUNCEMENTS, gym_id)
+
+
+def invalidate_gym_role_caches(gym_id) -> None:
+    invalidate_cache(GYM_USERS, gym_id)
+
+
+def invalidate_gym_device_caches(gym_id) -> None:
+    invalidate_cache(GYM_DEVICES, gym_id)
+
+
+def invalidate_gym_locker_caches(gym_id) -> None:
+    invalidate_cache(GYM_LOCKERS, gym_id)
+
+
+def invalidate_user_subscription_caches(user_id, subscription_id) -> None:
+    invalidate_cache(USER_SUBSCRIPTIONS, user_id)
+    invalidate_cache(USER_SUBSCRIPTION, user_id, subscription_id)
 
 
 def get_cache(key: str, builder: Callable[[], T]) -> T:

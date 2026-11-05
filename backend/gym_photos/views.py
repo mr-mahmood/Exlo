@@ -12,11 +12,9 @@ from .models import GymPhotos
 from .serializers import GymPhotoSerializer
 from core.cache import (
     GYM_PHOTOS,
-    GYM_DETAIL,
-    GYM_LIST,
     cache_key,
     get_cache,
-    invalidate_cache,
+    invalidate_gym_photo_caches,
 )
 
 
@@ -68,9 +66,7 @@ class GymPhotoCreateAPIView(APIView):
 
                 serializer.save()
 
-            invalidate_cache(GYM_PHOTOS, gym.id)
-            invalidate_cache(GYM_DETAIL, gym.id)
-            invalidate_cache(GYM_LIST)
+            invalidate_gym_photo_caches(gym.id)
 
         return Response(status=status.HTTP_201_CREATED)
 
@@ -98,8 +94,6 @@ class GymPhotoDeleteAPIView(APIView):
 
         photo.delete()
 
-        invalidate_cache(GYM_PHOTOS, gym.id)
-        invalidate_cache(GYM_DETAIL, gym.id)
-        invalidate_cache(GYM_LIST)
+        invalidate_gym_photo_caches(gym.id)
 
         return Response(status=status.HTTP_200_OK)

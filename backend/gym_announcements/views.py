@@ -8,7 +8,12 @@ from gym.models import Gym
 from core.pagination import CustomPagination
 from .models import GymAnnouncement
 from .serializers import GymAnnouncementSerializer
-from core.cache import GYM_ANNOUNCEMENTS, cache_key, get_cache, invalidate_cache
+from core.cache import (
+    GYM_ANNOUNCEMENTS,
+    cache_key,
+    get_cache,
+    invalidate_gym_announcement_caches,
+)
 
 
 class GymAnnouncementAPIView(APIView):
@@ -51,7 +56,7 @@ class GymAnnouncementCreateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         announcement = serializer.save(author=request.user)
 
-        invalidate_cache(GYM_ANNOUNCEMENTS, gym.id)
+        invalidate_gym_announcement_caches(gym.id)
 
         return Response(
             {
@@ -85,7 +90,7 @@ class GymAnnouncementUpdateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save(author=request.user)
 
-        invalidate_cache(GYM_ANNOUNCEMENTS, gym.id)
+        invalidate_gym_announcement_caches(gym.id)
 
         return Response({"announcement": serializer.data}, status=status.HTTP_200_OK)
 
@@ -102,6 +107,6 @@ class GymAnnouncementDeleteAPIView(APIView):
         )
         announcement.delete()
 
-        invalidate_cache(GYM_ANNOUNCEMENTS, gym.id)
+        invalidate_gym_announcement_caches(gym.id)
 
         return Response(status=status.HTTP_200_OK)

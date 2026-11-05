@@ -8,7 +8,7 @@ from gym_auth.permissions import IsAdminOrGymOwner
 from gym.models import Gym
 from gym_plans.serializers import GymMembershipPlanSerializer
 from gym_plans.models import GymMembershipPlan
-from core.cache import GYM_PLANS, cache_key, get_cache, invalidate_cache
+from core.cache import GYM_PLANS, cache_key, get_cache, invalidate_gym_plan_caches
 
 
 class GymPlansAPIView(APIView):
@@ -49,7 +49,7 @@ class GymPlansCreateAPIView(APIView):
             **serializer.validated_data,
         )
 
-        invalidate_cache(GYM_PLANS, gym.id)
+        invalidate_gym_plan_caches(gym.id)
 
         return Response(
             {
@@ -84,7 +84,7 @@ class GymPlansUpdateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        invalidate_cache(GYM_PLANS, gym.id)
+        invalidate_gym_plan_caches(gym.id)
 
         return Response(
             {
@@ -108,6 +108,6 @@ class GymPlansDeleteAPIView(APIView):
 
         plan.soft_delete()
 
-        invalidate_cache(GYM_PLANS, gym.id)
+        invalidate_gym_plan_caches(gym.id)
 
         return Response(status=status.HTTP_200_OK)

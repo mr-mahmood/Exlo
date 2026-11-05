@@ -9,7 +9,14 @@ from gym_auth.permissions import IsAdminOrGymOwner
 from gym.models import Gym
 from gym.serializers import GymSerializer
 from core.pagination import CustomPagination
-from core.cache import GYM_LIST, GYM_DETAIL, cache_key, get_cache, invalidate_cache
+from core.cache import (
+    GYM_LIST,
+    GYM_DETAIL,
+    cache_key,
+    get_cache,
+    invalidate_gym_list_cache,
+    invalidate_gym_caches,
+)
 
 
 class GymListAPIView(APIView):
@@ -65,7 +72,7 @@ class GymCreateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         gym = serializer.save()
 
-        invalidate_cache(GYM_LIST)
+        invalidate_gym_list_cache()
 
         return Response(
             {"gym": self.serializer_class(gym, context={"request": request}).data},
@@ -89,8 +96,7 @@ class GymUpdateAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
 
-        invalidate_cache(GYM_DETAIL, gym.id)
-        invalidate_cache(GYM_LIST)
+        invalidate_gym_caches(gym.id)
 
         return Response({"gym": serializer.data}, status=status.HTTP_200_OK)
 
@@ -102,8 +108,7 @@ class GymDeleteAPIView(APIView):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=False)
         gym.deactivate()
 
-        invalidate_cache(GYM_DETAIL, gym.id)
-        invalidate_cache(GYM_LIST)
+        invalidate_gym_caches(gym.id)
 
         return Response(status=status.HTTP_200_OK)
 
@@ -115,7 +120,6 @@ class GymRestoreAPIView(APIView):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=False)
         gym.activate()
 
-        invalidate_cache(GYM_DETAIL, gym.id)
-        invalidate_cache(GYM_LIST)
+        invalidate_gym_caches(gym.id)
 
         return Response(status=status.HTTP_200_OK)

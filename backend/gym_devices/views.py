@@ -8,7 +8,7 @@ from gym.models import Gym
 from core.pagination import CustomPagination
 from .models import GymDevice
 from .serializers import GymDeviceSerializer
-from core.cache import GYM_DEVICES, cache_key, get_cache, invalidate_cache
+from core.cache import GYM_DEVICES, cache_key, get_cache, invalidate_gym_device_caches
 
 
 class GymDevicesAPIView(APIView):
@@ -54,7 +54,7 @@ class GymDevicesCreateAPIView(APIView):
             device_type=device_type,
         )
 
-        invalidate_cache(GYM_DEVICES, gym.id)
+        invalidate_gym_device_caches(gym.id)
 
         return Response(
             {
@@ -74,7 +74,7 @@ class GymDevicesDeActivateAPIView(APIView):
         gym = Gym.objects.get_gym(gym_id)
         device = GymDevice.objects.get_device(device_id=device_id, gym=gym)
         device.deactivate_device()
-        invalidate_cache(GYM_DEVICES, gym.id)
+        invalidate_gym_device_caches(gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -85,5 +85,5 @@ class GymDevicesActivateAPIView(APIView):
         gym = Gym.objects.get_gym(gym_id)
         device = GymDevice.objects.get_device(device_id=device_id, gym=gym)
         device.activate_device()
-        invalidate_cache(GYM_DEVICES, gym.id)
+        invalidate_gym_device_caches(gym.id)
         return Response(status=status.HTTP_200_OK)

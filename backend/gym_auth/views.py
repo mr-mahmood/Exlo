@@ -11,7 +11,7 @@ from gym.models import Gym
 from .models import UserGymRole
 from .serializers import UserGymRoleSerializer
 from core.errors import APIError, UserGymRoleError
-from core.cache import GYM_USERS, cache_key, get_cache, invalidate_cache
+from core.cache import GYM_USERS, cache_key, get_cache, invalidate_gym_role_caches
 
 
 class GymUserRoleListAPIView(APIView):
@@ -46,7 +46,7 @@ class GymOwnerCreateAPIView(APIView):
         user = User.objects.get_user(user_id)
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_owner(user, gym)
-        invalidate_cache(GYM_USERS, gym.id)
+        invalidate_gym_role_caches(gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -58,7 +58,7 @@ class GymCoachCreateAPIView(APIView):
         user = User.objects.get_user(user_id)
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_coach(user, gym)
-        invalidate_cache(GYM_USERS, gym.id)
+        invalidate_gym_role_caches(gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -70,7 +70,7 @@ class GymStaffCreateAPIView(APIView):
         user = User.objects.get_user(user_id)
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_staff(user, gym)
-        invalidate_cache(GYM_USERS, gym.id)
+        invalidate_gym_role_caches(gym.id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -82,7 +82,7 @@ class GymRoleDeleteAPIView(APIView):
         if role is None:
             raise APIError(UserGymRoleError.ROLE_NOT_FOUND)
         role.delete()
-        invalidate_cache(GYM_USERS, gym_id)
+        invalidate_gym_role_caches(gym_id)
         return Response(status=status.HTTP_200_OK)
 
 
@@ -98,5 +98,5 @@ class GymStaffRoleDeleteAPIView(APIView):
         if role is None:
             raise APIError(UserGymRoleError.ROLE_NOT_FOUND)
         role.delete()
-        invalidate_cache(GYM_USERS, gym_id)
+        invalidate_gym_role_caches(gym_id)
         return Response(status=status.HTTP_200_OK)
