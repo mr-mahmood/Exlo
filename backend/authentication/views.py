@@ -54,8 +54,10 @@ class LoginVerifyApiView(APIView):
         phone_number = request.data.get("phone_number")
         otp_code = request.data.get("otp")
 
-        if not phone_number or not otp_code:
+        if phone_number is None or phone_number == "" or not otp_code:
             raise APIError(OTPError.PHONE_REQUIRED)
+
+        phone_number = validate_phone(phone_number, skip_duplicate_check=True)
 
         # Verify OTP
         verify_otp(phone_number, otp_code)

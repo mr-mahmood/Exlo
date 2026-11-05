@@ -5,7 +5,7 @@ from users.models import User
 
 
 def validate_phone(value, instance=None, skip_duplicate_check=False):
-    if value is None:
+    if not isinstance(value, str):
         raise APIError(UserValidationError.INVALID_PHONE_NUMBER)
 
     stripped_value = value.strip()

@@ -57,11 +57,94 @@ class AuthenticationViewsTest(TestCase):
         cache_key = f"otp_09123456789"
         self.assertIsNotNone(cache.get(cache_key))
 
+    def test_login_endpoints_reject_non_string_phones(self):
+        response = self.client.post(
+            self.login_request_url,
+            {"phone_number": self.user.phone_number},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        otp_key = f"otp_{self.user.phone_number}"
+        original_otp = cache.get(otp_key)
+        self.assertIsNotNone(original_otp)
+
+        for url in (self.login_request_url, self.login_verify_url):
+            for phone in (
+                9123456789,
+                0,
+                1.5,
+                True,
+                False,
+                [],
+                ["09123456789"],
+                {},
+                {"phone": "09123456789"},
+            ):
+                with self.subTest(url=url, phone=phone):
+                    response = self.client.post(
+                        url, {"phone_number": phone, "otp": "123456"}, format="json"
+                    )
+                    self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                    body = response.json()
+                    self.assertFalse(body["success"])
+                    self.assertIsNone(body["data"])
+                    self.assertEqual(
+                        body["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0]
+                    )
+                    for name in ("access_token", "refresh_token", "signup_token"):
+                        self.assertNotIn(name, response.cookies)
+                    self.assertEqual(cache.get(otp_key), original_otp)
+                    self.assertIsNone(
+                        cache.get(f"signup_verified_{self.user.phone_number}")
+                    )
+        self.assertEqual(User.objects.count(), 1)
+        self.assertFalse(Session.objects.exists())
+
     def test_login_request_without_phone(self):
         """Test login request without phone number"""
         response = self.client.post(self.login_request_url, {})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_login_request_null_phone(self):
+        response = self.client.post(
+            self.login_request_url, {"phone_number": None}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.json()["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0]
+        )
+
+    def test_login_verify_normalizes_phone(self):
+        for phone, new_user in ((self.user.phone_number, False), ("09123456788", True)):
+            with self.subTest(new_user=new_user):
+                response = self.client.post(
+                    self.login_request_url, {"phone_number": phone}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+                response = self.client.post(
+                    self.login_verify_url,
+                    {"phone_number": f" {phone} ", "otp": "123456"},
+                    format="json",
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                body = response.json()
+                self.assertTrue(body["success"])
+                self.assertEqual(body["data"]["new_user"], new_user)
+                self.assertIsNone(cache.get(f"otp_{phone}"))
+                if new_user:
+                    self.assertIsNotNone(cache.get(f"signup_verified_{phone}"))
+                    self.assertIsNone(cache.get(f"signup_verified_ {phone} "))
+                    self.assertIn("signup_token", response.cookies)
+                    self.assertNotIn("access_token", response.cookies)
+                    self.assertNotIn("refresh_token", response.cookies)
+                else:
+                    self.assertEqual(body["data"]["user"]["phone_number"], phone)
+                    self.assertEqual(Session.objects.filter(user=self.user).count(), 1)
+                    self.assertIn("access_token", response.cookies)
+                    self.assertIn("refresh_token", response.cookies)
 
     def test_login_verify_success_existing_user(self):
         """Test login verify with existing user"""
@@ -252,11 +335,15 @@ class AuthenticationViewsTest(TestCase):
 
     def test_login_verify_missing_phone(self):
         """Test login verify with missing phone number"""
-        data = {"otp": "123456"}  # Missing phone_number
-        response = self.client.post(self.login_verify_url, data)
-
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
+        for data in (
+            {"otp": "123456"},
+            {"phone_number": None, "otp": "123456"},
+            {"phone_number": "", "otp": "123456"},
+        ):
+            with self.subTest(data=data):
+                response = self.client.post(self.login_verify_url, data, format="json")
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
 
     def test_login_verify_existing_user_sets_cookies(self):
         """Test that login verify sets proper cookies for existing user"""
@@ -299,7 +386,9 @@ class AuthenticationViewsTest(TestCase):
         self.assertIn("signup_token", response.cookies)
         self.assertTrue(response.cookies["signup_token"]["httponly"])
         self.assertEqual(response.json()["data"], {"user": None, "new_user": True})
-        self.assertNotIn(response.cookies["signup_token"].value, response.content.decode())
+        self.assertNotIn(
+            response.cookies["signup_token"].value, response.content.decode()
+        )
 
     def test_login_verify_clears_otp_cache(self):
         """Test that OTP cache is cleared after successful verification"""

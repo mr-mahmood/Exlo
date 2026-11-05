@@ -64,7 +64,7 @@ class UserSignupAPIView(APIView):
             )
             serializer.is_valid(raise_exception=True)
 
-            referral_code = request.data.get("referral")
+            referral_code = serializer.validated_data.get("referral")
 
             try:
                 with transaction.atomic():
@@ -209,10 +209,10 @@ class PhoneChangeNewRequestAPIView(APIView):
         if state.get("step") != "old_verified":
             raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
 
+        new_phone = validate_phone(new_phone, instance=user)
+
         if user.phone_number == new_phone:
             raise APIError(UserAccountError.SAME_PHONE_AS_CURRENT)
-
-        validate_phone(new_phone, user)
 
         # Generate OTP for new phone
         result = generate_otp(new_phone)
@@ -259,15 +259,30 @@ class PhoneChangeNewVerifyAPIView(APIView):
         if not new_phone:
             raise APIError(OTPError.NEW_PHONE_NOT_FOUND)
 
+        try:
+            new_phone = validate_phone(new_phone, instance=user)
+        except APIError as exc:
+            if exc.error_code == SignUpError.PHONE_NUMBER_REUSE[0]:
+                cache.delete(cache_key)
+            raise
+
         # Verify OTP from new phone
         verify_otp(new_phone, otp)
 
-        # Update user's phone number
-        user.phone_number = new_phone
-        user.save(update_fields=["phone_number", "updated_at"])
-
-        # Clear state
-        cache.delete(cache_key)
+        old_phone = user.phone_number
+        try:
+            with transaction.atomic():
+                user.phone_number = new_phone
+                user.save(update_fields=["phone_number", "updated_at"])
+                transaction.on_commit(lambda: cache.delete(cache_key))
+        except IntegrityError:
+            user.phone_number = old_phone
+            # Another account may claim the phone after validation. Query only
+            # after the failed update's savepoint has been rolled back.
+            if User.objects.filter(phone_number=new_phone).exclude(pk=user.pk).exists():
+                cache.delete(cache_key)
+                raise APIError(SignUpError.PHONE_NUMBER_REUSE)
+            raise
 
         return Response(
             {

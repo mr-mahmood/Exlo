@@ -8,15 +8,15 @@ from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import close_old_connections, connections, transaction
+from django.db import IntegrityError, close_old_connections, connections, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
-from authentication.otp_service import OTP_CACHE_PREFIX
+from authentication.otp_service import OTP_CACHE_PREFIX, verify_otp
 from commerce_wallet.models import Wallet
-from core.errors import AuthenticationError, SignUpError
+from core.errors import AuthenticationError, OTPError, SignUpError, UserValidationError
 from users.models import User
 from users_referrals.models import Referral
 from users_sessions.models import Session
@@ -102,6 +102,8 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         self.assertEqual(user.date_of_birth, self.valid_data["date_of_birth"])
         self.assertIsNotNone(user.referral_code)
         self.assertTrue(user.is_active)
+        self.assertEqual(Wallet.objects.filter(owner=user).count(), 1)
+        self.assertFalse(Referral.objects.filter(referred_user=user).exists())
 
         session = Session.objects.get(user=user)
         self.assertIsNotNone(session.id)
@@ -134,6 +136,51 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         self.assertIsNotNone(referral.referred_at)
         self.assert_proof_consumed()
 
+    def test_signup_success_with_padded_referral(self):
+        referrer = User.objects.create_user(
+            phone_number="09123456788",
+            first_name="Referrer",
+            last_name="User",
+            gender=User.Gender.MALE,
+        )
+        data = {**self.valid_data, "referral": f"  {referrer.referral_code}  "}
+
+        response = self.client.post(self.url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.json()["success"])
+        user = User.objects.get(phone_number=self.phone)
+        referral = Referral.objects.get()
+        self.assertEqual(referral.referrer, referrer)
+        self.assertEqual(referral.referred_user, user)
+        self.assertEqual(Wallet.objects.filter(owner=user).count(), 1)
+        self.assertEqual(Session.objects.filter(user=user).count(), 1)
+        self.assertIn("access_token", response.cookies)
+        self.assertIn("refresh_token", response.cookies)
+        self.assert_proof_consumed()
+
+    def test_signup_with_whitespace_only_referral(self):
+        self.assert_signup_without_referral(" \t\n ")
+
+    def test_signup_with_empty_referral(self):
+        self.assert_signup_without_referral("")
+
+    def test_signup_with_null_referral(self):
+        self.assert_signup_without_referral(None)
+
+    def assert_signup_without_referral(self, referral):
+        data = {**self.valid_data, "referral": referral}
+
+        response = self.client.post(self.url, data, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.json()["success"])
+        user = User.objects.get(phone_number=self.phone)
+        self.assertFalse(Referral.objects.exists())
+        self.assertEqual(Wallet.objects.filter(owner=user).count(), 1)
+        self.assertEqual(Session.objects.filter(user=user).count(), 1)
+        self.assert_proof_consumed()
+
     # Original phone-verification cases.
 
     def test_signup_without_phone_verification(self):
@@ -160,6 +207,7 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         data.pop("phone_number")
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["error_code"], OTPError.PHONE_REQUIRED[0])
         # Missing phone is rejected before proof validation/consumption.
         self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
 
@@ -186,6 +234,37 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         )
         self.assert_proof_consumed()
         self.assertFalse(User.objects.filter(phone_number=self.phone).exists())
+
+    def test_signup_rejects_non_string_phone(self):
+        for phone in (9123456789, 1.5, True, [self.phone], {"phone": self.phone}):
+            with self.subTest(phone=phone):
+                self.assert_invalid_signup_phone(
+                    phone, UserValidationError.INVALID_PHONE_NUMBER[0]
+                )
+
+    def test_signup_falsy_phone_preserves_required_error(self):
+        for phone in (None, 0, False, [], {}):
+            with self.subTest(phone=phone):
+                self.assert_invalid_signup_phone(phone, OTPError.PHONE_REQUIRED[0])
+
+    def assert_invalid_signup_phone(self, phone, error_code):
+        proof_key = f"signup_verified_{self.phone}"
+        original_proof = cache.get(proof_key)
+        self.assertIsNotNone(original_proof)
+
+        response = self.client.post(
+            self.url, {**self.valid_data, "phone_number": phone}, format="json"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        body = response.json()
+        self.assertFalse(body["success"])
+        self.assertIsNone(body["data"])
+        self.assertEqual(body["error_code"], error_code)
+        for name in ("access_token", "refresh_token", "signup_token"):
+            self.assertNotIn(name, response.cookies)
+        self.assert_no_account()
+        self.assertEqual(cache.get(proof_key), original_proof)
 
     def test_signup_invalid_phone(self):
         data = {**self.valid_data, "phone_number": "12345"}
@@ -599,6 +678,19 @@ class PhoneChangeFlowTest(TestCase):
         self.sms_patcher.stop()
         cache.clear()
 
+    def verify_old_phone(self):
+        response = self.client.post(self.old_request_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.post(self.old_verify_url, {"otp": "123456"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def request_new_phone(self, phone):
+        self.verify_old_phone()
+        response = self.client.post(
+            self.new_request_url, {"phone_number": phone}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
     # ========== SUCCESS FLOW ==========
     def test_complete_phone_change_flow(self):
         """Test complete phone change flow with all steps"""
@@ -634,7 +726,8 @@ class PhoneChangeFlowTest(TestCase):
         self.assertEqual(state["step"], "new_otp_sent")
         self.assertEqual(state["new_phone"], new_phone)
 
-        response = self.client.post(self.new_verify_url, {"otp": "123456"})
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("user", response.data)
         self.assertEqual(response.data["user"]["phone_number"], new_phone)
@@ -645,9 +738,173 @@ class PhoneChangeFlowTest(TestCase):
         self.assertIsNone(cache.get(state_key))
         self.assertIsNone(cache.get(new_cache_key))
 
+    def test_new_phone_request_caches_normalized_phone(self):
+        self.request_new_phone(" 09123456711 ")
+
+        state = cache.get(f"phone_change_step_{self.user.id}")
+        self.assertEqual(state["new_phone"], "09123456711")
+        self.assertIsNotNone(cache.get("otp_09123456711"))
+        self.assertIsNone(cache.get("otp_ 09123456711 "))
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+
+    def test_padded_current_phone_is_rejected(self):
+        self.verify_old_phone()
+        state_key = f"phone_change_step_{self.user.id}"
+        original_state = cache.get(state_key)
+
+        response = self.client.post(
+            self.new_request_url,
+            {"phone_number": f" {self.user.phone_number} "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["error_code"], "USER-006")
+        self.assertEqual(cache.get(state_key), original_state)
+        self.assertIsNone(cache.get(f"otp_ {self.user.phone_number} "))
+
+    def test_padded_phone_change_completes(self):
+        self.request_new_phone(" 09123456711 ")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.json()["data"]["user"]["phone_number"], "09123456711")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456711")
+        self.assertIsNone(cache.get(f"phone_change_step_{self.user.id}"))
+        self.assertIsNone(cache.get("otp_09123456711"))
+
+    def test_phone_change_state_is_cleared_after_commit(self):
+        self.request_new_phone("09123456711")
+        state_key = f"phone_change_step_{self.user.id}"
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertIsNotNone(cache.get(state_key))
+        self.assertIsNone(cache.get(state_key))
+
+    def test_phone_change_rollback_preserves_pending_state(self):
+        self.request_new_phone("09123456711")
+        state_key = f"phone_change_step_{self.user.id}"
+        original_state = cache.get(state_key)
+        with self.captureOnCommitCallbacks(execute=True):
+            with transaction.atomic():
+                response = self.client.post(self.new_verify_url, {"otp": "123456"})
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                transaction.set_rollback(True)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+        self.assertEqual(cache.get(state_key), original_state)
+        # Redis OTP consumption is not rolled back with the database.
+        self.assertIsNone(cache.get("otp_09123456711"))
+
+    def test_new_phone_claimed_before_confirmation(self):
+        self.request_new_phone("09123456711")
+        owner = User.objects.create_user(
+            phone_number="09123456711",
+            first_name="Other",
+            last_name="User",
+            gender=User.Gender.MALE,
+        )
+        other_state_key = f"phone_change_step_{owner.id}"
+        other_state = {"step": "old_verified", "user_id": owner.id}
+        cache.set(other_state_key, other_state, 300)
+        original_otp = cache.get("otp_09123456711")
+
+        response = self.client.post(self.new_verify_url, {"otp": "123456"})
+
+        self.assert_confirmation_conflict(response, owner)
+        self.assertEqual(cache.get("otp_09123456711"), original_otp)
+        self.assertEqual(cache.get(other_state_key), other_state)
+
+    def test_new_phone_claimed_after_final_validation(self):
+        self.request_new_phone("09123456711")
+        owner = None
+
+        def verify_and_claim(phone, otp):
+            nonlocal owner
+            result = verify_otp(phone, otp)
+            owner = User.objects.create_user(
+                phone_number="09123456711",
+                first_name="Other",
+                last_name="User",
+                gender=User.Gender.MALE,
+            )
+            return result
+
+        # Real OTP verification and a real competing row exercise PostgreSQL's
+        # unique constraint after the view has already checked availability.
+        with patch("users.views.verify_otp", side_effect=verify_and_claim):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+
+        self.assertIsNotNone(owner)
+        self.assert_confirmation_conflict(response, owner)
+        self.assertIsNone(cache.get("otp_09123456711"))
+
+    def assert_confirmation_conflict(self, response, owner):
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        body = response.json()
+        self.assertFalse(body["success"])
+        self.assertIsNone(body["data"])
+        self.assertEqual(body["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+        self.assertEqual(User.objects.get(phone_number="09123456711"), owner)
+        self.assertIsNone(cache.get(f"phone_change_step_{self.user.id}"))
+
+    def test_unrelated_confirmation_integrity_error_is_not_masked(self):
+        self.request_new_phone("09123456711")
+        state_key = f"phone_change_step_{self.user.id}"
+        with patch.object(User, "save", side_effect=IntegrityError("unrelated failure")):
+            with self.assertRaisesMessage(IntegrityError, "unrelated failure"):
+                self.client.post(self.new_verify_url, {"otp": "123456"})
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+        self.assertIsNotNone(cache.get(state_key))
+
+    def test_new_phone_request_rejects_invalid_input(self):
+        self.verify_old_phone()
+        state_key = f"phone_change_step_{self.user.id}"
+        original_state = cache.get(state_key)
+        for phone in (
+            9123456789,
+            True,
+            ["09123456711"],
+            {"phone": "09123456711"},
+            "invalid",
+        ):
+            with self.subTest(phone=phone):
+                response = self.client.post(
+                    self.new_request_url, {"phone_number": phone}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    response.json()["error_code"],
+                    UserValidationError.INVALID_PHONE_NUMBER[0],
+                )
+                self.assertEqual(cache.get(state_key), original_state)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+        self.assertIsNone(cache.get("otp_09123456711"))
+
+    def test_new_otp_verify_missing_target(self):
+        cache.set(
+            f"phone_change_step_{self.user.id}",
+            {"step": "new_otp_sent", "user_id": self.user.id},
+            300,
+        )
+        response = self.client.post(self.new_verify_url, {"otp": "123456"})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json()["error_code"], "OTP-006")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+
     def test_phone_change_flow_old_otp_expiry(self):
         """Test OTP expiry during phone change flow"""
-        self.client.post(self.old_request_url)
+        response = self.client.post(self.old_request_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         state_key = f"phone_change_step_{self.user.id}"
         cache.set(state_key, {"step": "old_otp_sent", "user_id": self.user.id}, -1)
@@ -665,7 +922,8 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_old_otp_verify_invalid_otp(self):
         """Test verifying old OTP with invalid code"""
-        self.client.post(self.old_request_url)
+        response = self.client.post(self.old_request_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         response = self.client.post(self.old_verify_url, {"otp": "999999"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -685,7 +943,8 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_old_otp_request_missing_otp(self):
         """Test old OTP verification without OTP code"""
-        self.client.post(self.old_request_url)
+        response = self.client.post(self.old_request_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         response = self.client.post(self.old_verify_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -702,8 +961,7 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_new_otp_request_missing_phone(self):
         """Test new phone OTP request without phone number"""
-        self.client.post(self.old_request_url)
-        self.client.post(self.old_verify_url, {"otp": "123456"})
+        self.verify_old_phone()
 
         response = self.client.post(self.new_request_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -718,8 +976,7 @@ class PhoneChangeFlowTest(TestCase):
             gender=User.Gender.MALE,
         )
 
-        self.client.post(self.old_request_url)
-        self.client.post(self.old_verify_url, {"otp": "123456"})
+        self.verify_old_phone()
 
         response = self.client.post(
             self.new_request_url, {"phone_number": "09123456788"}
@@ -729,8 +986,7 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_new_otp_request_same_phone(self):
         """Test changing to the same phone number"""
-        self.client.post(self.old_request_url)
-        self.client.post(self.old_verify_url, {"otp": "123456"})
+        self.verify_old_phone()
 
         response = self.client.post(
             self.new_request_url, {"phone_number": self.user.phone_number}
@@ -745,9 +1001,7 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_new_otp_verify_invalid_otp(self):
         """Test verifying new phone OTP with invalid code"""
-        self.client.post(self.old_request_url)
-        self.client.post(self.old_verify_url, {"otp": "123456"})
-        self.client.post(self.new_request_url, {"phone_number": "09123456788"})
+        self.request_new_phone("09123456788")
 
         response = self.client.post(self.new_verify_url, {"otp": "999999"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -764,9 +1018,7 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_new_otp_verify_missing_otp(self):
         """Test new OTP verification without OTP code"""
-        self.client.post(self.old_request_url)
-        self.client.post(self.old_verify_url, {"otp": "123456"})
-        self.client.post(self.new_request_url, {"phone_number": "09123456788"})
+        self.request_new_phone("09123456788")
 
         response = self.client.post(self.new_verify_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -774,9 +1026,7 @@ class PhoneChangeFlowTest(TestCase):
 
     def test_new_otp_verify_expired_state(self):
         """Test verifying new phone with expired state"""
-        self.client.post(self.old_request_url)
-        self.client.post(self.old_verify_url, {"otp": "123456"})
-        self.client.post(self.new_request_url, {"phone_number": "09123456788"})
+        self.request_new_phone("09123456788")
 
         state_key = f"phone_change_step_{self.user.id}"
         cache.set(state_key, {"step": "new_otp_sent", "user_id": self.user.id}, -1)

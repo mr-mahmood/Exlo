@@ -45,6 +45,28 @@ class PhoneValidatorTest(TestCase):
                 UserValidationError.INVALID_PHONE_NUMBER[0],
             )
 
+    def test_non_string_phone_numbers_are_rejected_without_queries(self):
+        for phone in (
+            9123456789,
+            0,
+            1.5,
+            True,
+            False,
+            None,
+            [],
+            ["09123456789"],
+            {},
+            {"phone": "09123456789"},
+            b"09123456789",
+        ):
+            with self.subTest(phone=phone), self.assertNumQueries(0):
+                with self.assertRaises(APIError) as context:
+                    validate_phone(phone)
+                self.assertEqual(
+                    context.exception.error_code,
+                    UserValidationError.INVALID_PHONE_NUMBER[0],
+                )
+
     def test_duplicate_phone_raises_error(self):
         """Test duplicate phone number raises error"""
         User.objects.create_user(
