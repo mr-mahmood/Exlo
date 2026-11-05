@@ -11,11 +11,17 @@ from users_referrals.models import Referral
 from users_sessions.models import Session
 from authentication.otp_service import generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
-from authentication.utils import attach_auth_tokens
 from authentication.throttles import OTPPhoneThrottle, OTPIPThrottle
 from core.errors import APIError, OTPError, SignUpError, UserAccountError
 from users.validators import validate_phone
 from typing import cast
+from authentication.utils import (
+    make_cookie,
+    delete_cookies,
+    signup_key,
+    verify_signup_proof,
+    SIGNUP_PATH,
+)
 
 
 class UserSignupAPIView(APIView):
@@ -25,70 +31,97 @@ class UserSignupAPIView(APIView):
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
+
         if not phone_number:
             raise APIError(OTPError.PHONE_REQUIRED)
 
-        # Check if phone is verified
-        verified_key = f"signup_verified_{phone_number}"
-        verified_data = cache.get(verified_key)
+        phone_number = validate_phone(phone_number, skip_duplicate_check=True)
 
-        if not verified_data:
+        # Lock concurrent signup attempts for the same phone.
+        lock = cache.lock(f"signup_verification_lock_{phone_number}", timeout=10)
+        if not lock.acquire(blocking=False):
             raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
 
-        # Validate data
-        serializer = self.serializer_class(
-            data=request.data,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-
-        referral_code = request.data.get("referral")
-
         try:
-            with transaction.atomic():
-                # Create user
-                user = cast(User, serializer.save())
+            # Validate the signup proof.
+            token = request.COOKIES.get("signup_token")
 
-                # Create referral if provided
-                if referral_code:
-                    if referral_code != user.referral_code:
-                        referrer = User.objects.get(referral_code=referral_code)
-                        Referral.objects.create(
-                            referrer=referrer,
-                            referred_user=user,
-                            referred_at=timezone.now(),
-                        )
-                    else:
-                        raise APIError(SignUpError.REFERRAL_CODE_NOT_VALID)
+            if not verify_signup_proof(phone_number, token):
+                raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
 
-                # Create session and tokens
-                session = Session.create_session(user, request)
-                access, refresh = create_tokens_for_user(user, session)
+            # One verified OTP permits one signup attempt.
+            # Consume the proof before processing the signup.
+            if not cache.delete(signup_key(phone_number)):
+                raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
 
-                # Prepare response
-                response = Response(
-                    {
-                        "user": self.serializer_class(
-                            user,
-                            context={"request": request},
-                        ).data,
-                    },
-                    status=status.HTTP_201_CREATED,
-                )
+            # Validate signup data.
+            data = request.data.copy()
+            data["phone_number"] = phone_number
 
-                attach_auth_tokens(
+            serializer = self.serializer_class(
+                data=data,
+                context={"request": request},
+            )
+            serializer.is_valid(raise_exception=True)
+
+            referral_code = request.data.get("referral")
+
+            try:
+                with transaction.atomic():
+                    # Create user.
+                    user = cast(User, serializer.save())
+
+                    # Create referral if provided.
+                    if referral_code:
+                        if referral_code != user.referral_code:
+                            referrer = User.objects.get(referral_code=referral_code)
+                            Referral.objects.create(
+                                referrer=referrer,
+                                referred_user=user,
+                                referred_at=timezone.now(),
+                            )
+                        else:
+                            raise APIError(SignUpError.REFERRAL_CODE_NOT_VALID)
+
+                    # Create session and JWT tokens.
+                    session = Session.create_session(user, request)
+                    access, refresh = create_tokens_for_user(user, session)
+
+                    # Prepare response.
+                    response = Response(
+                        {
+                            "user": self.serializer_class(
+                                user,
+                                context={"request": request},
+                            ).data,
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+
+                    # Set authentication cookies.
+                    make_cookie(
+                        response,
+                        {
+                            "access_token": access,
+                            "refresh_token": refresh,
+                        },
+                    )
+
+                # Clear signup cookie after successful creation.
+                delete_cookies(
                     response,
-                    request,
-                    access,
-                    refresh,
+                    ["signup_token"],
+                    path=SIGNUP_PATH,
                 )
 
-                # Clean up cache
-                cache.delete(verified_key)
                 return response
 
-        except IntegrityError:
-            raise APIError(SignUpError.UNEXPECTED_ERROR)
+            except IntegrityError:
+                raise APIError(SignUpError.UNEXPECTED_ERROR)
+
+        finally:
+            if lock.owned():
+                lock.release()
 
 
 class PhoneChangeOldRequestAPIView(APIView):

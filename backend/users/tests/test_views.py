@@ -1,68 +1,101 @@
 # users/tests/test_views.py
 
-
-from django.test import TestCase
-from django.urls import reverse
-from django.core.cache import cache
-from rest_framework.test import APIClient
-from rest_framework import status
-from datetime import date
-from unittest.mock import patch
-from core.errors import SignUpError
-from users.models import User
-from users_sessions.models import Session
-from authentication.otp_service import OTP_CACHE_PREFIX
-from core.errors import AuthenticationError, SignUpError
-from django.core.files.uploadedfile import SimpleUploadedFile
-from PIL import Image
 import io
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
+from threading import Barrier
+from unittest.mock import patch
+from django.conf import settings
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import close_old_connections, connections, transaction
+from django.test import TestCase, TransactionTestCase, override_settings
+from django.urls import reverse
+from PIL import Image
+from rest_framework import status
+from rest_framework.test import APIClient
+from authentication.otp_service import OTP_CACHE_PREFIX
+from commerce_wallet.models import Wallet
+from core.errors import AuthenticationError, SignUpError
+from users.models import User
+from users_referrals.models import Referral
+from users_sessions.models import Session
 
 
-class UserSignupViewTest(TestCase):
-    """Test user signup view"""
+class SignupTestHelpers:
+    """Shared OTP/setup assertions; not itself a test class."""
+
+    def set_up_signup(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.client = APIClient()
+        self.phone = "09123456789"
+        self.verified_phone = self.phone
+        self.url = reverse("users:user-signup")
+        self.signup_url = self.url
+
+    def verify_phone(self, phone=None, client=None):
+        phone = phone or self.phone
+        client = client if client is not None else self.client
+        response = client.post(
+            reverse("authentication:login-request"),
+            {"phone_number": phone},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = client.post(
+            reverse("authentication:login-verify"),
+            {"phone_number": phone, "otp": "123456"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.json()["data"]["new_user"])
+        self.assertIn("signup_token", response.cookies)
+        return response
+
+    def assert_denied(self, response):
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.json()["error_code"],
+            SignUpError.SIGN_UP_NOT_ALLOWED[0],
+        )
+        self.assertNotIn("access_token", response.cookies)
+        self.assertNotIn("refresh_token", response.cookies)
+
+    def assert_no_account(self):
+        self.assertFalse(User.objects.exists())
+        self.assertFalse(Wallet.objects.exists())
+        self.assertFalse(Session.objects.exists())
+
+    def assert_proof_consumed(self, phone=None):
+        phone = phone or self.phone
+        self.assertIsNone(cache.get(f"signup_verified_{phone}"))
+
+
+class UserSignupViewTest(SignupTestHelpers, TestCase):
+    """Original signup coverage updated to the one-attempt proof contract."""
 
     def setUp(self):
-        self.client = APIClient()
-        cache.clear()
-        self.url = reverse("users:user-signup")
-
-        self.verified_phone = "09123456789"
-        self.verify_phone(self.verified_phone)
-
+        self.set_up_signup()
+        self.verify_phone()
         self.valid_data = {
-            "phone_number": self.verified_phone,
+            "phone_number": self.phone,
             "first_name": "John",
             "last_name": "Doe",
             "gender": User.Gender.MALE,
             "date_of_birth": date(1990, 1, 1),
         }
 
-    def tearDown(self):
-        cache.clear()
-
-    def verify_phone(self, phone):
-        response = self.client.post(
-            reverse("authentication:login-request"), {"phone_number": phone}
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        response = self.client.post(
-            reverse("authentication:login-verify"),
-            {"phone_number": phone, "otp": "123456"},
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data["new_user"])
-
-    # ========== SUCCESS CASES ==========
+    # Original success cases.
 
     def test_signup_success(self):
-        """Test successful signup with all valid data"""
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(self.url, self.valid_data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("user", response.data)
 
-        user = User.objects.get(phone_number=self.valid_data["phone_number"])
+        user = User.objects.get(phone_number=self.phone)
         self.assertEqual(user.first_name, self.valid_data["first_name"])
         self.assertEqual(user.last_name, self.valid_data["last_name"])
         self.assertEqual(user.gender, self.valid_data["gender"])
@@ -70,153 +103,143 @@ class UserSignupViewTest(TestCase):
         self.assertIsNotNone(user.referral_code)
         self.assertTrue(user.is_active)
 
-        # Check session created
-        self.assertTrue(Session.objects.filter(user=user).exists())
         session = Session.objects.get(user=user)
         self.assertIsNotNone(session.id)
         self.assertEqual(session.ip_address, "127.0.0.1")
 
-        # Check cookies set
         self.assertIn("access_token", response.cookies)
         self.assertIn("refresh_token", response.cookies)
-        self.assertTrue(response.cookies["access_token"]["httponly"])
-        self.assertTrue(response.cookies["refresh_token"]["httponly"])
         self.assertEqual(set(response.json()["data"]), {"user"})
-        for name in ["access_token", "refresh_token"]:
+        for name in ("access_token", "refresh_token"):
+            self.assertTrue(response.cookies[name]["httponly"])
             self.assertNotIn(response.cookies[name].value, response.content.decode())
-
-        # Check cache cleared
-        self.assertIsNone(
-            cache.get(f"signup_verified_{self.valid_data['phone_number']}")
-        )
+        self.assertEqual(response.cookies["signup_token"]["max-age"], 0)
+        self.assertEqual(response.cookies["signup_token"]["path"], "/api/users/signup/")
+        self.assert_proof_consumed()
 
     def test_signup_success_with_referral(self):
-        """Test successful signup with valid referral code"""
         referrer = User.objects.create_user(
             phone_number="09123456788",
             first_name="Referrer",
             last_name="User",
             gender=User.Gender.MALE,
         )
-
-        data = self.valid_data.copy()
-        data["referral"] = referrer.referral_code
-
+        data = {**self.valid_data, "referral": referrer.referral_code}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        from users_referrals.models import Referral
-
-        user = User.objects.get(phone_number=self.valid_data["phone_number"])
+        user = User.objects.get(phone_number=self.phone)
         referral = Referral.objects.get(referred_user=user)
         self.assertEqual(referral.referrer, referrer)
         self.assertIsNotNone(referral.referred_at)
+        self.assert_proof_consumed()
 
-    # ========== PHONE VERIFICATION TESTS ==========
+    # Original phone-verification cases.
 
     def test_signup_without_phone_verification(self):
-        """Test signup without prior phone verification"""
         cache.clear()
         response = self.client.post(self.url, self.valid_data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], SignUpError.SIGN_UP_NOT_ALLOWED[0]
-        )
+        self.assert_denied(response)
 
     def test_signup_with_expired_phone_verification(self):
-        """Test signup with expired phone verification"""
-        cache.expire(f"signup_verified_{self.verified_phone}", 0)
+        cache.expire(f"signup_verified_{self.phone}", 0)
         response = self.client.post(self.url, self.valid_data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assert_denied(response)
 
     def test_signup_with_wrong_phone_verification(self):
-        """Test signup with phone number that wasn't verified"""
+        data = {**self.valid_data, "phone_number": "09123456788"}
+        response = self.client.post(self.url, data)
+        self.assert_denied(response)
+        self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
+
+    # The original missing-fields loop must be split: a valid failed attempt
+    # consumes the proof and each independent field needs a fresh test setup.
+
+    def test_signup_missing_phone_number(self):
         data = self.valid_data.copy()
-        data["phone_number"] = "09123456788"
+        data.pop("phone_number")
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Missing phone is rejected before proof validation/consumption.
+        self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
 
-    # ========== VALIDATION (single representative) ==========
+    def test_signup_missing_first_name(self):
+        self.assert_missing_field_consumes_proof("first_name")
 
-    def test_signup_missing_fields(self):
-        """Test signup with missing required fields"""
-        required_fields = [
-            "phone_number",
-            "first_name",
-            "last_name",
-            "gender",
-            "date_of_birth",
-        ]
+    def test_signup_missing_last_name(self):
+        self.assert_missing_field_consumes_proof("last_name")
 
-        for field in required_fields:
-            data = self.valid_data.copy()
-            data.pop(field)
-            response = self.client.post(self.url, data)
-            self.assertEqual(
-                response.status_code,
-                status.HTTP_400_BAD_REQUEST,
-                f"Field '{field}' should be required",
-            )
+    def test_signup_missing_gender(self):
+        self.assert_missing_field_consumes_proof("gender")
+
+    def test_signup_missing_date_of_birth(self):
+        self.assert_missing_field_consumes_proof("date_of_birth")
+
+    def assert_missing_field_consumes_proof(self, field):
+        data = self.valid_data.copy()
+        data.pop(field)
+        response = self.client.post(self.url, data)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+            f"Missing '{field}' must be rejected",
+        )
+        self.assert_proof_consumed()
+        self.assertFalse(User.objects.filter(phone_number=self.phone).exists())
 
     def test_signup_invalid_phone(self):
-        """Test signup with an invalid phone number format (single case)"""
-        data = self.valid_data.copy()
-        data["phone_number"] = "12345"  # invalid
-
+        data = {**self.valid_data, "phone_number": "12345"}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Phone validation happens before proof consumption.
+        self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
 
-    # ========== DUPLICATE TESTS ==========
+    # Original duplicate and referral cases.
+
     def test_signup_duplicate_phone(self):
-        """Test signup with phone number already in use"""
         User.objects.create_user(
-            phone_number=self.valid_data["phone_number"],
+            phone_number=self.phone,
             first_name="Existing",
             last_name="User",
             gender=User.Gender.MALE,
         )
-
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
+        self.assert_proof_consumed()
+        self.assertEqual(User.objects.filter(phone_number=self.phone).count(), 1)
 
-    # ========== REFERRAL TESTS ==========
     def test_signup_with_invalid_referral(self):
-        """Test signup with invalid referral code"""
-        data = self.valid_data.copy()
-        data["referral"] = "INVALID_CODE"
-
+        data = {**self.valid_data, "referral": "INVALID_CODE"}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(
             response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0]
         )
+        self.assert_proof_consumed()
+        self.assertFalse(User.objects.filter(phone_number=self.phone).exists())
 
-    # ========== EDGE CASES ==========
+    # Original names/Unicode cases.
+
     def test_signup_with_special_characters_in_name(self):
-        """Test signup with special characters in name"""
-        data = self.valid_data.copy()
-        data["first_name"] = "John-Doe"
-        data["last_name"] = "O'Brien"
+        data = {**self.valid_data, "first_name": "John-Doe", "last_name": "O'Brien"}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        user: User = User.objects.get(phone_number=self.valid_data["phone_number"])
+        user = User.objects.get(phone_number=self.phone)
         self.assertEqual(user.first_name, "John-Doe")
         self.assertEqual(user.last_name, "O'Brien")
+        self.assert_proof_consumed()
 
     def test_signup_with_unicode_characters(self):
-        """Test signup with unicode characters in name"""
-        data = self.valid_data.copy()
-        data["first_name"] = "José"
-        data["last_name"] = "García"
+        data = {**self.valid_data, "first_name": "José", "last_name": "García"}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        user: User = User.objects.get(phone_number=self.valid_data["phone_number"])
+        user = User.objects.get(phone_number=self.phone)
         self.assertEqual(user.first_name, "José")
         self.assertEqual(user.last_name, "García")
+        self.assert_proof_consumed()
 
     def test_signup_phone_already_verified_but_used(self):
-        """Test phone verified but already used by another user"""
         self.verify_phone("09123456788")
         User.objects.create_user(
             phone_number="09123456788",
@@ -224,26 +247,20 @@ class UserSignupViewTest(TestCase):
             last_name="User",
             gender=User.Gender.MALE,
         )
-
-        data = self.valid_data.copy()
-        data["phone_number"] = "09123456788"
-
+        data = {**self.valid_data, "phone_number": "09123456788"}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
+        self.assert_proof_consumed("09123456788")
 
-    # ========== SELF-REFERRAL PREVENTION ==========
     def test_signup_self_referral_prevention(self):
-        """Test that a user cannot refer themselves even if referral code matches"""
-        # Mock the create_user to return a user with a predictable referral code
+        """Keep the original self-referral regression and check one-attempt cleanup."""
         original_create_user = User.objects.create_user
-
         created_user = None
 
         def mock_create_user(**kwargs):
             nonlocal created_user
             user = original_create_user(**kwargs)
-            # Force a specific referral code
             user.referral_code = "ABCDEF"
             user.save(update_fields=["referral_code"])
             created_user = user
@@ -251,24 +268,307 @@ class UserSignupViewTest(TestCase):
 
         try:
             User.objects.create_user = mock_create_user
-
-            data = self.valid_data.copy()
-            data["referral"] = "ABCDEF"  # Same as the user's own code after creation
-
+            data = {**self.valid_data, "referral": "ABCDEF"}
             response = self.client.post(self.url, data)
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
             self.assertEqual(
                 response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0]
             )
-
-            from users_referrals.models import Referral
-
             self.assertFalse(
                 Referral.objects.filter(referred_user=created_user).exists()
             )
-
+            self.assert_proof_consumed()
         finally:
             User.objects.create_user = original_create_user
+
+
+class SignupVerificationTests(SignupTestHelpers, TestCase):
+    """Cookie-bound verification proof, expiry, replay and failure semantics."""
+
+    def setUp(self):
+        self.set_up_signup()
+        self.data = {
+            "phone_number": self.phone,
+            "first_name": "Alice",
+            "last_name": "Example",
+            "gender": User.Gender.FEMALE,
+            "date_of_birth": "1990-01-01",
+        }
+
+    def test_another_clients_verification_cannot_authorize_signup(self):
+        self.verify_phone()
+        key = f"signup_verified_{self.phone}"
+        record = cache.get(key)
+        attacker = APIClient()
+        response = attacker.post(self.signup_url, self.data, format="json")
+        self.assert_denied(response)
+        self.assertEqual(cache.get(key), record)
+        self.assert_no_account()
+        # An unauthorized attempt must not harm the real verified client.
+        response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_cookie_signup_consumes_proof_and_creates_complete_account(self):
+        verification = self.verify_phone()
+        cookie = verification.cookies["signup_token"]
+        self.assertEqual(len(cookie.value), 43)
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["max-age"], 600)
+        self.assertEqual(cookie["path"], "/api/users/signup/")
+        self.assertEqual(cookie["samesite"], settings.SESSION_COOKIE_SAMESITE)
+        self.assertEqual(bool(cookie["secure"]), settings.SESSION_COOKIE_SECURE)
+        self.assertEqual(verification.json()["data"], {"user": None, "new_user": True})
+        self.assertNotIn(cookie.value, verification.content.decode())
+
+        key = f"signup_verified_{self.phone}"
+        record = cache.get(key)
+        self.assertEqual(record["phone_number"], self.phone)
+        self.assertNotIn(cookie.value, str(record))
+        self.assertGreater(cache.ttl(key), 0)
+        self.assertLessEqual(cache.ttl(key), 600)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response.json()["success"])
+        self.assertIsNone(response.json()["error_code"])
+        self.assertEqual(set(response.json()["data"]), {"user"})
+        self.assertIn("access_token", response.cookies)
+        self.assertIn("refresh_token", response.cookies)
+        for name in ("access_token", "refresh_token"):
+            self.assertTrue(response.cookies[name]["httponly"])
+            self.assertNotIn(response.cookies[name].value, response.content.decode())
+        self.assertEqual(response.cookies["signup_token"]["max-age"], 0)
+        self.assertEqual(response.cookies["signup_token"]["path"], "/api/users/signup/")
+
+        user = User.objects.get(phone_number=self.phone)
+        self.assertEqual(user.first_name, "Alice")
+        self.assertEqual(Wallet.objects.get(owner=user).balance, 0)
+        self.assertEqual(Session.objects.filter(user=user).count(), 1)
+        self.assert_proof_consumed()
+        profile = self.client.get(reverse("users:dashboard"))
+        self.assertEqual(profile.status_code, status.HTTP_200_OK)
+        self.assertEqual(profile.json()["data"]["user"]["phone_number"], self.phone)
+
+        replay = APIClient()
+        replay.cookies["signup_token"] = cookie.value
+        self.assert_denied(replay.post(self.signup_url, self.data, format="json"))
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(Wallet.objects.count(), 1)
+        self.assertEqual(Session.objects.count(), 1)
+
+    @override_settings(SESSION_COOKIE_SECURE=True, SESSION_COOKIE_DOMAIN=".example.com")
+    def test_signup_cookie_uses_configured_security_attributes(self):
+        response = self.verify_phone()
+        cookie = response.cookies["signup_token"]
+        self.assertTrue(cookie["secure"])
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["domain"], ".example.com")
+        response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.cookies["signup_token"]["domain"], ".example.com")
+        self.assertEqual(response.cookies["signup_token"]["max-age"], 0)
+
+    def test_signup_body_token_cannot_replace_cookie(self):
+        verification = self.verify_phone()
+        token = verification.cookies["signup_token"].value
+        record = cache.get(f"signup_verified_{self.phone}")
+        response = APIClient().post(
+            self.signup_url, {**self.data, "signup_token": token}, format="json"
+        )
+        self.assert_denied(response)
+        self.assert_no_account()
+        self.assertEqual(cache.get(f"signup_verified_{self.phone}"), record)
+
+    def test_wrong_or_malformed_secrets_are_rejected_without_consuming_proof(self):
+        verification = self.verify_phone()
+        valid_token = verification.cookies["signup_token"].value
+        key = f"signup_verified_{self.phone}"
+        record = cache.get(key)
+        for token in ("", "short", "A" * 43, "!" * 43, "A" * 44):
+            with self.subTest(token=token):
+                self.client.cookies["signup_token"] = token
+                response = self.client.post(self.signup_url, self.data, format="json")
+                self.assert_denied(response)
+                self.assert_no_account()
+                self.assertEqual(cache.get(key), record)
+        self.client.cookies["signup_token"] = valid_token
+        response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assert_proof_consumed()
+
+    def test_proof_is_bound_to_phone_number(self):
+        self.verify_phone()
+        key = f"signup_verified_{self.phone}"
+        record = cache.get(key)
+        response = self.client.post(
+            self.signup_url,
+            {**self.data, "phone_number": "09123456788"},
+            format="json",
+        )
+        self.assert_denied(response)
+        self.assert_no_account()
+        self.assertEqual(cache.get(key), record)
+
+    def test_normalized_phone_uses_the_same_proof(self):
+        self.verify_phone()
+        response = self.client.post(
+            self.signup_url,
+            {**self.data, "phone_number": f" {self.phone} "},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(User.objects.get().phone_number, self.phone)
+        self.assert_proof_consumed()
+
+    def test_expired_proof_is_rejected(self):
+        self.verify_phone()
+        key = f"signup_verified_{self.phone}"
+        cache.expire(key, 0)
+        self.assertIsNone(cache.get(key))
+        self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
+        self.assert_no_account()
+
+    def test_new_verification_replaces_the_old_secret(self):
+        first_client = APIClient()
+        first = self.verify_phone(client=first_client)
+        second = self.verify_phone()
+        self.assertNotEqual(
+            first.cookies["signup_token"].value,
+            second.cookies["signup_token"].value,
+        )
+        self.assert_denied(first_client.post(self.signup_url, self.data, format="json"))
+        self.assert_no_account()
+        response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assert_proof_consumed()
+
+    def test_legacy_or_inconsistent_cache_records_do_not_authorize_signup(self):
+        self.verify_phone()
+        key = f"signup_verified_{self.phone}"
+        original = cache.get(key)
+        for record in (
+            {"phone_number": self.phone},
+            {**original, "phone_number": "09123456788"},
+            {**original, "proof_hash": None},
+            "legacy-marker",
+        ):
+            with self.subTest(record=record):
+                cache.set(key, record, 600)
+                self.assert_denied(
+                    self.client.post(self.signup_url, self.data, format="json")
+                )
+                self.assert_no_account()
+                self.assertEqual(cache.get(key), record)
+
+    def test_validation_failure_consumes_proof_and_requires_fresh_otp(self):
+        self.verify_phone()
+        response = self.client.post(
+            self.signup_url, {**self.data, "first_name": "A"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assert_no_account()
+        self.assert_proof_consumed()
+        self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
+        self.verify_phone()
+        response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assert_proof_consumed()
+
+    def test_creation_failure_rolls_back_and_consumes_proof(self):
+        self.verify_phone()
+        with patch.object(
+            Session, "create_session", side_effect=RuntimeError("creation failed")
+        ):
+            with self.assertRaisesMessage(RuntimeError, "creation failed"):
+                self.client.post(self.signup_url, self.data, format="json")
+        self.assert_no_account()
+        self.assert_proof_consumed()
+        self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
+        self.verify_phone()
+        response = self.client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assert_proof_consumed()
+
+    def test_outer_rollback_still_consumes_verification(self):
+        self.verify_phone()
+        with transaction.atomic():
+            response = self.client.post(self.signup_url, self.data, format="json")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assert_proof_consumed()  # Redis deletion is not rolled back with SQL.
+            transaction.set_rollback(True)
+        self.assert_no_account()
+        self.assert_proof_consumed()
+
+
+class SignupConcurrencyTests(SignupTestHelpers, TransactionTestCase):
+    """Requires a real shared Redis cache and PostgreSQL for realistic concurrency."""
+
+    def setUp(self):
+        self.set_up_signup()
+        self.data = {
+            "phone_number": self.phone,
+            "first_name": "Alice",
+            "last_name": "Example",
+            "gender": User.Gender.FEMALE,
+            "date_of_birth": "1990-01-01",
+        }
+        verification = self.verify_phone()
+        self.token = verification.cookies["signup_token"].value
+
+    def test_proof_is_consumed_before_database_commit(self):
+        key = f"signup_verified_{self.phone}"
+        client = APIClient()
+        client.cookies["signup_token"] = self.token
+        with transaction.atomic():
+            response = client.post(self.signup_url, self.data, format="json")
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+            self.assertIsNone(cache.get(key))
+        self.assertIsNone(cache.get(key))
+        self.assertEqual(User.objects.filter(phone_number=self.phone).count(), 1)
+        self.assertEqual(Wallet.objects.count(), 1)
+        self.assertEqual(Session.objects.count(), 1)
+
+    def test_concurrent_signups_create_exactly_one_complete_account(self):
+        barrier = Barrier(2)
+
+        def signup():
+            close_old_connections()
+            try:
+                client = APIClient()
+                client.cookies["signup_token"] = self.token
+                barrier.wait(timeout=10)
+                response = client.post(self.signup_url, self.data, format="json")
+                return response.status_code, response.json()
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: signup(), range(2)))
+
+        self.assertEqual(sorted(code for code, _ in results), [201, 400])
+        denied = next(payload for code, payload in results if code == 400)
+        self.assertEqual(denied["error_code"], SignUpError.SIGN_UP_NOT_ALLOWED[0])
+        user = User.objects.get(phone_number=self.phone)
+        self.assertEqual(Wallet.objects.filter(owner=user).count(), 1)
+        self.assertEqual(Session.objects.filter(user=user).count(), 1)
+        self.assert_proof_consumed()
+
+    def test_lock_contention_rejects_signup_without_consuming_proof(self):
+        client = APIClient()
+        client.cookies["signup_token"] = self.token
+        lock = cache.lock(f"signup_verification_lock_{self.phone}", timeout=10)
+        self.assertTrue(lock.acquire(blocking=False))
+        try:
+            response = client.post(self.signup_url, self.data, format="json")
+            self.assert_denied(response)
+            self.assert_no_account()
+            self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
+        finally:
+            lock.release()
+        response = client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assert_proof_consumed()
 
 
 class PhoneChangeFlowTest(TestCase):

@@ -10,12 +10,17 @@ from users.models import User
 from users.serializers import UserProfileSerializer
 from users_sessions.models import Session
 from .token_services import create_tokens_for_user, refresh_tokens
-from .utils import make_cookie
 from .authentication import RefreshTokenAuthentication
 from .otp_service import generate_otp, verify_otp
 from django.conf import settings
 from .throttles import OTPPhoneThrottle, OTPIPThrottle
-from .signup_verification import issue_signup_token
+
+from .utils import (
+    make_cookie,
+    create_signup_proof,
+    SIGNUP_TTL,
+    SIGNUP_PATH,
+)
 
 
 class LoginRequestApiView(APIView):
@@ -80,12 +85,20 @@ class LoginVerifyApiView(APIView):
             return response
 
         except User.DoesNotExist:
-            # Signup flow
+            signup_token = create_signup_proof(phone_number)
+
             response = Response(
                 {"user": None, "new_user": True},
                 status=status.HTTP_200_OK,
             )
-            issue_signup_token(phone_number, response)
+
+            make_cookie(
+                response,
+                {"signup_token": signup_token},
+                path=SIGNUP_PATH,
+                max_age=SIGNUP_TTL,
+            )
+
             return response
 
 
@@ -127,7 +140,7 @@ class LogoutAPIView(APIView):
                 session: Session = Session.objects.get(session_id=session_id)
                 session.delete()
 
-            except TokenError:
+            except:
                 pass  # Token already invalid or expired
 
         # Clear cookies
