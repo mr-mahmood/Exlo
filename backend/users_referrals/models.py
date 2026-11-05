@@ -37,6 +37,12 @@ class Referral(models.Model):
             models.Index(fields=["referred_user", "referrer"]),
             models.Index(fields=["created_at"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(referrer=models.F("referred_user")),
+                name="referral_no_self_referral",
+            ),
+        ]
         unique_together = [["referrer", "referred_user"]]
 
     def save(self, *args, **kwargs):

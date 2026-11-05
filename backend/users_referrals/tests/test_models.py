@@ -65,6 +65,90 @@ class ReferralModelTest(TestCase):
             context.exception.error_code, ReferralError.SELF_REFERRAL_NOT_ALLOWED[0]
         )
 
+    def test_bulk_create_rejects_self_referral(self):
+        for ignore_conflicts in (False, True):
+            with self.subTest(ignore_conflicts=ignore_conflicts):
+                with self.assertRaises(IntegrityError) as context:
+                    with transaction.atomic():
+                        Referral.objects.bulk_create(
+                            [
+                                Referral(
+                                    referrer=self.referrer, referred_user=self.referred
+                                ),
+                                Referral(
+                                    referrer=self.referrer, referred_user=self.referrer
+                                ),
+                            ],
+                            ignore_conflicts=ignore_conflicts,
+                        )
+
+                self.assertEqual(
+                    context.exception.__cause__.diag.constraint_name,
+                    "referral_no_self_referral",
+                )
+                self.assertFalse(Referral.objects.exists())
+
+    def test_queryset_update_rejects_self_referral(self):
+        referral = Referral.objects.create(
+            referrer=self.referrer, referred_user=self.referred
+        )
+        for field, value in (
+            ("referrer_id", self.referred.pk),
+            ("referred_user_id", self.referrer.pk),
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(IntegrityError) as context:
+                    with transaction.atomic():
+                        Referral.objects.filter(pk=referral.pk).update(**{field: value})
+
+                self.assertEqual(
+                    context.exception.__cause__.diag.constraint_name,
+                    "referral_no_self_referral",
+                )
+                referral.refresh_from_db()
+                self.assertEqual(referral.referrer_id, self.referrer.pk)
+                self.assertEqual(referral.referred_user_id, self.referred.pk)
+
+    def test_bulk_update_rejects_self_referral(self):
+        referral = Referral.objects.create(
+            referrer=self.referrer, referred_user=self.referred
+        )
+        referral.referred_user = self.referrer
+
+        with self.assertRaises(IntegrityError) as context:
+            with transaction.atomic():
+                Referral.objects.bulk_update([referral], ["referred_user"])
+
+        self.assertEqual(
+            context.exception.__cause__.diag.constraint_name,
+            "referral_no_self_referral",
+        )
+        referral.refresh_from_db()
+        self.assertEqual(referral.referrer_id, self.referrer.pk)
+        self.assertEqual(referral.referred_user_id, self.referred.pk)
+
+    def test_bulk_and_queryset_updates_allow_distinct_users(self):
+        other_referrer = User.objects.create_user(
+            phone_number="09123456787",
+            first_name="Another",
+            last_name="Referrer",
+            gender=User.Gender.MALE,
+        )
+        referral = Referral.objects.create(
+            referrer=self.referrer, referred_user=self.referred
+        )
+        referral.referrer = other_referrer
+
+        Referral.objects.bulk_update([referral], ["referrer"])
+        referral.refresh_from_db()
+        self.assertEqual(referral.referrer_id, other_referrer.pk)
+        self.assertEqual(referral.referred_user_id, self.referred.pk)
+
+        Referral.objects.filter(pk=referral.pk).update(referred_user=self.referrer)
+        referral.refresh_from_db()
+        self.assertEqual(referral.referrer_id, other_referrer.pk)
+        self.assertEqual(referral.referred_user_id, self.referrer.pk)
+
     def test_referral_relationships(self):
         """Test referral relationships"""
         referral = Referral.objects.create(
