@@ -289,9 +289,9 @@ CELERY_BEAT_SCHEDULE = {
         "task": "gym_subscriptions.tasks.sweep_gym_subscriptions",
         "schedule": crontab(hour=3, minute=0),
     },
-    "delete-stale-gym-devices": {
-        "task": "gym_devices.tasks.delete_stale_gym_devices",
-        "schedule": crontab(hour=3, minute=10),
+    "cleanup-expired-user-sessions": {
+        "task": "users_sessions.tasks.cleanup_expired_sessions",
+        "schedule": crontab(hour=3, minute=20),
     },
 }
 
