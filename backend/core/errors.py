@@ -553,6 +553,12 @@ class GymAnnouncementError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
+    INVALID_STATUS_TRANSITION = (
+        "ANNOU_003",
+        "Announcement status transition is not allowed.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
 
 # ============================================================================
 # GYM PLANS

@@ -20,6 +20,8 @@ def scan_directory(path):
     for root, dirs, files in os.walk(path):
         dirs[:] = [d for d in dirs if d not in IGNORE_FOLDER_AND_FILE]
         for file in files:
+            if "locustfile" in file:
+                continue
             _, ext = os.path.splitext(file)
             if ext.lower() in TARGET_EXTENSIONS:
                 full_path = os.path.join(root, file)

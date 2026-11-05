@@ -147,6 +147,75 @@ class GymAnnouncementSerializerTest(TestCase):
         )
         self.assertTrue(serializer.is_valid())
 
-        # Status should remain DRAFT because it's read-only
         updated = serializer.save()
         self.assertEqual(updated.status, GymAnnouncement.Status.PUBLISHED)
+        self.assertIsNotNone(updated.published_at)
+        updated.refresh_from_db()
+        self.assertEqual(updated.status, GymAnnouncement.Status.PUBLISHED)
+        self.assertIsNotNone(updated.published_at)
+
+    def make_announcement(self):
+        return GymAnnouncement.objects.create(
+            gym=self.gym,
+            author=self.user,
+            title="Original title",
+            content="Original content",
+        )
+
+    def test_stale_serializer_cannot_republish_archived_announcement(self):
+        announcement = self.make_announcement()
+        serializer = GymAnnouncementSerializer(
+            announcement,
+            data={"status": "PUBLISHED", "title": "Rejected"},
+            partial=True,
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        current = GymAnnouncement.objects.get(pk=announcement.pk)
+        current.archive()
+        original = GymAnnouncement.objects.values().get(pk=announcement.pk)
+
+        with self.assertRaises(APIError) as raised:
+            serializer.save()
+
+        self.assertEqual(raised.exception.error_code, "ANNOU_003")
+        self.assertEqual(
+            GymAnnouncement.objects.values().get(pk=announcement.pk), original
+        )
+
+    def test_deleted_announcement_is_not_recreated_by_stale_update(self):
+        announcement = self.make_announcement()
+        serializer = GymAnnouncementSerializer(
+            announcement, data={"status": "PUBLISHED"}, partial=True
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        GymAnnouncement.objects.filter(pk=announcement.pk).delete()
+
+        with self.assertRaises(APIError) as raised:
+            serializer.save()
+
+        self.assertEqual(raised.exception.error_code, "ANNOU_001")
+        self.assertFalse(GymAnnouncement.objects.filter(pk=announcement.pk).exists())
+
+    def test_stale_content_edit_preserves_latest_publication_state(self):
+        for state in ("PUBLISHED", "ARCHIVED"):
+            with self.subTest(state=state):
+                announcement = self.make_announcement()
+                serializer = GymAnnouncementSerializer(
+                    announcement, data={"title": "Edited title"}, partial=True
+                )
+                self.assertTrue(serializer.is_valid(), serializer.errors)
+                current = GymAnnouncement.objects.get(pk=announcement.pk)
+                if state == "PUBLISHED":
+                    current.publish()
+                else:
+                    current.archive()
+                timestamps = (current.published_at, current.archived_at)
+
+                serializer.save()
+
+                announcement.refresh_from_db()
+                self.assertEqual(announcement.title, "Edited title")
+                self.assertEqual(announcement.status, state)
+                self.assertEqual(
+                    (announcement.published_at, announcement.archived_at), timestamps
+                )
