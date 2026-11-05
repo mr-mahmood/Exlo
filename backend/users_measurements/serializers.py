@@ -31,6 +31,9 @@ class MeasurementPhotosSerializer(serializers.ModelSerializer):
         return value
 
     def validate_photo(self, value):
+        if value is None:
+            raise APIError(MeasurementsError.PHOTO_FILE_REQUIRED)
+
         # Check file size
         if value.size > settings.MAX_IMAGE_SIZE:
             raise APIError(MeasurementsError.PHOTO_FILE_TOO_LARGE)

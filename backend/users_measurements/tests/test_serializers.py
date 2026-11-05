@@ -763,6 +763,19 @@ class MeasurementPhotosSerializerTest(TestCase):
             context.exception.error_code, MeasurementsError.PHOTO_FILE_REQUIRED[0]
         )
 
+    def test_null_photo_file(self):
+        serializer = MeasurementPhotosSerializer(
+            data={"type": MeasurementPhotos.PhotoType.FRONT, "photo": None}
+        )
+
+        with self.assertRaises(APIError) as context:
+            serializer.is_valid(raise_exception=True)
+
+        self.assertEqual(
+            context.exception.error_code, MeasurementsError.PHOTO_FILE_REQUIRED[0]
+        )
+        self.assertFalse(MeasurementPhotos.objects.exists())
+
     def test_large_photo_file(self):
         """Test serializer with large photo file"""
         # Create a large image (over the limit)

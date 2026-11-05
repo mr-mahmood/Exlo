@@ -969,6 +969,37 @@ class MeasurementPhotosViewTest(TestCase):
             MeasurementPhotos.objects.filter(measurements=self.measurement).count(), 1
         )
 
+    def test_post_photo_rejects_missing_null_and_empty_uploads(self):
+        self.client.force_authenticate(user=self.user)
+        cases = (
+            ({"photo": None}, "json", MeasurementsError.PHOTO_FILE_REQUIRED[0]),
+            ({}, "json", MeasurementsError.PHOTO_FILE_REQUIRED[0]),
+            ({"photo": ""}, "json", "VALIDATION_ERROR"),
+            (
+                {
+                    "photo": SimpleUploadedFile(
+                        "empty.jpg", b"", content_type="image/jpeg"
+                    )
+                },
+                "multipart",
+                "VALIDATION_ERROR",
+            ),
+        )
+        for photo_data, request_format, error_code in cases:
+            with self.subTest(photo_data=photo_data):
+                response = self.client.post(
+                    self.photo_create_url,
+                    {"type": MeasurementPhotos.PhotoType.FRONT, **photo_data},
+                    format=request_format,
+                )
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                payload = response.json()
+                self.assertFalse(payload["success"])
+                self.assertIsNone(payload["data"])
+                self.assertEqual(payload["error_code"], error_code)
+                self.assertFalse(MeasurementPhotos.objects.exists())
+
     def test_post_photo_unauthenticated(self):
         """Test POST photo without authentication"""
         data = {
