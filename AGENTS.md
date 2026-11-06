@@ -572,3 +572,21 @@ Never switch `APP_ENV` automatically to bypass restrictions.
 - If the current environment does not permit the requested operation, explain the restriction and ask the developer to switch to the appropriate environment.
 - Always distinguish successfully executed tests and benchmarks from skipped or blocked verification.
 - Never claim tests passed or performance targets were achieved without executing the relevant verification.
+
+
+## Default Skills and Tool Usage
+
+Apply these defaults to every request without requiring me to name the skills:
+
+- Use `i-have-adhd` for clear, actionable responses: lead with the answer or next action, number multi-step instructions, and keep progress easy to follow.
+- Use `caveman` for concise wording. Preserve grammar, technical accuracy, important context, and all necessary details.
+- Use `ponytail` in full mode for coding tasks: make the smallest complete change that solves the problem.
+- Follow the global RTK instructions for supported commands. If filtered output hides details needed for diagnosis, retrieve the original output.
+- Consider `qmd` whenever local documentation could help. Use it when its search tool and relevant indexes are available; otherwise use normal file search.
+- Consider `headroom` whenever an applicable task involves compressing LLM context. Use it only where its runtime is installed and integration is supported.
+
+Check applicability on every request; do not run irrelevant tools merely to satisfy this list.
+
+Project engineering, security, authorization, testing, and environment rules take precedence over brevity or token savings. Never omit required checks or claim an unavailable tool was used.
+
+If style instructions conflict, prioritize clarity and actionable structure, then brevity. Follow any explicit request for a detailed explanation.

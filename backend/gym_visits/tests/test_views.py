@@ -2,9 +2,13 @@
 
 
 from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from unittest.mock import patch
 from uuid import uuid7
 from django.core.cache import cache
-from django.test import TestCase
+from django.db import DatabaseError, connections, transaction
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -26,7 +30,7 @@ from gym_subscriptions.models import GymSubscription
 from gym_visits.models import GymVisit
 from users.models import User
 from users_nfc_cards.models import UserNfcCard
-from gym_locks.models import GymLocker
+from gym_locks.models import GymLocker, GymLockerManager
 
 
 class NfcFlowTestBase(TestCase):
@@ -1535,3 +1539,75 @@ class FullJourneyTests(NfcFlowTestBase):
             ).count(),
             2,
         )
+
+
+class CheckOutConcurrencyTests(TransactionTestCase):
+    def test_checkout_locks_user_before_releasing_locker(self):
+        gym = Gym.objects.create(name="Gym")
+        user = User.objects.create_user(phone_number="09120000001")
+        plan = GymMembershipPlan.objects.create_plan(
+            name="Plan", gym=gym, duration_months=1, visit_limit=2, price=1000,
+        )
+        order = Order.objects.create(
+            buyer=user, status=Order.Status.PAID, subtotal_amount=1000,
+            discount_amount=0, tax_amount=0, total_amount=1000,
+            paid_at=timezone.now(),
+        )
+        item = OrderItem.objects.create(
+            commerce_product=plan.id, order=order,
+            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
+            item_snapshot={}, quantity=1, unit_price=1000,
+            subtotal_amount=1000, discount_amount=0, tax_amount=0,
+            total_amount=1000,
+        )
+        GymSubscription.objects.create(
+            subscriber=user, plan=plan, order_item=item,
+            status=GymSubscription.Status.ACTIVE,
+            expires_at=timezone.now() + timedelta(days=30),
+            remaining_visits=2, duration_months=1,
+        )
+        GymLocker.objects.add_lockers(gym=gym, count=1)
+        UserNfcCard.objects.assign_card(user=user, uid="CARD1")
+        _, token = GymDevice.objects.register_device(
+            gym=gym, device_type=GymDevice.GymDeviceType.ENTRANCE,
+        )
+        headers = {"HTTP_AUTHORIZATION": f"Device {token}"}
+        check_in_url = reverse("gym_visits:gym-visit-check-in", args=[gym.id])
+        check_out_url = reverse("gym_visits:gym-visit-check-out", args=[gym.id])
+        self.assertEqual(
+            APIClient().post(check_in_url, {"uid": "CARD1"}, format="json", **headers).status_code,
+            status.HTTP_200_OK,
+        )
+
+        releasing = Event()
+        continue_checkout = Event()
+        original_remove = GymLockerManager.remove_assignment
+
+        def pause_before_release(manager, gym, user):
+            releasing.set()
+            if not continue_checkout.wait(timeout=10):
+                raise TimeoutError("Checkout did not resume")
+            return original_remove(manager, gym, user)
+
+        def checkout():
+            try:
+                return APIClient().post(
+                    check_out_url, {"uid": "CARD1"}, format="json", **headers,
+                )
+            finally:
+                connections.close_all()
+
+        with patch.object(GymLockerManager, "remove_assignment", pause_before_release):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                result = executor.submit(checkout)
+                try:
+                    self.assertTrue(releasing.wait(timeout=10))
+                    with transaction.atomic():
+                        with self.assertRaises(DatabaseError):
+                            User.objects.select_for_update(nowait=True).get(pk=user.pk)
+                finally:
+                    continue_checkout.set()
+                self.assertEqual(result.result(timeout=10).status_code, status.HTTP_200_OK)
+
+        self.assertFalse(GymVisit.objects.filter(user=user, checked_out_at__isnull=True).exists())
+        self.assertFalse(GymLocker.objects.filter(gym=gym, assigned_user=user).exists())

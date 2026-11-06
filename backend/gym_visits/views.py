@@ -67,16 +67,17 @@ class NfcCardCheckOutView(APIView):
         user: User = UserNfcCard.objects.find_card(uid=uid).user
         user.validate_account_status()
 
-        visit: GymVisit = GymVisit.objects.filter(
-            user=user,
-            gym=gym,
-            checked_out_at__isnull=True,
-        ).first()
-
-        if visit is None:
-            raise APIError(GymVisitsError.VISIT_NOT_FOUND)
-
         with transaction.atomic():
+            User.objects.select_for_update().get(pk=user.pk)
+            visit: GymVisit = GymVisit.objects.filter(
+                user=user,
+                gym=gym,
+                checked_out_at__isnull=True,
+            ).first()
+
+            if visit is None:
+                raise APIError(GymVisitsError.VISIT_NOT_FOUND)
+
             GymLocker.objects.remove_assignment(gym, user)
             visit.check_out(method=GymVisit.Method.NFC)
 
