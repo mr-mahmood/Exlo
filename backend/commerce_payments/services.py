@@ -21,7 +21,7 @@ class ZibalIPG:
             "description": description,
             "feeMode": 0,
             "mobile": mobile,
-            "orderId": order_id,  # its the UUID of payment table, row
+            "orderId": str(order_id),  # its the UUID of payment table, row
         }
         try:
             response = requests.post(

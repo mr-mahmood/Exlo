@@ -58,10 +58,10 @@ class WalletTopUpAPIView(APIView):
         if response and response["result"] == 100:
             PaymentGateway.objects.create(
                 payment=payment,
-                track_id=response["track_id"],
+                track_id=response["trackId"],
             )
             return Response(
-                {"gateway_url": zibal.start_url(track_id=response["track_id"])},
+                {"gateway_url": zibal.start_url(track_id=response["trackId"])},
                 status=status.HTTP_200_OK,
             )
         else:

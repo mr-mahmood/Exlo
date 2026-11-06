@@ -576,7 +576,7 @@ Never switch `APP_ENV` automatically to bypass restrictions.
 
 ## Default Skills and Tool Usage
 
-Apply these defaults to every request without requiring me to name the skills:
+Apply these defaults to every request and make sure to use them without requiring me to name the skills:
 
 - Use `i-have-adhd` for clear, actionable responses: lead with the answer or next action, number multi-step instructions, and keep progress easy to follow.
 - Use `caveman` for concise wording. Preserve grammar, technical accuracy, important context, and all necessary details.
