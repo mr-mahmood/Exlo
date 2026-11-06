@@ -56,7 +56,6 @@ class GymSubscriptionsManager(models.Manager):
 
         if subscription.is_expired:
             subscription.expire(reason=subscription.expire_reason)
-            invalidate_user_subscription_caches(subscriber.id, subscription.id)
             subscription = self._promote_next_for_gym(subscriber, gym)
             if subscription is None or not subscription.is_active:
                 raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
@@ -69,9 +68,7 @@ class GymSubscriptionsManager(models.Manager):
 
         if subscription.remaining_visits <= 0:
             subscription.expire(reason=subscription.expire_reason)
-            next_subscription = self._promote_next_any(subscriber)
-            if next_subscription is not None:
-                invalidate_user_subscription_caches(subscriber.id, next_subscription.id)
+            self._promote_next_any(subscriber)
 
         invalidate_user_subscription_caches(subscriber.id, subscription.id)
         return subscription
@@ -117,7 +114,6 @@ class GymSubscriptionsManager(models.Manager):
 
             subscription.cancel()
             self._promote_next_any(subscriber)
-            invalidate_user_subscription_caches(subscriber.id, subscription.id)
             return subscription
 
     def _promote_next_for_gym(self, subscriber, gym) -> "GymSubscription | None":
@@ -321,12 +317,14 @@ class GymSubscription(models.Model):
                     "updated_at",
                 ]
             )
+            invalidate_user_subscription_caches(self.subscriber_id, self.pk)
 
     def expire(self, reason):
         if self.status == self.Status.ACTIVE:
             self.status = self.Status.EXPIRED
             self.end_reason = reason
             self.save(update_fields=["status", "end_reason", "updated_at"])
+            invalidate_user_subscription_caches(self.subscriber_id, self.pk)
 
     def cancel(self):
         if self.status in (self.Status.PENDING, self.Status.ACTIVE):
@@ -337,3 +335,4 @@ class GymSubscription(models.Model):
             self.save(
                 update_fields=["status", "end_reason", "cancelled_at", "updated_at"]
             )
+            invalidate_user_subscription_caches(self.subscriber_id, self.pk)

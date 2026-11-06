@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase
+from django.urls import reverse
+from rest_framework.test import APIClient
 
 from commerce_orders.models import Order, OrderItem
 from commerce_products.models import CommerceProduct
@@ -183,3 +185,44 @@ class SubscriptionSweepTaskTest(TestCase):
     def test_sweep_without_subscriptions_succeeds(self):
         self.run_sweep()
         self.assertFalse(GymSubscription.objects.exists())
+
+    def test_sweep_refreshes_expired_and_promoted_subscription_caches(self):
+        active = self.make_subscription(
+            self.users[0], status="ACTIVE", remaining_visits=10,
+            expires_at=self.now - timedelta(days=1),
+        )
+        pending = self.make_subscription(self.users[0], status="PENDING")
+        client = APIClient()
+        client.force_authenticate(user=self.users[0])
+        list_url = reverse("gym_subscriptions:gym-subscription-list")
+
+        def read_states():
+            response = client.get(list_url)
+            self.assertEqual(response.status_code, 200)
+            list_states = {
+                item["id"]: item["status"]
+                for item in response.data["subscriptions"]
+            }
+            detail_states = {}
+            for subscription in (active, pending):
+                detail_url = reverse(
+                    "gym_subscriptions:gym-subscription-detail",
+                    kwargs={"subscription_id": subscription.pk},
+                )
+                detail = client.get(detail_url)
+                self.assertEqual(detail.status_code, 200)
+                detail_states[str(subscription.pk)] = detail.data["subscription"]["status"]
+            return list_states, detail_states
+
+        expected_before = {str(active.pk): "ACTIVE", str(pending.pk): "PENDING"}
+        self.assertEqual(read_states(), (expected_before, expected_before))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.run_sweep()
+
+        active.refresh_from_db()
+        pending.refresh_from_db()
+        self.assertEqual(active.status, "EXPIRED")
+        self.assertEqual(pending.status, "ACTIVE")
+        expected_after = {str(active.pk): "EXPIRED", str(pending.pk): "ACTIVE"}
+        self.assertEqual(read_states(), (expected_after, expected_after))

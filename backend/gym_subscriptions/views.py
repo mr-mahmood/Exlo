@@ -11,7 +11,6 @@ from core.cache import (
     USER_SUBSCRIPTION,
     cache_key,
     get_cache,
-    invalidate_user_subscription_caches,
 )
 
 
@@ -81,5 +80,4 @@ class CancelSubscriptionAPIView(APIView):
         )
 
         GymSubscription.objects.cancel_subscription(subscription)
-        invalidate_user_subscription_caches(request.user.id, subscription.id)
         return Response(status=status.HTTP_200_OK)

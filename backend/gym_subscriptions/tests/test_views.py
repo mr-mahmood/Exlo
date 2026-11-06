@@ -3,12 +3,14 @@
 
 import uuid
 from datetime import timedelta
+from django.db import transaction
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from commerce_orders.models import CommerceProduct, Order, OrderItem
+from core.cache import USER_SUBSCRIPTION, cache_key
 from core.errors import GymSubscriptionError
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
@@ -618,6 +620,98 @@ class SubscriptionCancelTests(SubscriptionViewTestBase):
 
         theirs.refresh_from_db()
         self.assertEqual(theirs.status, GymSubscription.Status.ACTIVE)
+
+
+class SubscriptionCacheInvalidationTests(SubscriptionViewTestBase):
+    def assert_subscription_states(self, expected):
+        list_response = self.client.get(self.list_url)
+        self.assertEqual(list_response.status_code, status.HTTP_200_OK)
+        states = {
+            item["id"]: item["status"]
+            for item in list_response.data["subscriptions"]
+        }
+        self.assertEqual(states, {str(sub.pk): state for sub, state in expected})
+        for state in ("ACTIVE", "PENDING", "EXPIRED", "CANCELLED"):
+            filtered = self.client.get(self.list_url, {"status": state})
+            self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+            self.assertEqual(
+                {item["id"] for item in filtered.data["subscriptions"]},
+                {str(sub.pk) for sub, current in expected if current == state},
+            )
+        for sub, state in expected:
+            detail = self.client.get(self.detail_url(sub.pk))
+            self.assertEqual(detail.status_code, status.HTTP_200_OK)
+            self.assertEqual(detail.data["subscription"]["status"], state)
+
+    def test_activation_refreshes_cached_list_and_detail(self):
+        pending = self.make_subscription(self.user, self.plan, remaining_visits=30)
+        self.authenticate(self.user)
+        self.assert_subscription_states([(pending, "PENDING")])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            pending.activate()
+
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, "ACTIVE")
+        self.assert_subscription_states([(pending, "ACTIVE")])
+
+    def test_cancellation_refreshes_cancelled_and_promoted_details(self):
+        active = self.make_subscription(
+            self.user, self.plan, status=GymSubscription.Status.ACTIVE,
+            remaining_visits=10, expires_at=timezone.now() + timedelta(days=10),
+        )
+        pending = self.make_subscription(
+            self.user, self.plan_2, remaining_visits=30,
+        )
+        self.authenticate(self.user)
+        self.assert_subscription_states([(active, "ACTIVE"), (pending, "PENDING")])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.cancel_url(active.pk))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        active.refresh_from_db()
+        pending.refresh_from_db()
+        self.assertEqual(active.status, "CANCELLED")
+        self.assertEqual(pending.status, "ACTIVE")
+        self.assert_subscription_states([(active, "CANCELLED"), (pending, "ACTIVE")])
+
+    def test_expiry_refreshes_cached_list_and_detail(self):
+        active = self.make_subscription(
+            self.user, self.plan, status=GymSubscription.Status.ACTIVE,
+            remaining_visits=0, expires_at=timezone.now() + timedelta(days=10),
+        )
+        self.authenticate(self.user)
+        self.assert_subscription_states([(active, "ACTIVE")])
+
+        with self.captureOnCommitCallbacks(execute=True):
+            active.expire(reason=GymSubscription.EndReason.VISITS)
+
+        active.refresh_from_db()
+        self.assertEqual(active.status, "EXPIRED")
+        self.assert_subscription_states([(active, "EXPIRED")])
+
+    def test_rolled_back_transition_keeps_cached_state(self):
+        pending = self.make_subscription(self.user, self.plan, remaining_visits=30)
+        self.authenticate(self.user)
+        self.assert_subscription_states([(pending, "PENDING")])
+        original_key = cache_key(USER_SUBSCRIPTION, self.user.pk, pending.pk)
+
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                pending.activate()
+                self.assertEqual(
+                    cache_key(USER_SUBSCRIPTION, self.user.pk, pending.pk),
+                    original_key,
+                )
+                raise RuntimeError("roll back activation")
+
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, "PENDING")
+        self.assertEqual(
+            cache_key(USER_SUBSCRIPTION, self.user.pk, pending.pk), original_key
+        )
+        self.assert_subscription_states([(pending, "PENDING")])
 
 
 # ============================================================================
