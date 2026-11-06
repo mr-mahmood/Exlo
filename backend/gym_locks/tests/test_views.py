@@ -130,6 +130,24 @@ class GymLockerViewsTest(TestCase):
         self.assertIn(str(self.locker.id), locker_ids)
         self.assertNotIn(str(self.other_locker.id), locker_ids)
 
+    def test_list_reflects_locker_assignment_and_release(self):
+        self.authenticate(self.admin_user)
+
+        def assigned_user():
+            response = self.client.get(self.list_url)
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            return response.data["lockers"][0]["assigned_user"]
+
+        self.assertIsNone(assigned_user())
+
+        with self.captureOnCommitCallbacks(execute=True):
+            GymLocker.objects.assign(self.gym, self.regular_user)
+        self.assertEqual(assigned_user(), self.regular_user.id)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            GymLocker.objects.remove_assignment(self.gym, self.regular_user)
+        self.assertIsNone(assigned_user())
+
     def test_list_lockers_gym_staff(self):
         self.authenticate(self.staff_user)
 

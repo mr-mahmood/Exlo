@@ -6,6 +6,7 @@ from django.db.models import Max
 from gym.models import Gym
 from users.models import User
 from core.errors import APIError, GymLockerError
+from core.cache import invalidate_gym_locker_caches
 
 
 class GymLockerManager(models.Manager):
@@ -30,6 +31,7 @@ class GymLockerManager(models.Manager):
 
         locker.assigned_user = user
         locker.save(update_fields=["assigned_user", "updated_at"])
+        invalidate_gym_locker_caches(gym.id)
         return locker
 
     @transaction.atomic
@@ -44,6 +46,7 @@ class GymLockerManager(models.Manager):
 
         locker.assigned_user = None
         locker.save(update_fields=["assigned_user", "updated_at"])
+        invalidate_gym_locker_caches(gym.id)
         return locker
 
     @transaction.atomic
