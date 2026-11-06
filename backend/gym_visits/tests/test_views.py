@@ -16,7 +16,9 @@ from core.errors import (
     GymSubscriptionError,
     UserNfcCardError,
     UserAccountError,
+    GymLockerError,
 )
+from core.cache import USER_SUBSCRIPTION, cache_key
 from gym.models import Gym
 from gym_devices.models import GymDevice
 from gym_plans.models import GymMembershipPlan
@@ -876,6 +878,186 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
             self.user,
             "CARD1",
         )
+
+    def make_plan_b(self):
+        return GymMembershipPlan.objects.create_plan(
+            name="Plan B", gym=self.gym_b, duration_months=1,
+            visit_limit=30, price=1000,
+        )
+
+    def assert_subscription_api_states(self, *expected):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        for subscription, expected_status in expected:
+            response = client.get(
+                reverse(
+                    "gym_subscriptions:gym-subscription-detail",
+                    kwargs={"subscription_id": subscription.pk},
+                )
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(
+                response.json()["data"]["subscription"]["status"], expected_status
+            )
+        response = client.get(reverse("gym_subscriptions:gym-subscription-list"))
+        self.assertEqual(response.status_code, 200)
+        states = {
+            subscription["id"]: subscription["status"]
+            for subscription in response.json()["data"]["subscriptions"]
+        }
+        for subscription, expected_status in expected:
+            self.assertEqual(states[str(subscription.pk)], expected_status)
+
+    def test_last_visit_promotes_another_gyms_queue_and_refreshes_cache(self):
+        active = self.make_active_subscription(self.user, self.plan_a, remaining=1)
+        pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
+        later_a = self.make_pending_subscription(self.user, self.plan_a)
+        self.assert_subscription_api_states(
+            (active, "ACTIVE"), (pending_b, "PENDING"), (later_a, "PENDING")
+        )
+        keys = {
+            sub.pk: cache_key(USER_SUBSCRIPTION, self.user.pk, sub.pk)
+            for sub in (active, pending_b)
+        }
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
+            self.assertEqual(response.status_code, 200)
+            for sub_id, key in keys.items():
+                self.assertEqual(cache_key(USER_SUBSCRIPTION, self.user.pk, sub_id), key)
+
+        active.refresh_from_db()
+        pending_b.refresh_from_db()
+        later_a.refresh_from_db()
+        self.assertEqual(active.status, "EXPIRED")
+        self.assertEqual(active.end_reason, "VISITS")
+        self.assertEqual(active.remaining_visits, 0)
+        self.assertEqual(pending_b.status, "ACTIVE")
+        self.assertEqual(pending_b.remaining_visits, 30)
+        self.assertEqual(later_a.status, "PENDING")
+        visit = GymVisit.objects.get(user=self.user)
+        self.assertEqual(visit.gym_id, self.gym_a.pk)
+        self.assertEqual(visit.subscription_id, active.pk)
+        self.assert_subscription_api_states(
+            (active, "EXPIRED"), (pending_b, "ACTIVE"), (later_a, "PENDING")
+        )
+
+        self.assertEqual(
+            self.check_out(gym=self.gym_a, token=self.token_a, uid="CARD1").status_code,
+            200,
+        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+        self.assertEqual(response.status_code, 200)
+        pending_b.refresh_from_db()
+        self.assertEqual(pending_b.remaining_visits, 29)
+        self.assertEqual(
+            GymVisit.objects.get(user=self.user, checked_out_at__isnull=True)
+            .subscription_id,
+            pending_b.pk,
+        )
+
+    def test_check_in_recovers_pending_subscription_after_previous_expired(self):
+        expired = self.make_active_subscription(self.user, self.plan_a, remaining=0)
+        pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
+        expired.expire(reason=GymSubscription.EndReason.VISITS)
+        self.assert_subscription_api_states((expired, "EXPIRED"), (pending_b, "PENDING"))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+
+        self.assertEqual(response.status_code, 200)
+        pending_b.refresh_from_db()
+        self.assertEqual(pending_b.status, "ACTIVE")
+        self.assertEqual(pending_b.remaining_visits, 29)
+        self.assertIsNotNone(pending_b.started_at)
+        self.assertEqual(
+            GymVisit.objects.get(user=self.user, gym=self.gym_b).subscription_id,
+            pending_b.pk,
+        )
+        self.assert_subscription_api_states((expired, "EXPIRED"), (pending_b, "ACTIVE"))
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            retry = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+        self.assertEqual(retry.status_code, 400)
+        self.assertEqual(retry.json()["error_code"], GymVisitsError.ALREADY_CHECKED_IN[0])
+        self.assertEqual(callbacks, [])
+        pending_b.refresh_from_db()
+        self.assertEqual(pending_b.remaining_visits, 29)
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
+
+    def test_time_expiry_cross_gym_refreshes_both_subscription_details(self):
+        expired = self.make_active_subscription(
+            self.user, self.plan_a, remaining=5, expires_in_days=-1
+        )
+        pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
+        self.assert_subscription_api_states((expired, "ACTIVE"), (pending_b, "PENDING"))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+
+        self.assertEqual(response.status_code, 200)
+        expired.refresh_from_db()
+        self.assertEqual(expired.status, "EXPIRED")
+        self.assertEqual(expired.end_reason, "TIME")
+        self.assertEqual(expired.remaining_visits, 5)
+        self.assert_subscription_api_states((expired, "EXPIRED"), (pending_b, "ACTIVE"))
+
+    def test_last_visit_promotion_rolls_back_when_no_locker_is_available(self):
+        active = self.make_active_subscription(self.user, self.plan_a, remaining=1)
+        pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
+        GymLocker.objects.filter(gym=self.gym_a).update(is_active=False)
+        self.assert_subscription_api_states((active, "ACTIVE"), (pending_b, "PENDING"))
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0])
+        self.assertEqual(callbacks, [])
+        active.refresh_from_db()
+        pending_b.refresh_from_db()
+        self.assertEqual(active.status, "ACTIVE")
+        self.assertEqual(active.remaining_visits, 1)
+        self.assertEqual(pending_b.status, "PENDING")
+        self.assertEqual(pending_b.remaining_visits, 30)
+        self.assertIsNone(pending_b.started_at)
+        self.assertIsNone(pending_b.expires_at)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+        self.assert_subscription_api_states((active, "ACTIVE"), (pending_b, "PENDING"))
+
+    def test_recovery_promotion_rolls_back_when_no_locker_is_available(self):
+        expired = self.make_active_subscription(self.user, self.plan_a, remaining=0)
+        pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
+        expired.expire(reason=GymSubscription.EndReason.VISITS)
+        GymLocker.objects.filter(gym=self.gym_b).update(is_active=False)
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0])
+        self.assertEqual(callbacks, [])
+        pending_b.refresh_from_db()
+        self.assertEqual(pending_b.status, "PENDING")
+        self.assertEqual(pending_b.remaining_visits, 30)
+        self.assertIsNone(pending_b.started_at)
+        self.assertIsNone(pending_b.expires_at)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+
+    def test_existing_active_subscription_blocks_other_gyms_pending_subscription(self):
+        active = self.make_active_subscription(self.user, self.plan_a, remaining=10)
+        pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], GymSubscriptionError.WRONG_GYM[0])
+        self.assertEqual(callbacks, [])
+        active.refresh_from_db()
+        pending_b.refresh_from_db()
+        self.assertEqual(active.remaining_visits, 10)
+        self.assertEqual(pending_b.status, "PENDING")
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
 
     def test_expired_subscription_promotes_same_gym_pending_and_allows_checkin(self):
         expired = self.make_active_subscription(

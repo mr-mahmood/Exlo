@@ -2,10 +2,13 @@
 
 
 from datetime import timedelta
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import patch
 from dateutil.relativedelta import relativedelta
-from django.db import IntegrityError
-from django.test import TestCase
+from django.core.cache import cache
+from django.db import IntegrityError, connections
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from core.errors import APIError, GymSubscriptionError
@@ -1129,6 +1132,97 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
 
 
 class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
+    def test_last_visit_promotes_oldest_pending_across_gyms(self):
+        active = self.create_raw_subscription(
+            self.user, self.plan, status="ACTIVE", remaining_visits=1,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+        other_user_pending = self.create_raw_subscription(self.user_2, self.plan_3)
+        next_subscription = self.create_raw_subscription(self.user, self.plan_3)
+        later_same_gym = self.create_raw_subscription(self.user, self.plan_2)
+
+        result = GymSubscription.objects.consume_visit(self.user, self.gym)
+
+        for subscription in (active, next_subscription, later_same_gym, other_user_pending):
+            subscription.refresh_from_db()
+        self.assertEqual(result.pk, active.pk)
+        self.assertEqual(active.status, "EXPIRED")
+        self.assertEqual(active.end_reason, "VISITS")
+        self.assertEqual(active.remaining_visits, 0)
+        self.assertEqual(next_subscription.status, "ACTIVE")
+        self.assertEqual(next_subscription.remaining_visits, 20)
+        self.assertIsNotNone(next_subscription.started_at)
+        self.assertEqual(
+            next_subscription.expires_at,
+            next_subscription.started_at + relativedelta(months=1),
+        )
+        self.assertEqual(later_same_gym.status, "PENDING")
+        self.assertEqual(other_user_pending.status, "PENDING")
+        self.assertEqual(
+            GymSubscription.objects.filter(subscriber=self.user, status="ACTIVE").count(),
+            1,
+        )
+
+    def test_no_active_subscription_promotes_oldest_pending_for_requested_gym(self):
+        expired = self.create_raw_subscription(
+            self.user, self.plan, status="EXPIRED", remaining_visits=0,
+            end_reason="VISITS",
+        )
+        older_other_gym = self.create_raw_subscription(self.user, self.plan_2)
+        next_subscription = self.create_raw_subscription(self.user, self.plan_3)
+        later_same_gym = self.create_raw_subscription(self.user, self.plan_3)
+
+        result = GymSubscription.objects.consume_visit(self.user, self.gym_2)
+
+        for subscription in (expired, older_other_gym, next_subscription, later_same_gym):
+            subscription.refresh_from_db()
+        self.assertEqual(result.pk, next_subscription.pk)
+        self.assertEqual(next_subscription.status, "ACTIVE")
+        self.assertEqual(next_subscription.remaining_visits, 19)
+        self.assertEqual(expired.status, "EXPIRED")
+        self.assertEqual(expired.remaining_visits, 0)
+        self.assertEqual(older_other_gym.status, "PENDING")
+        self.assertEqual(later_same_gym.status, "PENDING")
+        self.assertEqual(
+            GymSubscription.objects.filter(subscriber=self.user, status="ACTIVE").count(),
+            1,
+        )
+
+    def test_no_active_subscription_does_not_use_another_gyms_queue(self):
+        pending = self.create_raw_subscription(self.user, self.plan_3)
+        with self.assertRaises(APIError) as raised:
+            GymSubscription.objects.consume_visit(self.user, self.gym)
+        self.assertEqual(raised.exception.error_code, "SUBS_003")
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, "PENDING")
+        self.assertEqual(pending.remaining_visits, 20)
+        self.assertIsNone(pending.started_at)
+
+    def test_no_active_subscription_does_not_use_another_users_queue(self):
+        pending = self.create_raw_subscription(self.user_2, self.plan_3)
+        with self.assertRaises(APIError) as raised:
+            GymSubscription.objects.consume_visit(self.user, self.gym_2)
+        self.assertEqual(raised.exception.error_code, "SUBS_003")
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, "PENDING")
+        self.assertEqual(pending.remaining_visits, 20)
+
+    def test_valid_active_subscription_prevents_other_gym_promotion(self):
+        active = self.create_raw_subscription(
+            self.user, self.plan, status="ACTIVE", remaining_visits=10,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+        pending = self.create_raw_subscription(self.user, self.plan_3)
+        with self.assertRaises(APIError) as raised:
+            GymSubscription.objects.consume_visit(self.user, self.gym_2)
+        self.assertEqual(raised.exception.error_code, "SUBS_004")
+        active.refresh_from_db()
+        pending.refresh_from_db()
+        self.assertEqual(active.status, "ACTIVE")
+        self.assertEqual(active.remaining_visits, 10)
+        self.assertEqual(pending.status, "PENDING")
+        self.assertEqual(pending.remaining_visits, 20)
+
     def test_check_in_decrements_remaining_visits(self):
         subscription = self.create_raw_subscription(
             self.user,
@@ -1791,3 +1885,57 @@ class GymSubscriptionManagerInternalTests(GymSubscriptionTestBase):
         )
 
         self.assertTrue(GymSubscription.objects._has_active_subscription(self.user))
+
+
+class GymSubscriptionRecoveryConcurrencyTests(TransactionTestCase):
+    def setUp(self):
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user(phone_number="09120000001")
+        self.gym = Gym.objects.create(name="Test Gym")
+        plan = GymMembershipPlan.objects.create_plan(
+            gym=self.gym, name="Monthly", description="Monthly membership",
+            duration_months=1, visit_limit=30, price=1000,
+        )
+        order = Order.objects.create(
+            buyer=self.user, status=Order.Status.PAID,
+            subtotal_amount=1000, discount_amount=0, tax_amount=0,
+            total_amount=1000, paid_at=timezone.now(),
+        )
+        order_item = OrderItem.objects.create(
+            order=order, commerce_product=plan.id,
+            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
+            item_snapshot={}, quantity=1, unit_price=1000,
+            subtotal_amount=1000, discount_amount=0, tax_amount=0, total_amount=1000,
+        )
+        self.pending = GymSubscription.objects.create(
+            subscriber=self.user, plan=plan, order_item=order_item,
+            status="PENDING", duration_months=1, remaining_visits=30,
+        )
+
+    def test_concurrent_consumption_promotes_once_and_preserves_both_decrements(self):
+        barrier = Barrier(2)
+
+        def consume_visit():
+            try:
+                barrier.wait(timeout=10)
+                with transaction.atomic():
+                    subscription = GymSubscription.objects.consume_visit(
+                        self.user, self.gym
+                    )
+                    return subscription.pk
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(consume_visit) for _ in range(2)]
+            results = [future.result(timeout=15) for future in futures]
+
+        self.assertEqual(results, [self.pending.pk, self.pending.pk])
+        self.pending.refresh_from_db()
+        self.assertEqual(self.pending.status, "ACTIVE")
+        self.assertEqual(self.pending.remaining_visits, 28)
+        self.assertEqual(
+            GymSubscription.objects.filter(subscriber=self.user, status="ACTIVE").count(),
+            1,
+        )

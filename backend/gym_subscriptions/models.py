@@ -50,10 +50,13 @@ class GymSubscriptionsManager(models.Manager):
         )
 
         if subscription is None:
+            subscription = self._promote_next_for_gym(subscriber, gym)
+        if subscription is None:
             raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
         if subscription.is_expired:
             subscription.expire(reason=subscription.expire_reason)
+            invalidate_user_subscription_caches(subscriber.id, subscription.id)
             subscription = self._promote_next_for_gym(subscriber, gym)
             if subscription is None or not subscription.is_active:
                 raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
@@ -66,7 +69,9 @@ class GymSubscriptionsManager(models.Manager):
 
         if subscription.remaining_visits <= 0:
             subscription.expire(reason=subscription.expire_reason)
-            self._promote_next_for_gym(subscriber, gym)
+            next_subscription = self._promote_next_any(subscriber)
+            if next_subscription is not None:
+                invalidate_user_subscription_caches(subscriber.id, next_subscription.id)
 
         invalidate_user_subscription_caches(subscriber.id, subscription.id)
         return subscription
