@@ -580,7 +580,6 @@ Every task must follow the mandatory skills and tools workflow.
 
 Required skills:
 - caveman
-- headroom
 - i-have-adhd
 - ponytail
 - qmd
