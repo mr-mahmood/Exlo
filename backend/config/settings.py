@@ -206,7 +206,7 @@ REST_FRAMEWORK = {
     },
     "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
     # Date format
-    "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%S.%fZ",
+    "DATETIME_FORMAT": "iso-8601",
     "DATE_FORMAT": "%Y-%m-%d",
     "TIME_FORMAT": "%H:%M:%S",
 }

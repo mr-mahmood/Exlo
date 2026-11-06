@@ -90,7 +90,7 @@ def _request_suffix(request) -> str:
     for key in sorted(request.query_params.keys()):
         values = request.query_params.getlist(key)
 
-        for value in sorted(values):
+        for value in values:
             items.append((key, value))
 
     if not items:
