@@ -8,6 +8,7 @@ from gym.models import Gym
 from core.pagination import CustomPagination
 from .models import GymAnnouncement
 from .serializers import GymAnnouncementSerializer
+from .permissions import CanViewGymAnnouncements
 from core.cache import (
     GYM_ANNOUNCEMENTS,
     cache_key,
@@ -17,6 +18,7 @@ from core.cache import (
 
 
 class GymAnnouncementAPIView(APIView):
+    permission_classes = [CanViewGymAnnouncements]
     serializer_class = GymAnnouncementSerializer
     pagination_class = CustomPagination
 

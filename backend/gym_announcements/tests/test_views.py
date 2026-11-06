@@ -16,6 +16,10 @@ from users.models import User
 from gym.models import Gym
 from gym_announcements.models import GymAnnouncement
 from gym_auth.models import UserGymRole
+from gym_plans.models import GymMembershipPlan
+from gym_subscriptions.models import GymSubscription
+from commerce_orders.models import Order, OrderItem
+from commerce_products.models import CommerceProduct
 from django.conf import settings
 
 
@@ -62,6 +66,7 @@ class GymAnnouncementViewsTest(TestCase):
         UserGymRole.objects.create(
             user=self.gym_owner, gym=self.gym, role=UserGymRole.Role.OWNER
         )
+        self.member_subscription = self.make_subscription(self.gym_member, self.gym)
 
         # Create test announcements
         self.announcement1 = GymAnnouncement.objects.create(
@@ -84,6 +89,37 @@ class GymAnnouncementViewsTest(TestCase):
     def authenticate(self, user):
         self.client.force_authenticate(user=user)
 
+    def make_subscription(self, user, gym):
+        plan = GymMembershipPlan.objects.create_plan(
+            gym=gym,
+            name="Monthly",
+            description="Monthly access",
+            duration_months=1,
+            visit_limit=30,
+            price=10000,
+        )
+        order = Order.objects.create(buyer=user)
+        item = OrderItem.objects.create(
+            commerce_product=plan.id,
+            order=order,
+            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
+            item_snapshot={},
+        )
+        return GymSubscription.objects.create(
+            subscriber=user,
+            plan=plan,
+            order_item=item,
+            status=GymSubscription.Status.ACTIVE,
+            remaining_visits=30,
+            started_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+
+    def list_url(self, gym=None):
+        return reverse(
+            "gym_announcements:list", kwargs={"gym_id": (gym or self.gym).id}
+        )
+
     # ==================== LIST TESTS ====================
 
     def test_announcement_list_gym_member_access(self):
@@ -99,6 +135,44 @@ class GymAnnouncementViewsTest(TestCase):
         self.assertEqual(
             response.data["announcements"][0]["title"], "Published Announcement"
         )
+
+    def test_announcement_list_roles_and_nonmembers(self):
+        staff = User.objects.create_user(phone_number="09127770001")
+        UserGymRole.objects.create(user=staff, gym=self.gym, role=UserGymRole.Role.STAFF)
+        for user in (self.admin_user, self.gym_owner, staff, self.gym_member):
+            self.authenticate(user)
+            self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_200_OK)
+
+        self.authenticate(self.regular_user)
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_announcement_list_requires_current_membership_in_requested_gym(self):
+        self.authenticate(self.gym_member)
+        other_gym = Gym.objects.create(name="Other Gym")
+        self.assertEqual(self.client.get(self.list_url(other_gym)).status_code, status.HTTP_404_NOT_FOUND)
+
+        for changes in (
+            {"status": GymSubscription.Status.PENDING},
+            {"status": GymSubscription.Status.CANCELLED},
+            {"status": GymSubscription.Status.EXPIRED},
+            {"remaining_visits": 0},
+            {"expires_at": timezone.now() - timedelta(seconds=1)},
+        ):
+            self.member_subscription.refresh_from_db()
+            self.member_subscription.status = GymSubscription.Status.ACTIVE
+            self.member_subscription.remaining_visits = 30
+            self.member_subscription.expires_at = timezone.now() + timedelta(days=30)
+            for name, value in changes.items():
+                setattr(self.member_subscription, name, value)
+            self.member_subscription.save()
+            self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cached_announcements_do_not_bypass_membership_check(self):
+        self.authenticate(self.gym_member)
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_200_OK)
+        self.member_subscription.remaining_visits = 0
+        self.member_subscription.save(update_fields=["remaining_visits"])
+        self.assertEqual(self.client.get(self.list_url()).status_code, status.HTTP_404_NOT_FOUND)
 
     def test_announcement_list_unauthenticated_no_access(self):
         """Test that unauthenticated users cannot view announcements."""
@@ -622,7 +696,9 @@ class GymAnnouncementPublicationViewsTest(TestCase):
         announcement = self.make_announcement()
         self.assertEqual(self.list_announcements(), [])
         other_key = cache_key(GYM_ANNOUNCEMENTS, self.other_gym.pk)
+        self.client.force_authenticate(user=self.other_owner)
         self.assertEqual(self.list_announcements(self.other_gym), [])
+        self.client.force_authenticate(user=self.owner)
 
         for target, visible in (("PUBLISHED", True), ("ARCHIVED", False)):
             key = cache_key(GYM_ANNOUNCEMENTS, self.gym.pk)

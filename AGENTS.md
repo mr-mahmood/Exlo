@@ -574,19 +574,26 @@ Never switch `APP_ENV` automatically to bypass restrictions.
 - Never claim tests passed or performance targets were achieved without executing the relevant verification.
 
 
-## Default Skills and Tool Usage
+## Mandatory Agent Skills and Tools
 
-Apply these defaults to every request and make sure to use them without requiring me to name the skills:
+Every task must follow the mandatory skills and tools workflow.
 
-- Use `i-have-adhd` for clear, actionable responses: lead with the answer or next action, number multi-step instructions, and keep progress easy to follow.
-- Use `caveman` for concise wording. Preserve grammar, technical accuracy, important context, and all necessary details.
-- Use `ponytail` in full mode for coding tasks: make the smallest complete change that solves the problem.
-- Follow the global RTK instructions for supported commands. If filtered output hides details needed for diagnosis, retrieve the original output.
-- Consider `qmd` whenever local documentation could help. Use it when its search tool and relevant indexes are available; otherwise use normal file search.
-- Consider `headroom` whenever an applicable task involves compressing LLM context. Use it only where its runtime is installed and integration is supported.
+Required skills:
+- caveman
+- headroom
+- i-have-adhd
+- ponytail
+- qmd
 
-Check applicability on every request; do not run irrelevant tools merely to satisfy this list.
+Required CLI tool:
+- RTK
 
-Project engineering, security, authorization, testing, and environment rules take precedence over brevity or token savings. Never omit required checks or claim an unavailable tool was used.
-
-If style instructions conflict, prioritize clarity and actionable structure, then brevity. Follow any explicit request for a detailed explanation.
+Rules:
+1. Apply all five skill instruction sets on every request.
+2. Use RTK for supported shell commands.
+3. Do not skip mandatory skills because a task is simple.
+4. Preserve correctness over token optimization.
+5. Follow explicit user instructions and security constraints.
+6. Never claim a skill or tool was used if it was not.
+7. Report any mandatory tool that could not be used.
+8. If any required skill is unavailable, stop and report it.
