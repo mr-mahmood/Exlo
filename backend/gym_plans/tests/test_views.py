@@ -15,6 +15,7 @@ from gym_auth.models import UserGymRole
 from commerce_products.models import CommerceProduct
 from core.cache import GYM_PLANS, cache_key
 
+
 class GymPlansViewsTest(TestCase):
     """Test cases for GymPlans views."""
 
@@ -192,7 +193,7 @@ class GymPlansViewsTest(TestCase):
     def test_create_accepts_numeric_storage_boundaries(self):
         self.authenticate(self.gym_owner)
         for values in (
-            {"duration_months": 1, "visit_limit": 1, "price": 1},
+            {"duration_months": 1, "visit_limit": 4, "price": 1},
             {
                 "duration_months": 2_147_483_647,
                 "visit_limit": 2_147_483_647,

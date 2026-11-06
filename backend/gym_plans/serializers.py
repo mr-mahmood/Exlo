@@ -42,7 +42,7 @@ class GymMembershipPlanSerializer(serializers.ModelSerializer):
         return value
 
     def validate_visit_limit(self, value):
-        if value <= 0:
+        if value < 4:
             raise APIError(GymPlansError.INVALID_VISIT_LIMIT)
         return value
 

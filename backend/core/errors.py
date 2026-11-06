@@ -576,7 +576,7 @@ class GymPlansError(APIError):
     )
     INVALID_VISIT_LIMIT = (
         "PLAN_003",
-        "Visit limit cannot be negative.",
+        "Visit limit must be higher than 4.",
         status.HTTP_400_BAD_REQUEST,
     )
     INVALID_PRICE = (

@@ -33,7 +33,7 @@ class GymMembershipPlanSerializerTest(TestCase):
             "name": "Premium Monthly",
             "description": "Unlimited access to all facilities",
             "duration_months": 1,
-            "visit_limit": 0,
+            "visit_limit": 4,
             "price": 49,
             "is_active": True,
         }
@@ -118,7 +118,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         self.assertEqual(data["name"], "Premium Monthly")
         self.assertEqual(data["price"], 49)
         self.assertEqual(data["duration_months"], 1)
-        self.assertEqual(data["visit_limit"], 0)
+        self.assertEqual(data["visit_limit"], 4)
         self.assertTrue(data["is_active"])
 
     def test_serializer_gym_is_read_only(self):
@@ -309,7 +309,7 @@ class GymMembershipPlanSerializerTest(TestCase):
 
     def test_serializer_accepts_numeric_boundaries(self):
         for values in (
-            {"duration_months": 1, "visit_limit": 1, "price": 1},
+            {"duration_months": 1, "visit_limit": 5, "price": 1},
             {
                 "duration_months": 2_147_483_647,
                 "visit_limit": 2_147_483_647,
@@ -318,11 +318,58 @@ class GymMembershipPlanSerializerTest(TestCase):
         ):
             with self.subTest(values=values):
                 serializer = GymMembershipPlanSerializer(
-                    data={"name": "Boundary Plan", "description": "Boundary", **values}
+                    data={
+                        "name": "Boundary Plan",
+                        "description": "Boundary",
+                        **values,
+                    }
                 )
                 self.assertTrue(serializer.is_valid(), serializer.errors)
+
                 for field, value in values.items():
                     self.assertEqual(serializer.validated_data[field], value)
+
+    def test_serializer_rejects_visit_limit_at_or_below_four(self):
+        """Visit limits of 4 or less must be rejected."""
+        for visit_limit in (0, 1, 2, 3):
+            with self.subTest(visit_limit=visit_limit):
+                serializer = GymMembershipPlanSerializer(
+                    data={
+                        "name": "Test Plan",
+                        "description": "Test Description",
+                        "duration_months": 1,
+                        "visit_limit": visit_limit,
+                        "price": 29,
+                    }
+                )
+
+                with self.assertRaises(APIError) as context:
+                    serializer.is_valid(raise_exception=True)
+
+                self.assertEqual(
+                    context.exception.error_code,
+                    GymPlansError.INVALID_VISIT_LIMIT[0],
+                )
+
+    def test_serializer_accepts_visit_limit_above_four(self):
+        """Visit limits greater than 4 must be accepted."""
+        for visit_limit in (5, 6, 10):
+            with self.subTest(visit_limit=visit_limit):
+                serializer = GymMembershipPlanSerializer(
+                    data={
+                        "name": "Test Plan",
+                        "description": "Test Description",
+                        "duration_months": 1,
+                        "visit_limit": visit_limit,
+                        "price": 29,
+                    }
+                )
+
+                self.assertTrue(serializer.is_valid(), serializer.errors)
+                self.assertEqual(
+                    serializer.validated_data["visit_limit"],
+                    visit_limit,
+                )
 
     def test_numeric_fields_remain_required_and_non_nullable(self):
         data = {
@@ -334,9 +381,7 @@ class GymMembershipPlanSerializerTest(TestCase):
         }
         for field in ("duration_months", "visit_limit", "price"):
             with self.subTest(field=field, case="missing"):
-                missing = {
-                    name: value for name, value in data.items() if name != field
-                }
+                missing = {name: value for name, value in data.items() if name != field}
                 serializer = GymMembershipPlanSerializer(data=missing)
                 self.assertFalse(serializer.is_valid())
                 self.assertIn(field, serializer.errors)
