@@ -129,7 +129,6 @@ class PhoneChangeOldRequestAPIView(APIView):
 
     def post(self, request):
         user: User = request.user
-        user.validate_account_status()
 
         # Generate OTP for current phone
         result = generate_otp(user.phone_number)

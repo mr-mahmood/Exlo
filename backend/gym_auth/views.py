@@ -7,6 +7,7 @@ from authentication.permissions import IsAdmin
 from core.pagination import CustomPagination
 from .permissions import IsAdminOrGymOwner
 from users.models import User
+from users.validators import validate_phone
 from gym.models import Gym
 from .models import UserGymRole
 from .serializers import UserGymRoleSerializer
@@ -42,8 +43,10 @@ class GymOwnerCreateAPIView(APIView):
     permission_classes = [IsAdmin]
 
     def post(self, request, gym_id):
-        user_id = request.data.get("user")
-        user = User.objects.get_user(user_id)
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
+        )
+        user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_owner(user, gym)
@@ -55,8 +58,10 @@ class GymCoachCreateAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def post(self, request, gym_id):
-        user_id = request.data.get("user")
-        user = User.objects.get_user(user_id)
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
+        )
+        user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_coach(user, gym)
@@ -68,8 +73,10 @@ class GymStaffCreateAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def post(self, request, gym_id):
-        user_id = request.data.get("user")
-        user = User.objects.get_user(user_id)
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
+        )
+        user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_staff(user, gym)
@@ -78,27 +85,14 @@ class GymStaffCreateAPIView(APIView):
 
 
 class GymRoleDeleteAPIView(APIView):
-    permission_classes = [IsAdmin]
-
-    def delete(self, request, gym_id, role_id):
-        role = UserGymRole.objects.filter(id=role_id, gym_id=gym_id).first()
-        if role is None:
-            raise APIError(UserGymRoleError.ROLE_NOT_FOUND)
-        role.delete()
-        invalidate_gym_role_caches(gym_id)
-        return Response(status=status.HTTP_200_OK)
-
-
-class GymStaffRoleDeleteAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def delete(self, request, gym_id, role_id):
-        role = UserGymRole.objects.filter(
-            id=role_id,
-            gym_id=gym_id,
-            role__in=[UserGymRole.Role.COACH, UserGymRole.Role.STAFF],
-        ).first()
-        if role is None:
+        role : UserGymRole = UserGymRole.objects.filter(id=role_id, gym_id=gym_id).first()
+        if role is None or (
+            role.role == UserGymRole.Role.OWNER
+            and not IsAdmin().has_permission(request, self)
+        ):
             raise APIError(UserGymRoleError.ROLE_NOT_FOUND)
         role.delete()
         invalidate_gym_role_caches(gym_id)

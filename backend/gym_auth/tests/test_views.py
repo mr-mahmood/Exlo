@@ -122,15 +122,6 @@ class GymAuthViewsTest(TestCase):
             },
         )
 
-    def staff_role_delete_url(self, gym_id, role_id):
-        return reverse(
-            "gym_auth:gym-staff-role-delete",
-            kwargs={
-                "gym_id": gym_id,
-                "role_id": role_id,
-            },
-        )
-
     # ==================== LIST TESTS ====================
 
     def test_list_roles_admin(self):
@@ -233,6 +224,62 @@ class GymAuthViewsTest(TestCase):
 
     # ==================== OWNER CREATE TESTS ====================
 
+    def test_create_coach_assigns_phone_target_not_request_user(self):
+        self.authenticate(self.gym_owner)
+
+        response = self.client.post(
+            self.coach_create_url,
+            {"phone_number": self.regular_user.phone_number},
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            UserGymRole.objects.filter(
+                user=self.regular_user,
+                gym=self.gym,
+                role=UserGymRole.Role.COACH,
+            ).exists()
+        )
+        self.assertFalse(
+            UserGymRole.objects.filter(
+                user=self.gym_owner,
+                gym=self.gym,
+                role=UserGymRole.Role.COACH,
+            ).exists()
+        )
+
+    def test_create_role_requires_valid_existing_phone(self):
+        self.authenticate(self.admin_user)
+        original = UserGymRole.objects.count()
+        for url in (self.owner_create_url, self.coach_create_url, self.staff_create_url):
+            for data, expected_status, error_code in (
+                ({}, 400, "VAL-001"),
+                ({"user": str(self.regular_user.pk)}, 400, "VAL-001"),
+                ({"phone_number": "123"}, 400, "VAL-001"),
+                ({"phone_number": 9121112222}, 400, "VAL-001"),
+                ({"phone_number": "09120000000"}, 404, "USER-001"),
+            ):
+                with self.subTest(url=url, data=data):
+                    response = self.client.post(url, data)
+                    self.assertEqual(response.status_code, expected_status)
+                    self.assertEqual(response.json()["error_code"], error_code)
+                    self.assertEqual(UserGymRole.objects.count(), original)
+
+    def test_create_role_accepts_trimmed_phone(self):
+        self.authenticate(self.admin_user)
+        response = self.client.post(
+            self.owner_create_url,
+            {"phone_number": f" {self.regular_user.phone_number} "},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            UserGymRole.objects.filter(
+                user=self.regular_user,
+                gym=self.gym,
+                role=UserGymRole.Role.OWNER,
+            ).exists()
+        )
+
     def assert_duplicate_role_rejected(self, url, existing_role, actor):
         cache.clear()
         self.addCleanup(cache.clear)
@@ -244,7 +291,7 @@ class GymAuthViewsTest(TestCase):
         original = list(UserGymRole.objects.order_by("pk").values())
 
         with self.captureOnCommitCallbacks(execute=True) as callbacks:
-            response = self.client.post(url, {"user": str(existing_role.user_id)})
+            response = self.client.post(url, {"phone_number": existing_role.user.phone_number})
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         payload = response.json()
@@ -275,7 +322,7 @@ class GymAuthViewsTest(TestCase):
         self.authenticate(self.admin_user)
         for url in (self.coach_create_url, self.staff_create_url):
             with self.subTest(url=url):
-                response = self.client.post(url, {"user": str(self.gym_owner.pk)})
+                response = self.client.post(url, {"phone_number": self.gym_owner.phone_number})
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         self.assertEqual(
@@ -296,7 +343,7 @@ class GymAuthViewsTest(TestCase):
             with self.subTest(role=role.role):
                 response = self.client.post(
                     reverse(route, kwargs={"gym_id": self.other_gym.pk}),
-                    {"user": str(role.user_id)},
+                    {"phone_number": role.user.phone_number},
                 )
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(
@@ -319,7 +366,7 @@ class GymAuthViewsTest(TestCase):
         before = list(UserGymRole.objects.order_by("pk").values())
         for url in (self.owner_create_url, self.coach_create_url, self.staff_create_url):
             with self.subTest(url=url):
-                response = self.client.post(url, {"user": str(self.regular_user.pk)})
+                response = self.client.post(url, {"phone_number": self.regular_user.phone_number})
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(response.json()["error_code"], "USER-002")
                 self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), before)
@@ -334,7 +381,7 @@ class GymAuthViewsTest(TestCase):
             (self.staff_create_url, self.staff_role),
         ):
             with self.subTest(role=role.role):
-                response = self.client.post(url, {"user": str(role.user_id)})
+                response = self.client.post(url, {"phone_number": role.user.phone_number})
                 self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
                 self.assertNotEqual(response.json()["error_code"], "ROLE_002")
         self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), original)
@@ -343,7 +390,7 @@ class GymAuthViewsTest(TestCase):
         """Test that an admin can assign an owner."""
         self.authenticate(self.admin_user)
 
-        data = {"user": str(self.regular_user.id)}
+        data = {"phone_number": self.regular_user.phone_number}
 
         response = self.client.post(self.owner_create_url, data)
 
@@ -363,7 +410,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.owner_create_url,
-            {"user": str(self.regular_user.id)},
+            {"phone_number": self.regular_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -382,7 +429,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.owner_create_url,
-            {"user": str(self.coach_user.id)},
+            {"phone_number": self.coach_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -391,7 +438,7 @@ class GymAuthViewsTest(TestCase):
         """Test that an unauthenticated user cannot assign an owner."""
         response = self.client.post(
             self.owner_create_url,
-            {"user": str(self.regular_user.id)},
+            {"phone_number": self.regular_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -404,7 +451,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.coach_create_url,
-            {"user": str(self.regular_user.id)},
+            {"phone_number": self.regular_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -423,7 +470,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.coach_create_url,
-            {"user": str(self.regular_user.id)},
+            {"phone_number": self.regular_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -442,7 +489,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.coach_create_url,
-            {"user": str(self.staff_user.id)},
+            {"phone_number": self.staff_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -455,7 +502,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.staff_create_url,
-            {"user": str(self.regular_user.id)},
+            {"phone_number": self.regular_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -474,7 +521,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.staff_create_url,
-            {"user": str(self.regular_user.id)},
+            {"phone_number": self.regular_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -493,7 +540,7 @@ class GymAuthViewsTest(TestCase):
 
         response = self.client.post(
             self.staff_create_url,
-            {"user": str(self.coach_user.id)},
+            {"phone_number": self.coach_user.phone_number},
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
@@ -596,7 +643,7 @@ class GymAuthViewsTest(TestCase):
         """Test that the gym owner can delete a coach assignment."""
         self.authenticate(self.gym_owner)
 
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             self.coach_role.id,
         )
@@ -615,7 +662,7 @@ class GymAuthViewsTest(TestCase):
         """Test that the gym owner can delete a staff assignment."""
         self.authenticate(self.gym_owner)
 
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             self.staff_role.id,
         )
@@ -634,7 +681,7 @@ class GymAuthViewsTest(TestCase):
         """Test that the owner endpoint cannot delete an owner."""
         self.authenticate(self.gym_owner)
 
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             self.owner_role.id,
         )
@@ -653,7 +700,7 @@ class GymAuthViewsTest(TestCase):
         """Test that a regular user cannot delete a coach assignment."""
         self.authenticate(self.regular_user)
 
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             self.coach_role.id,
         )
@@ -677,7 +724,7 @@ class GymAuthViewsTest(TestCase):
             gym=self.other_gym,
         )
 
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             other_role.id,
         )
@@ -688,11 +735,25 @@ class GymAuthViewsTest(TestCase):
 
         self.assertTrue(UserGymRole.objects.filter(id=other_role.id).exists())
 
+    def test_owner_cannot_delete_using_another_gym_url(self):
+        self.authenticate(self.gym_owner)
+        other_role = UserGymRole.objects.create_staff(
+            user=self.regular_user,
+            gym=self.other_gym,
+        )
+
+        response = self.client.delete(
+            self.role_delete_url(self.other_gym.id, other_role.id)
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(UserGymRole.objects.filter(id=other_role.id).exists())
+
     def test_owner_delete_role_not_found(self):
         """Test deleting a non-existent coach or staff assignment."""
         self.authenticate(self.gym_owner)
 
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             uuid.uuid7(),
         )
@@ -722,7 +783,7 @@ class GymAuthViewsTest(TestCase):
 
     def test_unauthenticated_user_cannot_delete_staff_role(self):
         """Test that unauthenticated users cannot use the owner endpoint."""
-        url = self.staff_role_delete_url(
+        url = self.role_delete_url(
             self.gym.id,
             self.staff_role.id,
         )
@@ -765,7 +826,7 @@ class GymRoleCreationConcurrencyTests(TransactionTestCase):
                     client.force_authenticate(user=self.admin)
                     try:
                         barrier.wait(timeout=10)
-                        response = client.post(url, {"user": str(self.target.pk)})
+                        response = client.post(url, {"phone_number": self.target.phone_number})
                         return response.status_code, response.json()
                     finally:
                         connections.close_all()

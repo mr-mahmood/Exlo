@@ -480,8 +480,6 @@ class AuthenticatedApiUser(HttpUser):
 
         phone_numbers: dict[str, str] = {}
 
-        user_ids: dict[str, str] = {}
-
         # ==============================================================
         # OWNER + STAFF
         # ==============================================================
@@ -515,8 +513,6 @@ class AuthenticatedApiUser(HttpUser):
                 name=f"bootstrap/{role}/signup",
                 fatal=True,
             )
-
-            user_ids[role] = self.user_id
 
             sessions[role] = self._save_session(phone)
 
@@ -556,7 +552,7 @@ class AuthenticatedApiUser(HttpUser):
             f"/api/gym/{gym_id}/owner/create/",
             name="bootstrap/gym/assign-owner",
             json_body={
-                "user": user_ids["owner"],
+                "phone_number": phone_numbers["owner"],
             },
             expected_status=(200,),
             fatal=True,
@@ -571,7 +567,7 @@ class AuthenticatedApiUser(HttpUser):
             f"/api/gym/{gym_id}/staff/create/",
             name="bootstrap/gym/assign-staff",
             json_body={
-                "user": user_ids["staff"],
+                "phone_number": phone_numbers["staff"],
             },
             expected_status=(200,),
             fatal=True,

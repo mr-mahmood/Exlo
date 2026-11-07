@@ -30,7 +30,6 @@ def refresh_tokens(refresh_token_str, request):
         raise APIError(AuthenticationError.INVALID_REFRESH_TOKEN)
 
     user = User.objects.get_user(user_id)
-    user.validate_account_status()
 
     # Blacklist old refresh token
     old_refresh.blacklist()

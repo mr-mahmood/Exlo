@@ -8,7 +8,6 @@ from .views import (
     GymCoachCreateAPIView,
     GymStaffCreateAPIView,
     GymRoleDeleteAPIView,
-    GymStaffRoleDeleteAPIView,
 )
 
 app_name = "gym_auth"
@@ -38,10 +37,5 @@ urlpatterns = [
         "<uuid:gym_id>/roles/<uuid:role_id>/delete/",
         GymRoleDeleteAPIView.as_view(),
         name="gym-role-delete",
-    ),
-    path(
-        "<uuid:gym_id>/roles/<uuid:role_id>/delete/staff/",
-        GymStaffRoleDeleteAPIView.as_view(),
-        name="gym-staff-role-delete",
     ),
 ]
