@@ -306,6 +306,25 @@ class GymAuthViewsTest(TestCase):
                     2,
                 )
 
+    def test_inactive_target_cannot_receive_any_gym_role(self):
+        self.regular_user.is_active = False
+        self.regular_user.save(update_fields=["is_active"])
+        self.authenticate(self.admin_user)
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.assertEqual(self.client.get(self.list_url).status_code, 200)
+        key = cache_key(GYM_USERS, self.gym.pk)
+        warmed = cache.get(key)
+        self.assertIsNotNone(warmed)
+        before = list(UserGymRole.objects.order_by("pk").values())
+        for url in (self.owner_create_url, self.coach_create_url, self.staff_create_url):
+            with self.subTest(url=url):
+                response = self.client.post(url, {"user": str(self.regular_user.pk)})
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(response.json()["error_code"], "USER-002")
+                self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), before)
+                self.assertEqual(cache.get(key), warmed)
+
     def test_duplicate_roles_do_not_bypass_permissions(self):
         self.authenticate(self.regular_user)
         original = list(UserGymRole.objects.order_by("pk").values())

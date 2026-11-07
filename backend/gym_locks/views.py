@@ -13,6 +13,7 @@ from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymLocker
 from users_nfc_cards.models import UserNfcCard
 from users.models import User
+from users.validators import validate_phone
 from core.cache import GYM_LOCKERS, cache_key, get_cache, invalidate_gym_locker_caches
 
 
@@ -77,6 +78,7 @@ class NfcCardLockerOpenAPIView(APIView):
     authentication_classes = [DeviceTokenAuthentication]
     permission_classes = [IsGymLocker]
 
+    # look open dont need user to be active
     def post(self, request, gym_id):
         device = request.auth
         gym = device.gym
@@ -90,7 +92,10 @@ class ManualLockerOpenAPIView(APIView):
     permission_classes = [IsAdminOrGymOwnerOrGymStaff]
 
     def post(self, request, gym_id):
-        phone_number = request.data.get("phone_number")
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
+        )
+        # look open dont need user to be active
         user = User.objects.get_user_by_phone(phone_number)
         gym = Gym.objects.get_gym(gym_id)
         locker = GymLocker.objects.get_user_locker(gym=gym, user=user)
@@ -98,7 +103,4 @@ class ManualLockerOpenAPIView(APIView):
         # TODO: send websocket order to the gym esp32 device to open this lcok
         # TODO: Handle device offline / command failure.
 
-        return Response(
-            {"locker_number": locker.number},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"locker_number": locker.number}, status=status.HTTP_200_OK)

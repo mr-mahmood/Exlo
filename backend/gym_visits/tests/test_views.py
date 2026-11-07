@@ -21,14 +21,16 @@ from core.errors import (
     GymSubscriptionError,
     UserNfcCardError,
     UserAccountError,
+    UserValidationError,
     GymLockerError,
 )
 from core.cache import USER_SUBSCRIPTION, cache_key
 from gym.models import Gym
+from gym_auth.models import UserGymRole
 from gym_devices.models import GymDevice
 from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
-from gym_visits.models import GymVisit
+from gym_visits.models import GymVisit, GymVisitManager
 from users.models import User
 from users_nfc_cards.models import UserNfcCard
 from gym_locks.models import GymLocker, GymLockerManager
@@ -392,6 +394,18 @@ class CardResolutionTests(NfcFlowTestBase):
 
 
 class NewCardAssignmentFlowTests(NfcFlowTestBase):
+    def test_inactive_pending_user_keeps_request_and_receives_no_card(self):
+        self.make_active_subscription(self.user, self.plan_a)
+        self.create_pending_card_assignment(self.gym_a, self.user)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        response = self.check_in(gym=self.gym_a, token=self.token_a, uid="NEW_CARD")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])
+        self.assertEqual(cache.get(f"nfc_card_assign_{self.gym_a.pk}"), self.user.pk)
+        self.assertFalse(UserNfcCard.objects.filter(user=self.user).exists())
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+
     def test_unassigned_card_with_pending_assignment_is_assigned(self):
         self.make_active_subscription(
             self.user,
@@ -1247,6 +1261,12 @@ class InactiveUserTests(NfcFlowTestBase):
             response.data["error_code"],
             UserAccountError.USER_ACCOUNT_INACTIVE[0],
         )
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+        self.assertEqual(
+            GymSubscription.objects.get(subscriber=self.user).remaining_visits,
+            10,
+        )
 
 
 class MultipleUsersAtSameGymTests(NfcFlowTestBase):
@@ -1414,6 +1434,57 @@ class CheckOutFlowTests(NfcFlowTestBase):
             visit.checked_out_method,
             GymVisit.Method.NFC,
         )
+
+    def test_inactive_user_can_open_locker_and_check_out(self):
+        _, locker_token = GymDevice.objects.register_device(
+            gym=self.gym_a,
+            device_type=GymDevice.GymDeviceType.LOCKER,
+        )
+        locker_url = reverse("gym_locks:gym_locks-open-nfc", args=[self.gym_a.pk])
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        locker_response = self.client.post(
+            locker_url, {"uid": "CARD1"}, format="json", **self.auth_header(locker_token)
+        )
+        self.assertEqual(locker_response.status_code, 200)
+        self.assertEqual(
+            locker_response.data["locker_number"],
+            GymLocker.objects.get(gym=self.gym_a, assigned_user=self.user).number,
+        )
+        self.assertEqual(self.check_out(gym=self.gym_a, token=self.token_a, uid="CARD1").status_code, 200)
+        visit = GymVisit.objects.get(user=self.user)
+        self.assertIsNotNone(visit.checked_out_at)
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+        after = self.client.post(
+            locker_url, {"uid": "CARD1"}, format="json", **self.auth_header(locker_token)
+        )
+        self.assertEqual(after.status_code, 404)
+        self.assertEqual(after.data["error_code"], GymLockerError.USER_NOT_ASSIGNED[0])
+
+    def test_locker_open_stays_scoped_to_device_gym_and_card(self):
+        _, locker_token_a = GymDevice.objects.register_device(
+            gym=self.gym_a, device_type=GymDevice.GymDeviceType.LOCKER
+        )
+        _, locker_token_b = GymDevice.objects.register_device(
+            gym=self.gym_b, device_type=GymDevice.GymDeviceType.LOCKER
+        )
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        url_a = reverse("gym_locks:gym_locks-open-nfc", args=[self.gym_a.pk])
+        url_b = reverse("gym_locks:gym_locks-open-nfc", args=[self.gym_b.pk])
+        cases = (
+            (url_a, locker_token_b, "CARD1"),
+            (url_b, locker_token_b, "CARD1"),
+            (url_a, locker_token_a, "WRONG_CARD"),
+            (url_a, self.token_a, "CARD1"),
+        )
+        for url, token, uid in cases:
+            with self.subTest(url=url, uid=uid):
+                response = self.client.post(
+                    url, {"uid": uid}, format="json", **self.auth_header(token)
+                )
+                self.assertEqual(response.status_code, 404)
+        self.assertTrue(GymVisit.objects.filter(user=self.user, checked_out_at__isnull=True).exists())
 
     def test_expired_subscription_keeps_open_visit_and_locker_access(self):
         visit = GymVisit.objects.get(user=self.user, gym=self.gym_a)
@@ -1808,3 +1879,276 @@ class CheckOutConcurrencyTests(TransactionTestCase):
             GymVisit.objects.filter(user=user, checked_out_at__isnull=True).exists()
         )
         self.assertFalse(GymLocker.objects.filter(gym=gym, assigned_user=user).exists())
+
+
+class ManualAttendanceTests(NfcFlowTestBase):
+    def setUp(self):
+        super().setUp()
+        self.admin = User.objects.create_superuser(
+            phone_number="09120000030", password="x"
+        )
+        self.owner = User.objects.create_user(phone_number="09120000031")
+        self.staff = User.objects.create_user(phone_number="09120000032")
+        self.coach = User.objects.create_user(phone_number="09120000033")
+        UserGymRole.objects.create_owner(self.owner, self.gym_a)
+        UserGymRole.objects.create_staff(self.staff, self.gym_a)
+        UserGymRole.objects.create_coach(self.coach, self.gym_a)
+        self.plan_b = GymMembershipPlan.objects.create_plan(
+            name="Plan B", gym=self.gym_b, duration_months=1,
+            visit_limit=30, price=1000,
+        )
+
+    def manual(self, action, actor, gym=None):
+        gym = gym or self.gym_a
+        self.client.force_authenticate(user=actor)
+        return self.client.post(
+            reverse(f"gym_visits:gym-visit-manual-{action}", args=[gym.pk]),
+            {"phone_number": self.user.phone_number},
+            format="json",
+        )
+
+    def test_manual_check_in_validates_and_normalizes_phone(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("gym_visits:gym-visit-manual-check-in", args=[self.gym_a.pk])
+        for data in ({}, {"phone_number": "invalid"}, {"phone_number": 123}):
+            with self.subTest(data=data):
+                response = self.client.post(url, data, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.data["error_code"],
+                    UserValidationError.INVALID_PHONE_NUMBER[0],
+                )
+                self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+                self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+                subscription.refresh_from_db()
+                self.assertEqual(subscription.remaining_visits, 10)
+        response = self.client.post(
+            url, {"phone_number": f"  {self.user.phone_number}  "}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
+
+    def test_manual_check_out_validates_phone_for_inactive_user(self):
+        self.make_active_subscription(self.user, self.plan_a)
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("gym_visits:gym-visit-manual-check-out", args=[self.gym_a.pk])
+        for data in ({}, {"phone_number": "invalid"}, {"phone_number": 123}):
+            with self.subTest(data=data):
+                response = self.client.post(url, data, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.data["error_code"],
+                    UserValidationError.INVALID_PHONE_NUMBER[0],
+                )
+                self.assertTrue(
+                    GymVisit.objects.filter(user=self.user, checked_out_at__isnull=True).exists()
+                )
+                self.assertTrue(GymLocker.objects.filter(assigned_user=self.user).exists())
+        response = self.client.post(
+            url, {"phone_number": f"  {self.user.phone_number}  "}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(GymVisit.objects.filter(user=self.user, checked_out_at__isnull=True).exists())
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+
+    def test_manual_locker_open_validates_phone_for_inactive_user(self):
+        self.make_active_subscription(self.user, self.plan_a)
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        locker = GymLocker.objects.get(gym=self.gym_a, assigned_user=self.user)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("gym_locks:gym_locks-open-manual", args=[self.gym_a.pk])
+        for data in ({}, {"phone_number": "invalid"}, {"phone_number": 123}):
+            with self.subTest(data=data):
+                response = self.client.post(url, data, format="json")
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(
+                    response.data["error_code"],
+                    UserValidationError.INVALID_PHONE_NUMBER[0],
+                )
+                self.assertTrue(
+                    GymVisit.objects.filter(user=self.user, checked_out_at__isnull=True).exists()
+                )
+                locker.refresh_from_db()
+                self.assertEqual(locker.assigned_user_id, self.user.pk)
+        response = self.client.post(
+            url, {"phone_number": f"  {self.user.phone_number}  "}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["locker_number"], locker.number)
+
+    def test_admin_can_manage_attendance_at_any_gym(self):
+        self.make_active_subscription(self.user, self.plan_b)
+        self.assertEqual(self.manual("check-in", self.admin, self.gym_b).status_code, 200)
+        visit = GymVisit.objects.get(user=self.user, gym=self.gym_b)
+        self.assertEqual(visit.checked_in_method, GymVisit.Method.STAFF)
+        self.assertEqual(self.manual("check-out", self.admin, self.gym_b).status_code, 200)
+        visit.refresh_from_db()
+        self.assertEqual(visit.checked_out_method, GymVisit.Method.STAFF)
+
+    def test_owner_and_staff_can_manage_own_gym(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        for actor in (self.owner, self.staff):
+            with self.subTest(actor=actor.pk):
+                self.assertEqual(self.manual("check-in", actor).status_code, 200)
+                self.assertEqual(self.manual("check-out", actor).status_code, 200)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 8)
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 2)
+
+    def test_owner_staff_coach_and_regular_user_permissions(self):
+        self.make_active_subscription(self.user, self.plan_b)
+        for actor, gym in (
+            (self.owner, self.gym_b), (self.staff, self.gym_b),
+            (self.coach, self.gym_a), (self.other_user, self.gym_a),
+        ):
+            for action in ("check-in", "check-out"):
+                with self.subTest(actor=actor.pk, action=action):
+                    self.assertEqual(self.manual(action, actor, gym).status_code, 404)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+
+    def test_check_in_consumes_one_visit_and_checkout_releases_locker(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        visit = GymVisit.objects.get(user=self.user)
+        self.assertEqual(visit.checked_in_method, GymVisit.Method.STAFF)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 9)
+        self.assertTrue(GymLocker.objects.filter(gym=self.gym_a, assigned_user=self.user).exists())
+        self.assertEqual(self.manual("check-out", self.staff).status_code, 200)
+        visit.refresh_from_db()
+        subscription.refresh_from_db()
+        self.assertIsNotNone(visit.checked_out_at)
+        self.assertEqual(visit.checked_out_method, GymVisit.Method.STAFF)
+        self.assertEqual(subscription.remaining_visits, 9)
+        self.assertFalse(GymLocker.objects.filter(gym=self.gym_a, assigned_user=self.user).exists())
+
+    def test_open_visit_blocks_second_check_in_even_at_other_gym(self):
+        first = self.make_active_subscription(self.user, self.plan_a)
+        second = self.make_active_subscription(self.user, self.plan_b)
+        self.assertEqual(self.manual("check-in", self.admin).status_code, 200)
+        response = self.manual("check-in", self.admin, self.gym_b)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], GymVisitsError.ALREADY_CHECKED_IN[0])
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual((first.remaining_visits, second.remaining_visits), (9, 10))
+
+    def test_pending_renewal_promotes_only_at_same_gym(self):
+        active = self.make_active_subscription(self.user, self.plan_a, remaining=2)
+        pending = self.make_pending_subscription(self.user, self.plan_a)
+        active.expires_at = timezone.now() - timedelta(seconds=1)
+        active.save(update_fields=["expires_at"])
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        active.refresh_from_db()
+        pending.refresh_from_db()
+        self.assertEqual(active.status, GymSubscription.Status.EXPIRED)
+        self.assertEqual(pending.status, GymSubscription.Status.ACTIVE)
+        self.assertEqual(pending.remaining_visits, 29)
+        self.assertEqual(GymVisit.objects.get(user=self.user).subscription_id, pending.pk)
+
+    def test_pending_subscription_at_other_gym_cannot_check_in(self):
+        self.make_pending_subscription(self.user, self.plan_b)
+        response = self.manual("check-in", self.staff)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0])
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+
+    def test_check_in_rolls_back_when_locker_assignment_fails(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        GymLocker.objects.filter(gym=self.gym_a).delete()
+        response = self.manual("check-in", self.staff)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0])
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 10)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+
+    def test_check_in_rolls_back_when_visit_creation_fails(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        with patch.object(GymVisitManager, "check_in", side_effect=DatabaseError("visit write failed")):
+            with self.assertRaises(DatabaseError):
+                self.manual("check-in", self.staff)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 10)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+
+    def test_inactive_target_cannot_check_in(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        response = self.manual("check-in", self.staff)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 10)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+
+    def test_inactive_target_cannot_create_second_visit(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        self.assign_card(self.user, "CARD1")
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        manual_response = self.manual("check-in", self.staff)
+        self.client.force_authenticate(user=None)
+        nfc_response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
+        for response in (manual_response, nfc_response):
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 9)
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
+
+    def test_inactive_target_can_check_out_after_subscription_expires(self):
+        subscription = self.make_active_subscription(self.user, self.plan_a)
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        subscription.expire(GymSubscription.EndReason.TIME)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        self.assertEqual(self.manual("check-out", self.staff).status_code, 200)
+        visit = GymVisit.objects.get(user=self.user)
+        subscription.refresh_from_db()
+        self.assertIsNotNone(visit.checked_out_at)
+        self.assertEqual(subscription.remaining_visits, 9)
+        self.assertFalse(GymLocker.objects.filter(assigned_user=self.user).exists())
+
+    def test_inactive_target_can_use_manual_locker_until_checkout(self):
+        self.make_active_subscription(self.user, self.plan_a)
+        self.assertEqual(self.manual("check-in", self.staff).status_code, 200)
+        locker = GymLocker.objects.get(gym=self.gym_a, assigned_user=self.user)
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        open_url = reverse("gym_locks:gym_locks-open-manual", args=[self.gym_a.pk])
+        self.client.force_authenticate(user=self.staff)
+        data = {"phone_number": self.user.phone_number}
+        response = self.client.post(open_url, data, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["locker_number"], locker.number)
+        wrong_gym_url = reverse("gym_locks:gym_locks-open-manual", args=[self.gym_b.pk])
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.post(wrong_gym_url, data, format="json").status_code, 404)
+        self.assertEqual(self.manual("check-out", self.staff).status_code, 200)
+        self.client.force_authenticate(user=self.staff)
+        after = self.client.post(open_url, data, format="json")
+        self.assertEqual(after.status_code, 404)
+        self.assertEqual(after.data["error_code"], GymLockerError.USER_NOT_ASSIGNED[0])
+
+    def test_checkout_requires_matching_open_visit(self):
+        self.make_active_subscription(self.user, self.plan_a)
+        self.assertEqual(self.manual("check-in", self.admin).status_code, 200)
+        response = self.manual("check-out", self.admin, self.gym_b)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.data["error_code"], GymVisitsError.VISIT_NOT_FOUND[0])
+        self.assertTrue(GymVisit.objects.filter(user=self.user, checked_out_at__isnull=True).exists())
+        self.assertEqual(self.manual("check-out", self.admin).status_code, 200)
+        self.assertEqual(self.manual("check-out", self.admin).status_code, 404)

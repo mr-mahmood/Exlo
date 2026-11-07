@@ -37,6 +37,7 @@ class UserNfcCardManager(models.Manager):
             raise APIError(UserNfcCardError.CARD_NOT_FOUND)
 
         user: User = User.objects.get_user(user_id)
+        user.validate_account_status()
         card = self.assign_card(user=user, uid=uid)
         cache.delete(key)
         return card, True

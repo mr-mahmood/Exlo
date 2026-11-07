@@ -16,16 +16,6 @@ from core.cache import invalidate_user_subscription_caches
 
 class GymSubscriptionsManager(models.Manager):
 
-    def truly_active(self):
-        return self.filter(
-            models.Q(
-                status=GymSubscription.Status.ACTIVE,
-                expires_at__gt=timezone.now(),
-                remaining_visits__gt=0,
-            )
-            | models.Q(status=GymSubscription.Status.PENDING)
-        )
-
     def get_subscription(self, subscription_id, subscriber):
         try:
             return self.select_related(

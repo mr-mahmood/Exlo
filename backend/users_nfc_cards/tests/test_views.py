@@ -1,6 +1,8 @@
 # users_nfc_cards/tests/test_views.py
 
 
+from datetime import timedelta
+
 from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
@@ -8,11 +10,18 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from commerce_orders.models import CommerceProduct, Order, OrderItem
+from core.errors import (
+    GymSubscriptionError,
+    UserAccountError,
+    UserNfcCardError,
+    UserValidationError,
+)
 from gym.models import Gym
 from gym_auth.models import UserGymRole
 from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
 from users.models import User
+from users_nfc_cards.models import UserNfcCard
 
 
 class ViewTestBase(TestCase):
@@ -144,12 +153,21 @@ class ViewTestBase(TestCase):
 
         return self.client.post(
             self.url(gym_id),
-            {"phone": phone},
+            {"phone_number": phone},
             format="json",
         )
 
 
 class AssignRequestViewTests(ViewTestBase):
+    def test_padded_valid_phone_is_normalized_before_lookup(self):
+        self.create_active_subscription(self.target, self.plan_a)
+        response = self.assign_request(
+            self.admin,
+            phone=f"  {self.target.phone_number}  ",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(cache.get(f"nfc_card_assign_{self.gym_a.pk}"), self.target.pk)
+
     def test_admin_can_create_assignment_request_for_member(self):
         self.create_active_subscription(
             self.target,
@@ -258,7 +276,7 @@ class AssignRequestViewTests(ViewTestBase):
         response = self.client.post(
             self.url(self.gym_a.id),
             {
-                "phone": self.target.phone_number,
+                "phone_number": self.target.phone_number,
             },
             format="json",
         )
@@ -274,7 +292,7 @@ class AssignRequestViewTests(ViewTestBase):
         response = self.client.post(
             self.url(self.gym_a.id),
             {
-                "phone": "09129999999",
+                "phone_number": "09129999999",
             },
             format="json",
         )
@@ -293,10 +311,9 @@ class AssignRequestViewTests(ViewTestBase):
             format="json",
         )
 
-        self.assertNotEqual(
-            response.status_code,
-            status.HTTP_201_CREATED,
-        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])
+        self.assertIsNone(cache.get(f"nfc_card_assign_{self.gym_a.pk}"))
 
     def test_invalid_phone_is_rejected(self):
         self.client.force_authenticate(user=self.admin)
@@ -304,15 +321,14 @@ class AssignRequestViewTests(ViewTestBase):
         response = self.client.post(
             self.url(self.gym_a.id),
             {
-                "phone": "invalid",
+                "phone_number": "invalid",
             },
             format="json",
         )
 
-        self.assertNotEqual(
-            response.status_code,
-            status.HTTP_201_CREATED,
-        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])
+        self.assertIsNone(cache.get(f"nfc_card_assign_{self.gym_a.pk}"))
 
     def test_second_request_for_same_gym_is_rejected(self):
         self.create_active_subscription(
@@ -430,3 +446,74 @@ class AssignRequestViewTests(ViewTestBase):
                 nfc_card__isnull=False,
             ).exists()
         )
+
+    def test_coach_and_cross_gym_staff_cannot_request_assignment(self):
+        coach = User.objects.create_user(phone_number="09120000027")
+        UserGymRole.objects.create_coach(coach, self.gym_a)
+        self.create_active_subscription(self.target, self.plan_a)
+        for actor, gym in ((coach, self.gym_a), (self.staff_a, self.gym_b)):
+            with self.subTest(actor=actor.pk):
+                response = self.assign_request(actor, gym.pk)
+                self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+                self.assertIsNone(cache.get(f"nfc_card_assign_{gym.pk}"))
+
+    def test_only_current_active_subscription_at_selected_gym_qualifies(self):
+        subscription = self.create_active_subscription(self.target, self.plan_a)
+        cases = (
+            (GymSubscription.Status.PENDING, subscription.expires_at, 30),
+            (GymSubscription.Status.CANCELLED, subscription.expires_at, 30),
+            (GymSubscription.Status.ACTIVE, timezone.now() - timedelta(seconds=1), 30),
+            (GymSubscription.Status.ACTIVE, subscription.expires_at, 0),
+        )
+        for sub_status, expiry, visits in cases:
+            with self.subTest(status=sub_status, expiry=expiry, visits=visits):
+                subscription.status = sub_status
+                subscription.expires_at = expiry
+                subscription.remaining_visits = visits
+                subscription.save(update_fields=["status", "expires_at", "remaining_visits"])
+                response = self.assign_request(self.admin)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(
+                    response.data["error_code"],
+                    GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
+                )
+                self.assertIsNone(cache.get(f"nfc_card_assign_{self.gym_a.pk}"))
+        subscription.status = GymSubscription.Status.ACTIVE
+        subscription.expires_at = timezone.now() + timedelta(days=1)
+        subscription.remaining_visits = 1
+        subscription.save(update_fields=["status", "expires_at", "remaining_visits"])
+        self.assertEqual(self.assign_request(self.admin).status_code, 201)
+
+    def test_other_gym_subscription_does_not_authorize_assignment(self):
+        self.create_active_subscription(self.target, self.plan_a)
+        response = self.assign_request(self.admin, self.gym_b.pk)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
+        )
+        self.assertIsNone(cache.get(f"nfc_card_assign_{self.gym_b.pk}"))
+
+    def test_inactive_target_does_not_create_pending_assignment(self):
+        self.create_active_subscription(self.target, self.plan_a)
+        self.target.is_active = False
+        self.target.save(update_fields=["is_active"])
+        response = self.assign_request(self.admin)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"],
+            UserAccountError.USER_ACCOUNT_INACTIVE[0],
+        )
+        self.assertIsNone(cache.get(f"nfc_card_assign_{self.gym_a.pk}"))
+        self.assertFalse(UserNfcCard.objects.filter(user=self.target).exists())
+
+    def test_existing_pending_assignment_reports_application_error(self):
+        self.create_active_subscription(self.target, self.plan_a)
+        self.assertEqual(self.assign_request(self.admin).status_code, 201)
+        response = self.assign_request(self.owner_a)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["error_code"],
+            UserNfcCardError.CARD_ASSIGNMENT_ALREADY_PENDING[0],
+        )
+        self.assertEqual(cache.get(f"nfc_card_assign_{self.gym_a.pk}"), self.target.pk)

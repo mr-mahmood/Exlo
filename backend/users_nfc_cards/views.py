@@ -2,24 +2,33 @@ from django.core.cache import cache
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.utils import timezone
+
 from users_nfc_cards.permissions import CanAssignUserNfcCard
 from users.models import User
-from core.errors import APIError, UserNfcCardError
 from users.validators import validate_phone
+from gym_subscriptions.models import GymSubscription
+from core.errors import APIError, UserNfcCardError, GymSubscriptionError
 
 
 class UserNfcCardAssignRequestView(APIView):
     permission_classes = [CanAssignUserNfcCard]
 
     def post(self, request, gym_id):
-        phone = validate_phone(
-            value=request.data.get("phone"),
-            skip_duplicate_check=True,
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
         )
+        user = User.objects.get_user_by_phone(phone_number)
+        user.validate_account_status()
 
-        user = User.objects.get_user_by_phone(phone_number=phone)
-
-        self.check_object_permissions(request, user)
+        if not GymSubscription.objects.filter(
+            subscriber=user,
+            gym_id=gym_id,
+            status=GymSubscription.Status.ACTIVE,
+            expires_at__gt=timezone.now(),
+            remaining_visits__gt=0,
+        ).exists():
+            raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
         created = cache.add(
             f"nfc_card_assign_{gym_id}",

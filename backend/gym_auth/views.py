@@ -44,6 +44,7 @@ class GymOwnerCreateAPIView(APIView):
     def post(self, request, gym_id):
         user_id = request.data.get("user")
         user = User.objects.get_user(user_id)
+        user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_owner(user, gym)
         invalidate_gym_role_caches(gym.id)
@@ -56,6 +57,7 @@ class GymCoachCreateAPIView(APIView):
     def post(self, request, gym_id):
         user_id = request.data.get("user")
         user = User.objects.get_user(user_id)
+        user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_coach(user, gym)
         invalidate_gym_role_caches(gym.id)
@@ -68,6 +70,7 @@ class GymStaffCreateAPIView(APIView):
     def post(self, request, gym_id):
         user_id = request.data.get("user")
         user = User.objects.get_user(user_id)
+        user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
         UserGymRole.objects.create_staff(user, gym)
         invalidate_gym_role_caches(gym.id)

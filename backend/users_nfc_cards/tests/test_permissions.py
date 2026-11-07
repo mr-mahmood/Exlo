@@ -121,14 +121,7 @@ class PermissionTestBase(TestCase):
 
         perm = CanAssignUserNfcCard()
 
-        if not perm.has_permission(request, view):
-            return False
-
-        return perm.has_object_permission(
-            request,
-            view,
-            target,
-        )
+        return perm.has_permission(request, view)
 
     def create_active_subscription(self, user, plan):
         return GymSubscription.objects.create_subscription(
@@ -234,8 +227,8 @@ class HasObjectPermissionTests(PermissionTestBase):
             )
         )
 
-    def test_admin_cannot_assign_to_user_without_subscription(self):
-        self.assertFalse(
+    def test_admin_permission_does_not_depend_on_target_subscription(self):
+        self.assertTrue(
             self.call_permission(
                 self.admin,
                 self.target,
@@ -243,13 +236,13 @@ class HasObjectPermissionTests(PermissionTestBase):
             )
         )
 
-    def test_admin_cannot_assign_for_different_gym_subscription(self):
+    def test_admin_permission_does_not_depend_on_target_subscription_gym(self):
         self.create_active_subscription(
             self.target,
             self.plan_b,
         )
 
-        self.assertFalse(
+        self.assertTrue(
             self.call_permission(
                 self.admin,
                 self.target,
@@ -313,8 +306,8 @@ class HasObjectPermissionTests(PermissionTestBase):
             )
         )
 
-    def test_target_without_any_subscription_is_rejected(self):
-        self.assertFalse(
+    def test_owner_permission_does_not_depend_on_target_subscription(self):
+        self.assertTrue(
             self.call_permission(
                 self.owner_a,
                 self.target,
@@ -322,7 +315,7 @@ class HasObjectPermissionTests(PermissionTestBase):
             )
         )
 
-    def test_target_with_expired_subscription_is_rejected(self):
+    def test_owner_permission_ignores_expired_target_subscription(self):
         sub = self.create_active_subscription(
             self.target,
             self.plan_a,
@@ -330,40 +323,6 @@ class HasObjectPermissionTests(PermissionTestBase):
 
         sub.expires_at = timezone.now() - timedelta(seconds=1)
         sub.save(update_fields=["expires_at"])
-
-        self.assertFalse(
-            self.call_permission(
-                self.owner_a,
-                self.target,
-                self.gym_a.id,
-            )
-        )
-
-    def test_target_with_visits_exhausted_is_rejected(self):
-        sub = self.create_active_subscription(
-            self.target,
-            self.plan_a,
-        )
-
-        sub.remaining_visits = 0
-        sub.save(update_fields=["remaining_visits"])
-
-        self.assertFalse(
-            self.call_permission(
-                self.owner_a,
-                self.target,
-                self.gym_a.id,
-            )
-        )
-
-    def test_target_with_pending_subscription_is_allowed(self):
-        GymSubscription.objects.create_subscription(
-            subscriber=self.target,
-            order_item=self._make_order_item(
-                self.target,
-                self.plan_a,
-            ),
-        )
 
         self.assertTrue(
             self.call_permission(
@@ -373,7 +332,45 @@ class HasObjectPermissionTests(PermissionTestBase):
             )
         )
 
-    def test_target_with_cancelled_subscription_is_rejected(self):
+    def test_owner_permission_ignores_exhausted_target_subscription(self):
+        sub = self.create_active_subscription(
+            self.target,
+            self.plan_a,
+        )
+
+        sub.remaining_visits = 0
+        sub.save(update_fields=["remaining_visits"])
+
+        self.assertTrue(
+            self.call_permission(
+                self.owner_a,
+                self.target,
+                self.gym_a.id,
+            )
+        )
+
+    def test_owner_permission_ignores_pending_target_subscription(self):
+        sub = GymSubscription.objects.create_subscription(
+            subscriber=self.target,
+            order_item=self._make_order_item(
+                self.target,
+                self.plan_a,
+            ),
+        )
+        sub.status = GymSubscription.Status.PENDING
+        sub.started_at = None
+        sub.expires_at = None
+        sub.save(update_fields=["status", "started_at", "expires_at"])
+
+        self.assertTrue(
+            self.call_permission(
+                self.owner_a,
+                self.target,
+                self.gym_a.id,
+            )
+        )
+
+    def test_owner_permission_ignores_cancelled_target_subscription(self):
         sub = self.create_active_subscription(
             self.target,
             self.plan_a,
@@ -382,7 +379,7 @@ class HasObjectPermissionTests(PermissionTestBase):
         sub.status = GymSubscription.Status.CANCELLED
         sub.save(update_fields=["status"])
 
-        self.assertFalse(
+        self.assertTrue(
             self.call_permission(
                 self.owner_a,
                 self.target,

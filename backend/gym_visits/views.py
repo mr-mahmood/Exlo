@@ -11,10 +11,14 @@ from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymGate
 from users_nfc_cards.models import UserNfcCard
 from users.models import User
+from users.validators import validate_phone
+from gym.models import Gym
 from gym_locks.models import GymLocker
+from gym_auth.permissions import IsAdminOrGymOwnerOrGymStaff
+from gym_visits.permissions import CanManageManualCheckInAndOut
 
 
-class NfcCardCheckInView(APIView):
+class NfcCardCheckInAPIView(APIView):
     authentication_classes = [DeviceTokenAuthentication]
     permission_classes = [IsGymGate]
 
@@ -69,7 +73,7 @@ class NfcCardCheckInView(APIView):
         return Response(status=status.HTTP_200_OK)
 
 
-class NfcCardCheckOutView(APIView):
+class NfcCardCheckOutAPIView(APIView):
     authentication_classes = [DeviceTokenAuthentication]
     permission_classes = [IsGymGate]
 
@@ -78,8 +82,8 @@ class NfcCardCheckOutView(APIView):
         gym = device.gym
 
         uid = request.data.get("uid")
+        # check out dont need user to be active
         user: User = UserNfcCard.objects.find_card(uid=uid).user
-        user.validate_account_status()
 
         with transaction.atomic():
             User.objects.select_for_update().get(pk=user.pk)
@@ -94,5 +98,80 @@ class NfcCardCheckOutView(APIView):
 
             GymLocker.objects.remove_assignment(gym, user)
             visit.check_out(method=GymVisit.Method.NFC)
+
+        return Response(status=status.HTTP_200_OK)
+
+
+class ManualCheckInAPIView(APIView):
+    permission_classes = [CanManageManualCheckInAndOut]
+
+    def post(self, request, gym_id):
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
+        )
+        user = User.objects.get_user_by_phone(phone_number)
+        user.validate_account_status()
+        gym = Gym.objects.get_gym(gym_id)
+
+        subscription_error = None
+        with transaction.atomic():
+
+            User.objects.select_for_update().get(pk=user.pk)
+            if GymVisit.objects.filter(user=user, checked_out_at__isnull=True).exists():
+                raise APIError(GymVisitsError.ALREADY_CHECKED_IN)
+
+            try:
+                subscription = GymSubscription.objects.consume_visit(
+                    subscriber=user,
+                    gym=gym,
+                )
+            except APIError as exc:
+                if exc.error_code != GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0]:
+                    raise
+                subscription_error = exc
+            else:
+                GymVisit.objects.check_in(
+                    user=user,
+                    gym=gym,
+                    subscription=subscription,
+                    method=GymVisit.Method.STAFF,
+                )
+
+                GymLocker.objects.assign(gym, user)
+
+        if subscription_error is not None:
+            raise subscription_error
+
+        # esp32 open gate
+        return Response(status=status.HTTP_200_OK)
+
+
+class ManualCheckOutAPIView(APIView):
+    permission_classes = [CanManageManualCheckInAndOut]
+
+    def post(self, request, gym_id):
+        phone_number = validate_phone(
+            request.data.get("phone_number"), skip_duplicate_check=True
+        )
+        # check out dont need user to be active
+        user = User.objects.get_user_by_phone(phone_number)
+        gym = Gym.objects.get_gym(gym_id)
+
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=user.pk)
+            visit: GymVisit = GymVisit.objects.filter(
+                user=user,
+                gym=gym,
+                checked_out_at__isnull=True,
+            ).first()
+
+            if visit is None:
+                raise APIError(GymVisitsError.VISIT_NOT_FOUND)
+
+            GymLocker.objects.remove_assignment(gym, user)
+            visit.check_out(method=GymVisit.Method.STAFF)
+
+        # TODO: send websocket order to the gym esp32 device to open this lcok
+        # TODO: Handle device offline / command failure.
 
         return Response(status=status.HTTP_200_OK)
