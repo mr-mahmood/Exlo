@@ -325,6 +325,44 @@ class GymSubscriptionPropertyTests(GymSubscriptionTestBase):
 
 
 class GymSubscriptionCreationTests(GymSubscriptionTestBase):
+    def test_other_gym_subscription_activates_independently(self):
+        first = self.create_subscription(self.user, self.plan)
+        second = self.create_subscription(self.user, self.plan_3)
+
+        first.refresh_from_db()
+        self.assertEqual(first.status, GymSubscription.Status.ACTIVE)
+        self.assertEqual(second.status, GymSubscription.Status.ACTIVE)
+
+    def test_early_same_gym_renewal_is_rejected(self):
+        active = self.create_subscription(self.user, self.plan)
+        with self.assertRaises(APIError) as raised:
+            self.create_subscription(self.user, self.plan_2)
+
+        self.assertEqual(raised.exception.error_code, GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS[0])
+        self.assertEqual(active.status, GymSubscription.Status.ACTIVE)
+        self.assertEqual(GymSubscription.objects.filter(subscriber=self.user).count(), 1)
+
+    def test_renewal_allowed_with_seven_days_remaining(self):
+        active = self.create_subscription(self.user, self.plan)
+        active.expires_at = timezone.now() + timedelta(days=7)
+        active.save(update_fields=["expires_at"])
+
+        renewal = self.create_subscription(self.user, self.plan_2)
+
+        self.assertEqual(renewal.status, GymSubscription.Status.PENDING)
+        self.assertIsNone(renewal.started_at)
+        self.assertEqual(renewal.remaining_visits, self.plan_2.visit_limit)
+
+    def test_renewal_allowed_with_two_visits_remaining(self):
+        active = self.create_subscription(self.user, self.plan)
+        active.remaining_visits = 2
+        active.save(update_fields=["remaining_visits"])
+
+        renewal = self.create_subscription(self.user, self.plan)
+
+        self.assertEqual(renewal.status, GymSubscription.Status.PENDING)
+        self.assertEqual(renewal.remaining_visits, self.plan.visit_limit)
+
     def test_create_subscription_activates_when_user_has_no_active_subscription(
         self,
     ):
@@ -361,7 +399,9 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
         self,
     ):
         # Create an active subscription first so the next one stays pending
-        self.create_subscription(self.user, self.plan)
+        active = self.create_subscription(self.user, self.plan)
+        active.remaining_visits = 2
+        active.save(update_fields=["remaining_visits"])
 
         pending = self.create_subscription(self.user, self.plan_2)
 
@@ -417,6 +457,8 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
         self,
     ):
         active = self.create_subscription(self.user, self.plan)
+        active.remaining_visits = 2
+        active.save(update_fields=["remaining_visits"])
 
         pending = self.create_subscription(self.user, self.plan_2)
 
@@ -436,6 +478,8 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
         self,
     ):
         active = self.create_subscription(self.user, self.plan)
+        active.remaining_visits = 2
+        active.save(update_fields=["remaining_visits"])
 
         started_at = active.started_at
         expires_at = active.expires_at
@@ -450,34 +494,26 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
         self.assertEqual(active.expires_at, expires_at)
         self.assertEqual(active.remaining_visits, remaining_visits)
 
-    def test_multiple_pending_subscriptions_are_allowed(self):
+    def test_second_pending_subscription_is_rejected(self):
         active = self.create_subscription(self.user, self.plan)
-
+        active.remaining_visits = 2
+        active.save(update_fields=["remaining_visits"])
         pending_1 = self.create_subscription(self.user, self.plan_2)
-        pending_2 = self.create_subscription(self.user, self.plan)
+        with self.assertRaises(APIError) as raised:
+            self.create_subscription(self.user, self.plan)
 
-        self.assertEqual(
-            active.status,
-            GymSubscription.Status.ACTIVE,
-        )
-        self.assertEqual(
-            pending_1.status,
-            GymSubscription.Status.PENDING,
-        )
-        self.assertEqual(
-            pending_2.status,
-            GymSubscription.Status.PENDING,
-        )
-
+        self.assertEqual(raised.exception.error_code, GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS[0])
+        self.assertEqual(active.status, GymSubscription.Status.ACTIVE)
+        self.assertEqual(pending_1.status, GymSubscription.Status.PENDING)
         self.assertEqual(
             GymSubscription.objects.filter(
                 subscriber=self.user,
                 status=GymSubscription.Status.PENDING,
             ).count(),
-            2,
+            1,
         )
 
-    def test_create_subscription_with_expired_active_subscription_stays_pending(
+    def test_create_subscription_with_expired_active_subscription_activates(
         self,
     ):
         active = self.create_raw_subscription(
@@ -495,11 +531,11 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
 
         self.assertEqual(
             active.status,
-            GymSubscription.Status.ACTIVE,
+            GymSubscription.Status.EXPIRED,
         )
         self.assertEqual(
             pending.status,
-            GymSubscription.Status.PENDING,
+            GymSubscription.Status.ACTIVE,
         )
 
 
@@ -744,7 +780,7 @@ class GymSubscriptionExpirationTests(GymSubscriptionTestBase):
 
 
 class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
-    def test_promote_next_activates_oldest_pending_subscription(self):
+    def test_promote_next_activates_only_same_gym_pending_subscription(self):
         first = self.create_raw_subscription(
             self.user,
             self.plan,
@@ -753,11 +789,11 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
 
         second = self.create_raw_subscription(
             self.user,
-            self.plan_2,
+            self.plan_3,
             status=GymSubscription.Status.PENDING,
         )
 
-        result = GymSubscription.objects._promote_next_any(self.user)
+        result = GymSubscription.objects._promote_next_for_gym(self.user, self.gym)
 
         first.refresh_from_db()
         second.refresh_from_db()
@@ -772,7 +808,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             GymSubscription.Status.PENDING,
         )
 
-    def test_promote_next_uses_created_at_order(self):
+    def test_promote_next_ignores_older_other_gym_pending(self):
         now = timezone.now()
 
         newer = self.create_raw_subscription(
@@ -784,24 +820,24 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
 
         older = self.create_raw_subscription(
             self.user,
-            self.plan_2,
+            self.plan_3,
             status=GymSubscription.Status.PENDING,
             created_at=now,
         )
 
-        result = GymSubscription.objects._promote_next_any(self.user)
+        result = GymSubscription.objects._promote_next_for_gym(self.user, self.gym)
 
         older.refresh_from_db()
         newer.refresh_from_db()
 
-        self.assertEqual(result.pk, older.pk)
+        self.assertEqual(result.pk, newer.pk)
         self.assertEqual(
             older.status,
-            GymSubscription.Status.ACTIVE,
+            GymSubscription.Status.PENDING,
         )
         self.assertEqual(
             newer.status,
-            GymSubscription.Status.PENDING,
+            GymSubscription.Status.ACTIVE,
         )
 
     def test_promote_next_returns_none_when_active_subscription_exists(self):
@@ -819,7 +855,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             status=GymSubscription.Status.PENDING,
         )
 
-        result = GymSubscription.objects._promote_next_any(self.user)
+        result = GymSubscription.objects._promote_next_for_gym(self.user, self.gym)
 
         active.refresh_from_db()
         pending.refresh_from_db()
@@ -837,7 +873,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
     def test_promote_next_returns_none_when_no_pending_subscription_exists(
         self,
     ):
-        result = GymSubscription.objects._promote_next_any(self.user)
+        result = GymSubscription.objects._promote_next_for_gym(self.user, self.gym)
 
         self.assertIsNone(result)
 
@@ -850,7 +886,7 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
             cancelled_at=timezone.now(),
         )
 
-        result = GymSubscription.objects._promote_next_any(self.user)
+        result = GymSubscription.objects._promote_next_for_gym(self.user, self.gym)
 
         cancelled.refresh_from_db()
 
@@ -862,6 +898,23 @@ class GymSubscriptionPromotionTests(GymSubscriptionTestBase):
 
 
 class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
+    def test_cancelling_gym_a_preserves_active_gym_b(self):
+        gym_a = self.create_raw_subscription(
+            self.user, self.plan, status=GymSubscription.Status.ACTIVE,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+        gym_b = self.create_raw_subscription(
+            self.user, self.plan_3, status=GymSubscription.Status.ACTIVE,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+
+        GymSubscription.objects.cancel_subscription(gym_a)
+
+        gym_a.refresh_from_db()
+        gym_b.refresh_from_db()
+        self.assertEqual(gym_a.status, GymSubscription.Status.CANCELLED)
+        self.assertEqual(gym_b.status, GymSubscription.Status.ACTIVE)
+
     def test_model_cancel_only_changes_subscription_state(self):
         active = self.create_raw_subscription(
             self.user,
@@ -927,7 +980,7 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
             GymSubscription.Status.ACTIVE,
         )
 
-    def test_cancel_subscription_promotes_oldest_pending_subscription(self):
+    def test_cancel_subscription_does_not_promote_other_gym_pending(self):
         active = self.create_raw_subscription(
             self.user,
             self.plan,
@@ -944,7 +997,7 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
 
         second_pending = self.create_raw_subscription(
             self.user,
-            self.plan,
+            self.plan_3,
             status=GymSubscription.Status.PENDING,
         )
 
@@ -1020,7 +1073,7 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
             GymSubscription.Status.CANCELLED,
         )
 
-    def test_cancel_pending_subscription_promotes_next_when_no_active_exists(
+    def test_cancel_pending_subscription_does_not_promote_other_gym(
         self,
     ):
         first = self.create_raw_subscription(
@@ -1031,7 +1084,7 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
 
         second = self.create_raw_subscription(
             self.user,
-            self.plan_2,
+            self.plan_3,
             status=GymSubscription.Status.PENDING,
         )
 
@@ -1046,7 +1099,7 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
         )
         self.assertEqual(
             second.status,
-            GymSubscription.Status.ACTIVE,
+            GymSubscription.Status.PENDING,
         )
 
     def test_cancel_expired_subscription_does_not_promote_pending_subscription(
@@ -1132,31 +1185,48 @@ class GymSubscriptionCancellationTests(GymSubscriptionTestBase):
 
 
 class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
-    def test_last_visit_promotes_oldest_pending_across_gyms(self):
+    def test_active_subscription_is_used_before_same_gym_pending(self):
+        active = self.create_raw_subscription(
+            self.user, self.plan, status=GymSubscription.Status.ACTIVE,
+            remaining_visits=2, expires_at=timezone.now() + timedelta(days=10),
+        )
+        pending = self.create_raw_subscription(self.user, self.plan_2)
+
+        used = GymSubscription.objects.consume_visit(self.user, self.gym)
+
+        active.refresh_from_db()
+        pending.refresh_from_db()
+        self.assertEqual(used.pk, active.pk)
+        self.assertEqual(active.remaining_visits, 1)
+        self.assertEqual(active.status, GymSubscription.Status.ACTIVE)
+        self.assertEqual(pending.status, GymSubscription.Status.PENDING)
+        self.assertEqual(pending.remaining_visits, self.plan_2.visit_limit)
+
+    def test_last_visit_promotes_only_same_gym_pending(self):
         active = self.create_raw_subscription(
             self.user, self.plan, status="ACTIVE", remaining_visits=1,
             expires_at=timezone.now() + timedelta(days=10),
         )
         other_user_pending = self.create_raw_subscription(self.user_2, self.plan_3)
-        next_subscription = self.create_raw_subscription(self.user, self.plan_3)
-        later_same_gym = self.create_raw_subscription(self.user, self.plan_2)
+        other_gym_pending = self.create_raw_subscription(self.user, self.plan_3)
+        next_subscription = self.create_raw_subscription(self.user, self.plan_2)
 
         result = GymSubscription.objects.consume_visit(self.user, self.gym)
 
-        for subscription in (active, next_subscription, later_same_gym, other_user_pending):
+        for subscription in (active, next_subscription, other_gym_pending, other_user_pending):
             subscription.refresh_from_db()
         self.assertEqual(result.pk, active.pk)
         self.assertEqual(active.status, "EXPIRED")
         self.assertEqual(active.end_reason, "VISITS")
         self.assertEqual(active.remaining_visits, 0)
         self.assertEqual(next_subscription.status, "ACTIVE")
-        self.assertEqual(next_subscription.remaining_visits, 20)
+        self.assertEqual(next_subscription.remaining_visits, 60)
         self.assertIsNotNone(next_subscription.started_at)
         self.assertEqual(
             next_subscription.expires_at,
-            next_subscription.started_at + relativedelta(months=1),
+            next_subscription.started_at + relativedelta(months=3),
         )
-        self.assertEqual(later_same_gym.status, "PENDING")
+        self.assertEqual(other_gym_pending.status, "PENDING")
         self.assertEqual(other_user_pending.status, "PENDING")
         self.assertEqual(
             GymSubscription.objects.filter(subscriber=self.user, status="ACTIVE").count(),
@@ -1170,11 +1240,10 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         )
         older_other_gym = self.create_raw_subscription(self.user, self.plan_2)
         next_subscription = self.create_raw_subscription(self.user, self.plan_3)
-        later_same_gym = self.create_raw_subscription(self.user, self.plan_3)
 
         result = GymSubscription.objects.consume_visit(self.user, self.gym_2)
 
-        for subscription in (expired, older_other_gym, next_subscription, later_same_gym):
+        for subscription in (expired, older_other_gym, next_subscription):
             subscription.refresh_from_db()
         self.assertEqual(result.pk, next_subscription.pk)
         self.assertEqual(next_subscription.status, "ACTIVE")
@@ -1182,7 +1251,6 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         self.assertEqual(expired.status, "EXPIRED")
         self.assertEqual(expired.remaining_visits, 0)
         self.assertEqual(older_other_gym.status, "PENDING")
-        self.assertEqual(later_same_gym.status, "PENDING")
         self.assertEqual(
             GymSubscription.objects.filter(subscriber=self.user, status="ACTIVE").count(),
             1,
@@ -1207,21 +1275,20 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         self.assertEqual(pending.status, "PENDING")
         self.assertEqual(pending.remaining_visits, 20)
 
-    def test_valid_active_subscription_prevents_other_gym_promotion(self):
+    def test_valid_active_subscription_does_not_prevent_other_gym_promotion(self):
         active = self.create_raw_subscription(
             self.user, self.plan, status="ACTIVE", remaining_visits=10,
             expires_at=timezone.now() + timedelta(days=10),
         )
         pending = self.create_raw_subscription(self.user, self.plan_3)
-        with self.assertRaises(APIError) as raised:
-            GymSubscription.objects.consume_visit(self.user, self.gym_2)
-        self.assertEqual(raised.exception.error_code, "SUBS_004")
+        result = GymSubscription.objects.consume_visit(self.user, self.gym_2)
         active.refresh_from_db()
         pending.refresh_from_db()
         self.assertEqual(active.status, "ACTIVE")
         self.assertEqual(active.remaining_visits, 10)
-        self.assertEqual(pending.status, "PENDING")
-        self.assertEqual(pending.remaining_visits, 20)
+        self.assertEqual(result.pk, pending.pk)
+        self.assertEqual(pending.status, "ACTIVE")
+        self.assertEqual(pending.remaining_visits, 19)
 
     def test_check_in_decrements_remaining_visits(self):
         subscription = self.create_raw_subscription(
@@ -1265,7 +1332,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
 
         self.assertEqual(
             context.exception.error_code,
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
         self.assertEqual(subscription.remaining_visits, 10)
         self.assertEqual(
@@ -1559,7 +1626,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
 
         self.assertEqual(
             context.exception.error_code,
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
         self.assertEqual(subscription.remaining_visits, 1)
         self.assertEqual(
@@ -1596,27 +1663,36 @@ class GymSubscriptionConstraintTests(GymSubscriptionTestBase):
             GymSubscription.Status.ACTIVE,
         )
 
-    def test_multiple_pending_subscriptions_are_allowed(self):
+    def test_only_one_pending_subscription_per_user_and_gym(self):
         first = self.create_raw_subscription(
             self.user,
             self.plan,
             status=GymSubscription.Status.PENDING,
         )
 
-        second = self.create_raw_subscription(
-            self.user,
-            self.plan_2,
-            status=GymSubscription.Status.PENDING,
-        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.create_raw_subscription(
+                    self.user,
+                    self.plan_2,
+                    status=GymSubscription.Status.PENDING,
+                )
 
         self.assertEqual(
             first.status,
             GymSubscription.Status.PENDING,
         )
-        self.assertEqual(
-            second.status,
-            GymSubscription.Status.PENDING,
+
+    def test_active_subscriptions_at_different_gyms_are_allowed(self):
+        first = self.create_raw_subscription(
+            self.user, self.plan, status=GymSubscription.Status.ACTIVE,
+            expires_at=timezone.now() + timedelta(days=10),
         )
+        second = self.create_raw_subscription(
+            self.user, self.plan_3, status=GymSubscription.Status.ACTIVE,
+            expires_at=timezone.now() + timedelta(days=10),
+        )
+        self.assertNotEqual(first.gym_id, second.gym_id)
 
     def test_active_subscriptions_for_different_users_are_allowed(self):
         first = self.create_raw_subscription(
@@ -1793,7 +1869,7 @@ class GymSubscriptionTransactionTests(GymSubscriptionTestBase):
 
         self.assertEqual(
             context.exception.error_code,
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
         self.assertEqual(subscription.remaining_visits, 10)
 
@@ -1863,10 +1939,10 @@ class GymSubscriptionManagerInternalTests(GymSubscriptionTestBase):
             expires_at=timezone.now() + timedelta(days=10),
         )
 
-        self.assertTrue(GymSubscription.objects._has_active_subscription(self.user))
+        self.assertTrue(GymSubscription.objects._has_active_subscription(self.user, self.gym))
 
     def test_has_active_subscription_returns_false(self):
-        self.assertFalse(GymSubscription.objects._has_active_subscription(self.user))
+        self.assertFalse(GymSubscription.objects._has_active_subscription(self.user, self.gym))
 
     def test_has_active_subscription_can_exclude_subscription(self):
         subscription = self.create_raw_subscription(
@@ -1880,11 +1956,12 @@ class GymSubscriptionManagerInternalTests(GymSubscriptionTestBase):
         self.assertFalse(
             GymSubscription.objects._has_active_subscription(
                 self.user,
+                self.gym,
                 exclude_pk=subscription.pk,
             )
         )
 
-        self.assertTrue(GymSubscription.objects._has_active_subscription(self.user))
+        self.assertTrue(GymSubscription.objects._has_active_subscription(self.user, self.gym))
 
 
 class GymSubscriptionRecoveryConcurrencyTests(TransactionTestCase):

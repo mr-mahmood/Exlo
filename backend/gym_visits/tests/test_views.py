@@ -15,6 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 from commerce_orders.models import CommerceProduct, Order, OrderItem
 from core.errors import (
+    APIError,
     GymDeviceError,
     GymVisitsError,
     GymSubscriptionError,
@@ -704,6 +705,10 @@ class CheckInFlowTests(NfcFlowTestBase):
             response.data["error_code"],
             GymVisitsError.ALREADY_CHECKED_IN[0],
         )
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
+        self.assertEqual(
+            GymSubscription.objects.get(subscriber=self.user).remaining_visits, 9
+        )
 
     def test_check_in_without_active_subscription_is_rejected(self):
         GymSubscription.objects.all().delete()
@@ -738,11 +743,11 @@ class CheckInFlowTests(NfcFlowTestBase):
 
         self.assertEqual(
             response.data["error_code"],
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
 
     def test_check_in_with_expired_subscription_is_rejected(self):
-        sub = GymSubscription.objects.get(
+        sub: GymSubscription = GymSubscription.objects.get(
             subscriber=self.user,
         )
 
@@ -764,6 +769,12 @@ class CheckInFlowTests(NfcFlowTestBase):
             response.data["error_code"],
             GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.status, GymSubscription.Status.EXPIRED)
+        self.assertEqual(sub.end_reason, GymSubscription.EndReason.TIME)
+        self.assertEqual(sub.remaining_visits, 10)
+        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
 
     def test_check_in_with_exhausted_visits_is_rejected(self):
         sub = GymSubscription.objects.get(
@@ -840,6 +851,9 @@ class CheckInFlowTests(NfcFlowTestBase):
 
         sub = GymSubscription.objects.get(subscriber=self.user)
         self.assertEqual(sub.remaining_visits, 10)
+        self.assertFalse(
+            GymLocker.objects.filter(gym=self.gym_a, assigned_user=self.user).exists()
+        )
 
 
 class CrossGymCheckInTests(NfcFlowTestBase):
@@ -870,8 +884,32 @@ class CrossGymCheckInTests(NfcFlowTestBase):
 
         self.assertEqual(
             response.data["error_code"],
-            GymSubscriptionError.WRONG_GYM[0],
+            GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0],
         )
+
+    def test_open_visit_blocks_check_in_at_other_gym(self):
+        plan_b = GymMembershipPlan.objects.create_plan(
+            name="Plan B",
+            gym=self.gym_b,
+            duration_months=1,
+            visit_limit=30,
+            price=1000,
+        )
+        gym_b_subscription = self.make_active_subscription(self.user, plan_b)
+        self.assertEqual(
+            self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1").status_code,
+            200,
+        )
+
+        response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["error_code"], GymVisitsError.ALREADY_CHECKED_IN[0]
+        )
+        gym_b_subscription.refresh_from_db()
+        self.assertEqual(gym_b_subscription.remaining_visits, 10)
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
 
 
 class SubscriptionPromotionTests(NfcFlowTestBase):
@@ -885,8 +923,11 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
 
     def make_plan_b(self):
         return GymMembershipPlan.objects.create_plan(
-            name="Plan B", gym=self.gym_b, duration_months=1,
-            visit_limit=30, price=1000,
+            name="Plan B",
+            gym=self.gym_b,
+            duration_months=1,
+            visit_limit=30,
+            price=1000,
         )
 
     def assert_subscription_api_states(self, *expected):
@@ -912,7 +953,7 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         for subscription, expected_status in expected:
             self.assertEqual(states[str(subscription.pk)], expected_status)
 
-    def test_last_visit_promotes_another_gyms_queue_and_refreshes_cache(self):
+    def test_last_visit_promotes_same_gym_and_preserves_other_gym_queue(self):
         active = self.make_active_subscription(self.user, self.plan_a, remaining=1)
         pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
         later_a = self.make_pending_subscription(self.user, self.plan_a)
@@ -928,7 +969,9 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
             response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
             self.assertEqual(response.status_code, 200)
             for sub_id, key in keys.items():
-                self.assertEqual(cache_key(USER_SUBSCRIPTION, self.user.pk, sub_id), key)
+                self.assertEqual(
+                    cache_key(USER_SUBSCRIPTION, self.user.pk, sub_id), key
+                )
 
         active.refresh_from_db()
         pending_b.refresh_from_db()
@@ -936,14 +979,14 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         self.assertEqual(active.status, "EXPIRED")
         self.assertEqual(active.end_reason, "VISITS")
         self.assertEqual(active.remaining_visits, 0)
-        self.assertEqual(pending_b.status, "ACTIVE")
+        self.assertEqual(pending_b.status, "PENDING")
         self.assertEqual(pending_b.remaining_visits, 30)
-        self.assertEqual(later_a.status, "PENDING")
+        self.assertEqual(later_a.status, "ACTIVE")
         visit = GymVisit.objects.get(user=self.user)
         self.assertEqual(visit.gym_id, self.gym_a.pk)
         self.assertEqual(visit.subscription_id, active.pk)
         self.assert_subscription_api_states(
-            (active, "EXPIRED"), (pending_b, "ACTIVE"), (later_a, "PENDING")
+            (active, "EXPIRED"), (pending_b, "PENDING"), (later_a, "ACTIVE")
         )
 
         self.assertEqual(
@@ -956,8 +999,9 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         pending_b.refresh_from_db()
         self.assertEqual(pending_b.remaining_visits, 29)
         self.assertEqual(
-            GymVisit.objects.get(user=self.user, checked_out_at__isnull=True)
-            .subscription_id,
+            GymVisit.objects.get(
+                user=self.user, checked_out_at__isnull=True
+            ).subscription_id,
             pending_b.pk,
         )
 
@@ -965,7 +1009,9 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         expired = self.make_active_subscription(self.user, self.plan_a, remaining=0)
         pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
         expired.expire(reason=GymSubscription.EndReason.VISITS)
-        self.assert_subscription_api_states((expired, "EXPIRED"), (pending_b, "PENDING"))
+        self.assert_subscription_api_states(
+            (expired, "EXPIRED"), (pending_b, "PENDING")
+        )
 
         with self.captureOnCommitCallbacks(execute=True):
             response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
@@ -984,13 +1030,15 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         with self.captureOnCommitCallbacks(execute=True) as callbacks:
             retry = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
         self.assertEqual(retry.status_code, 400)
-        self.assertEqual(retry.json()["error_code"], GymVisitsError.ALREADY_CHECKED_IN[0])
+        self.assertEqual(
+            retry.json()["error_code"], GymVisitsError.ALREADY_CHECKED_IN[0]
+        )
         self.assertEqual(callbacks, [])
         pending_b.refresh_from_db()
         self.assertEqual(pending_b.remaining_visits, 29)
         self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
 
-    def test_time_expiry_cross_gym_refreshes_both_subscription_details(self):
+    def test_check_in_at_other_gym_does_not_expire_first_gym_subscription(self):
         expired = self.make_active_subscription(
             self.user, self.plan_a, remaining=5, expires_in_days=-1
         )
@@ -1002,10 +1050,10 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
 
         self.assertEqual(response.status_code, 200)
         expired.refresh_from_db()
-        self.assertEqual(expired.status, "EXPIRED")
-        self.assertEqual(expired.end_reason, "TIME")
+        self.assertEqual(expired.status, "ACTIVE")
+        self.assertIsNone(expired.end_reason)
         self.assertEqual(expired.remaining_visits, 5)
-        self.assert_subscription_api_states((expired, "EXPIRED"), (pending_b, "ACTIVE"))
+        self.assert_subscription_api_states((expired, "ACTIVE"), (pending_b, "ACTIVE"))
 
     def test_last_visit_promotion_rolls_back_when_no_locker_is_available(self):
         active = self.make_active_subscription(self.user, self.plan_a, remaining=1)
@@ -1017,7 +1065,9 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
             response = self.check_in(gym=self.gym_a, token=self.token_a, uid="CARD1")
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0])
+        self.assertEqual(
+            response.json()["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0]
+        )
         self.assertEqual(callbacks, [])
         active.refresh_from_db()
         pending_b.refresh_from_db()
@@ -1040,7 +1090,9 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
             response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0])
+        self.assertEqual(
+            response.json()["error_code"], GymLockerError.NO_AVAILABLE_LOCKER[0]
+        )
         self.assertEqual(callbacks, [])
         pending_b.refresh_from_db()
         self.assertEqual(pending_b.status, "PENDING")
@@ -1049,19 +1101,20 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         self.assertIsNone(pending_b.expires_at)
         self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
 
-    def test_existing_active_subscription_blocks_other_gyms_pending_subscription(self):
+    def test_existing_active_subscription_allows_other_gyms_pending_subscription(self):
         active = self.make_active_subscription(self.user, self.plan_a, remaining=10)
         pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
         with self.captureOnCommitCallbacks(execute=True) as callbacks:
             response = self.check_in(gym=self.gym_b, token=self.token_b, uid="CARD1")
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error_code"], GymSubscriptionError.WRONG_GYM[0])
-        self.assertEqual(callbacks, [])
+        self.assertEqual(response.status_code, 200)
         active.refresh_from_db()
         pending_b.refresh_from_db()
         self.assertEqual(active.remaining_visits, 10)
-        self.assertEqual(pending_b.status, "PENDING")
-        self.assertFalse(GymVisit.objects.filter(user=self.user).exists())
+        self.assertEqual(pending_b.status, "ACTIVE")
+        self.assertEqual(pending_b.remaining_visits, 29)
+        self.assertEqual(
+            GymVisit.objects.get(user=self.user).subscription_id, pending_b.pk
+        )
 
     def test_expired_subscription_promotes_same_gym_pending_and_allows_checkin(self):
         expired = self.make_active_subscription(
@@ -1106,6 +1159,13 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
             pending.remaining_visits,
             pending.plan.visit_limit - 1,
         )
+        self.assertEqual(expired.end_reason, GymSubscription.EndReason.TIME)
+        self.assertEqual(expired.remaining_visits, 5)
+        self.assertEqual(
+            GymVisit.objects.get(user=self.user, gym=self.gym_a).subscription_id,
+            pending.pk,
+        )
+        self.assertEqual(GymVisit.objects.filter(user=self.user).count(), 1)
 
     def test_expired_subscription_does_not_promote_pending_at_other_gym(self):
         plan_b = GymMembershipPlan.objects.create_plan(
@@ -1355,6 +1415,27 @@ class CheckOutFlowTests(NfcFlowTestBase):
             GymVisit.Method.NFC,
         )
 
+    def test_expired_subscription_keeps_open_visit_and_locker_access(self):
+        visit = GymVisit.objects.get(user=self.user, gym=self.gym_a)
+        subscription = visit.subscription
+        subscription.expire(GymSubscription.EndReason.TIME)
+
+        locker = GymLocker.objects.get_user_locker(self.gym_a, self.user)
+        self.assertEqual(locker.assigned_user_id, self.user.pk)
+        self.assertEqual(visit.subscription_id, subscription.pk)
+
+        response = self.check_out(gym=self.gym_a, token=self.token_a, uid="CARD1")
+        self.assertEqual(response.status_code, 200)
+        visit.refresh_from_db()
+        self.assertIsNotNone(visit.checked_out_at)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 9)
+
+        locker.assigned_user = self.user
+        locker.save(update_fields=["assigned_user"])
+        with self.assertRaises(APIError):
+            GymLocker.objects.get_user_locker(self.gym_a, self.user)
+
     def test_check_out_without_open_visit_is_rejected(self):
         self.check_out(
             gym=self.gym_a,
@@ -1541,41 +1622,150 @@ class FullJourneyTests(NfcFlowTestBase):
         )
 
 
+class CheckInConcurrencyTests(TransactionTestCase):
+    def test_concurrent_check_ins_create_one_admission(self):
+        gym = Gym.objects.create(name="Gym")
+        user = User.objects.create_user(phone_number="09120000001")
+        plan = GymMembershipPlan.objects.create_plan(
+            name="Plan", gym=gym, duration_months=1, visit_limit=4, price=1000
+        )
+        order = Order.objects.create(
+            buyer=user,
+            status=Order.Status.PAID,
+            subtotal_amount=1000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=1000,
+            paid_at=timezone.now(),
+        )
+        item = OrderItem.objects.create(
+            commerce_product=plan.id,
+            order=order,
+            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
+            item_snapshot={},
+            quantity=1,
+            unit_price=1000,
+            subtotal_amount=1000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=1000,
+        )
+        subscription = GymSubscription.objects.create(
+            subscriber=user,
+            plan=plan,
+            order_item=item,
+            status=GymSubscription.Status.ACTIVE,
+            expires_at=timezone.now() + timedelta(days=30),
+            remaining_visits=2,
+            duration_months=1,
+        )
+        GymLocker.objects.add_lockers(gym=gym, count=2)
+        UserNfcCard.objects.assign_card(user=user, uid="CARD1")
+        _, token = GymDevice.objects.register_device(
+            gym=gym, device_type=GymDevice.GymDeviceType.ENTRANCE
+        )
+        url = reverse("gym_visits:gym-visit-check-in", args=[gym.id])
+        headers = {"HTTP_AUTHORIZATION": f"Device {token}"}
+        assigning = Event()
+        second_started = Event()
+        continue_assignment = Event()
+        original_assign = GymLockerManager.assign
+
+        def pause_before_assignment(manager, gym, user):
+            assigning.set()
+            if not continue_assignment.wait(timeout=10):
+                raise TimeoutError("Check-in did not resume")
+            return original_assign(manager, gym, user)
+
+        def check_in(started=None):
+            try:
+                if started is not None:
+                    started.set()
+                return APIClient().post(
+                    url, {"uid": "CARD1"}, format="json", **headers
+                )
+            finally:
+                connections.close_all()
+
+        with patch.object(GymLockerManager, "assign", pause_before_assignment):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                first = executor.submit(check_in)
+                try:
+                    self.assertTrue(assigning.wait(timeout=10))
+                    second = executor.submit(check_in, second_started)
+                    self.assertTrue(second_started.wait(timeout=10))
+                finally:
+                    continue_assignment.set()
+                responses = [first.result(timeout=10), second.result(timeout=10)]
+
+        self.assertEqual(sorted(response.status_code for response in responses), [200, 400])
+        self.assertEqual(
+            next(response for response in responses if response.status_code == 400)
+            .data["error_code"],
+            GymVisitsError.ALREADY_CHECKED_IN[0],
+        )
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.remaining_visits, 1)
+        self.assertEqual(GymVisit.objects.filter(user=user).count(), 1)
+        self.assertEqual(
+            GymLocker.objects.filter(gym=gym, assigned_user=user).count(), 1
+        )
+
+
 class CheckOutConcurrencyTests(TransactionTestCase):
     def test_checkout_locks_user_before_releasing_locker(self):
         gym = Gym.objects.create(name="Gym")
         user = User.objects.create_user(phone_number="09120000001")
         plan = GymMembershipPlan.objects.create_plan(
-            name="Plan", gym=gym, duration_months=1, visit_limit=2, price=1000,
+            name="Plan",
+            gym=gym,
+            duration_months=1,
+            visit_limit=4,
+            price=1000,
         )
         order = Order.objects.create(
-            buyer=user, status=Order.Status.PAID, subtotal_amount=1000,
-            discount_amount=0, tax_amount=0, total_amount=1000,
+            buyer=user,
+            status=Order.Status.PAID,
+            subtotal_amount=1000,
+            discount_amount=0,
+            tax_amount=0,
+            total_amount=1000,
             paid_at=timezone.now(),
         )
         item = OrderItem.objects.create(
-            commerce_product=plan.id, order=order,
+            commerce_product=plan.id,
+            order=order,
             item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={}, quantity=1, unit_price=1000,
-            subtotal_amount=1000, discount_amount=0, tax_amount=0,
+            item_snapshot={},
+            quantity=1,
+            unit_price=1000,
+            subtotal_amount=1000,
+            discount_amount=0,
+            tax_amount=0,
             total_amount=1000,
         )
         GymSubscription.objects.create(
-            subscriber=user, plan=plan, order_item=item,
+            subscriber=user,
+            plan=plan,
+            order_item=item,
             status=GymSubscription.Status.ACTIVE,
             expires_at=timezone.now() + timedelta(days=30),
-            remaining_visits=2, duration_months=1,
+            remaining_visits=2,
+            duration_months=1,
         )
         GymLocker.objects.add_lockers(gym=gym, count=1)
         UserNfcCard.objects.assign_card(user=user, uid="CARD1")
         _, token = GymDevice.objects.register_device(
-            gym=gym, device_type=GymDevice.GymDeviceType.ENTRANCE,
+            gym=gym,
+            device_type=GymDevice.GymDeviceType.ENTRANCE,
         )
         headers = {"HTTP_AUTHORIZATION": f"Device {token}"}
         check_in_url = reverse("gym_visits:gym-visit-check-in", args=[gym.id])
         check_out_url = reverse("gym_visits:gym-visit-check-out", args=[gym.id])
         self.assertEqual(
-            APIClient().post(check_in_url, {"uid": "CARD1"}, format="json", **headers).status_code,
+            APIClient()
+            .post(check_in_url, {"uid": "CARD1"}, format="json", **headers)
+            .status_code,
             status.HTTP_200_OK,
         )
 
@@ -1592,7 +1782,10 @@ class CheckOutConcurrencyTests(TransactionTestCase):
         def checkout():
             try:
                 return APIClient().post(
-                    check_out_url, {"uid": "CARD1"}, format="json", **headers,
+                    check_out_url,
+                    {"uid": "CARD1"},
+                    format="json",
+                    **headers,
                 )
             finally:
                 connections.close_all()
@@ -1607,7 +1800,11 @@ class CheckOutConcurrencyTests(TransactionTestCase):
                             User.objects.select_for_update(nowait=True).get(pk=user.pk)
                 finally:
                     continue_checkout.set()
-                self.assertEqual(result.result(timeout=10).status_code, status.HTTP_200_OK)
+                self.assertEqual(
+                    result.result(timeout=10).status_code, status.HTTP_200_OK
+                )
 
-        self.assertFalse(GymVisit.objects.filter(user=user, checked_out_at__isnull=True).exists())
+        self.assertFalse(
+            GymVisit.objects.filter(user=user, checked_out_at__isnull=True).exists()
+        )
         self.assertFalse(GymLocker.objects.filter(gym=gym, assigned_user=user).exists())

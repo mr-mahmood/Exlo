@@ -361,18 +361,15 @@ class GymLockerModelTest(TestCase):
             GymLockerError.LOCKER_NOT_FOUND,
         )
 
-    def test_get_user_locker_returns_active_assigned_locker(self):
-        assigned_locker = GymLocker.objects.assign(
+    def test_get_user_locker_rejects_assignment_without_open_visit(self):
+        GymLocker.objects.assign(
             gym=self.gym,
             user=self.user,
         )
 
-        locker = GymLocker.objects.get_user_locker(
-            gym=self.gym,
-            user=self.user,
-        )
-
-        self.assertEqual(locker, assigned_locker)
+        with self.assertRaises(APIError) as context:
+            GymLocker.objects.get_user_locker(gym=self.gym, user=self.user)
+        self.assertEqual(context.exception.args[0], GymLockerError.USER_NOT_ASSIGNED)
 
     def test_get_user_locker_rejects_unassigned_user(self):
         with self.assertRaises(APIError) as context:

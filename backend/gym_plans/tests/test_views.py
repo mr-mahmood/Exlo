@@ -74,7 +74,7 @@ class GymPlansViewsTest(TestCase):
             name="Premium Monthly",
             description="Unlimited access",
             duration_months=1,
-            visit_limit=0,
+            visit_limit=4,
             price=49,
             is_active=True,
         )
@@ -84,7 +84,7 @@ class GymPlansViewsTest(TestCase):
             name="Yearly Premium",
             description="Yearly unlimited access",
             duration_months=12,
-            visit_limit=0,
+            visit_limit=4,
             price=499,
             is_active=False,  # Inactive
         )

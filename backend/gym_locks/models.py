@@ -4,6 +4,7 @@ import uuid
 from django.db import models, transaction
 from django.db.models import Max
 from gym.models import Gym
+from gym_visits.models import GymVisit
 from users.models import User
 from core.errors import APIError, GymLockerError
 from core.cache import invalidate_gym_locker_caches
@@ -80,6 +81,12 @@ class GymLockerManager(models.Manager):
             raise APIError(GymLockerError.LOCKER_NOT_FOUND)
 
     def get_user_locker(self, gym, user) -> "GymLocker":
+        if not GymVisit.objects.filter(
+            gym=gym,
+            user=user,
+            checked_out_at__isnull=True,
+        ).exists():
+            raise APIError(GymLockerError.USER_NOT_ASSIGNED)
         locker = self.filter(gym=gym, assigned_user=user, is_active=True).first()
         if locker is None:
             raise APIError(GymLockerError.USER_NOT_ASSIGNED)

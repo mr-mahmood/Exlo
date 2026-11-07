@@ -8,6 +8,7 @@ from django.utils import timezone
 from gym.models import Gym
 from commerce_products.models import CommerceProduct
 from gym_plans.models import GymMembershipPlan
+from django.db import DataError, IntegrityError, transaction
 
 
 class GymMembershipPlanModelTest(TestCase):
@@ -28,7 +29,7 @@ class GymMembershipPlanModelTest(TestCase):
             name="Premium Monthly",
             description="Unlimited access",
             duration_months=1,
-            visit_limit=0,
+            visit_limit=4,
             price=49,
             is_active=True,
         )
@@ -38,7 +39,7 @@ class GymMembershipPlanModelTest(TestCase):
         self.assertEqual(plan.name, "Premium Monthly")
         self.assertEqual(plan.description, "Unlimited access")
         self.assertEqual(plan.duration_months, 1)
-        self.assertEqual(plan.visit_limit, 0)
+        self.assertEqual(plan.visit_limit, 4)
         self.assertEqual(plan.price, 49)
         self.assertTrue(plan.is_active)
         self.assertIsNone(plan.deleted_at)
@@ -293,6 +294,66 @@ class GymMembershipPlanModelTest(TestCase):
 
         self.assertGreater(plan.updated_at, original_updated)
 
+    def test_plan_accepts_minimum_duration_and_visits(self):
+        plan = GymMembershipPlan.objects.create_plan(
+            gym=self.gym,
+            name="Minimum Plan",
+            description="Minimum allowed values",
+            duration_months=1,
+            visit_limit=4,
+            price=49,
+        )
+
+        self.assertEqual(plan.duration_months, 1)
+        self.assertEqual(plan.visit_limit, 4)
+
+    def test_database_rejects_plan_below_minimum_on_creation(self):
+        invalid_values = [
+            {"duration_months": 0, "visit_limit": 4},
+            {"duration_months": -1, "visit_limit": 4},
+            {"duration_months": 1, "visit_limit": 3},
+            {"duration_months": 1, "visit_limit": 0},
+        ]
+
+        for values in invalid_values:
+            with self.subTest(values=values):
+                with self.assertRaises(IntegrityError):
+                    GymMembershipPlan.objects.create_plan(
+                        gym=self.gym,
+                        name="Invalid Plan",
+                        description="Invalid limits",
+                        price=49,
+                        **values,
+                    )
+
+    def test_database_rejects_plan_below_minimum_on_update(self):
+        plan = GymMembershipPlan.objects.create_plan(
+            gym=self.gym,
+            name="Valid Plan",
+            description="Test updates",
+            duration_months=1,
+            visit_limit=4,
+            price=49,
+        )
+
+        invalid_updates = [
+            {"duration_months": 0},
+            {"duration_months": -1},
+            {"visit_limit": 3},
+            {"visit_limit": 0},
+        ]
+
+        for values in invalid_updates:
+            with self.subTest(values=values):
+                with self.assertRaises(IntegrityError):
+                    with transaction.atomic():
+                        GymMembershipPlan.objects.filter(pk=plan.pk).update(**values)
+
+                plan.refresh_from_db()
+
+                self.assertEqual(plan.duration_months, 1)
+                self.assertEqual(plan.visit_limit, 4)
+
 
 class GymMembershipPlanCreationTransactionTests(TransactionTestCase):
     def setUp(self):
@@ -326,6 +387,18 @@ class GymMembershipPlanCreationTransactionTests(TransactionTestCase):
         self.assertEqual(
             set(GymMembershipPlan.objects.values_list("pk", flat=True)), plans
         )
+
+    def test_minimum_constraint_failure_does_not_leave_orphan_product(self):
+        invalid_values = [
+            {"duration_months": 0},
+            {"duration_months": -1},
+            {"visit_limit": 3},
+            {"visit_limit": 0},
+        ]
+
+        for values in invalid_values:
+            with self.subTest(values=values):
+                self.assert_failed_creation_is_atomic(IntegrityError, **values)
 
     def test_oversized_duration_does_not_leave_orphan_product(self):
         self.assert_failed_creation_is_atomic(DataError, duration_months=2_147_483_648)

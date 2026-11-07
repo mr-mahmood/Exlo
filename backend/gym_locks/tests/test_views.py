@@ -400,7 +400,7 @@ class GymLockerViewsTest(TestCase):
 
     # ==================== MANUAL OPEN TESTS ====================
 
-    def test_manual_open_returns_assigned_locker_number(self):
+    def test_manual_open_rejects_stale_assignment_without_open_visit(self):
         self.authenticate(self.staff_user)
 
         self.locker.assigned_user = self.regular_user
@@ -412,14 +412,7 @@ class GymLockerViewsTest(TestCase):
             format="json",
         )
 
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_200_OK,
-        )
-        self.assertEqual(
-            response.data,
-            {"locker_number": self.locker.number},
-        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_manual_open_unassigned_user_fails(self):
         self.authenticate(self.staff_user)

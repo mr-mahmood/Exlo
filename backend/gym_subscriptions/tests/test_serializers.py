@@ -439,7 +439,7 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                 subscriber=self.user,
                 plan=self.plan,
                 order_item=oi,
-                status=GymSubscription.Status.PENDING,
+                status=GymSubscription.Status.EXPIRED,
             )
 
         qs = GymSubscription.objects.select_related("plan", "plan__gym")
@@ -478,7 +478,7 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                 subscriber=self.user,
                 plan=self.plan,
                 order_item=oi,
-                status=GymSubscription.Status.PENDING,
+                status=GymSubscription.Status.EXPIRED,
             )
 
         qs = GymSubscription.objects.all()

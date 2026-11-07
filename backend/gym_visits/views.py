@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.db import transaction
 from gym_subscriptions.models import GymSubscription
-from core.errors import APIError, GymVisitsError
+from core.errors import APIError, GymSubscriptionError, GymVisitsError
 from gym_visits.models import GymVisit
 from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymGate
@@ -36,20 +36,34 @@ class NfcCardCheckInView(APIView):
         user: User = card.user
         user.validate_account_status()
 
+        subscription_error = None
         with transaction.atomic():
-            subscription = GymSubscription.objects.consume_visit(
-                subscriber=user,
-                gym=gym,
-            )
 
-            GymVisit.objects.check_in(
-                user=user,
-                gym=gym,
-                subscription=subscription,
-                method=GymVisit.Method.NFC,
-            )
+            User.objects.select_for_update().get(pk=user.pk)
+            if GymVisit.objects.filter(user=user, checked_out_at__isnull=True).exists():
+                raise APIError(GymVisitsError.ALREADY_CHECKED_IN)
 
-            GymLocker.objects.assign(gym, user)
+            try:
+                subscription = GymSubscription.objects.consume_visit(
+                    subscriber=user,
+                    gym=gym,
+                )
+            except APIError as exc:
+                if exc.error_code != GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0]:
+                    raise
+                subscription_error = exc
+            else:
+                GymVisit.objects.check_in(
+                    user=user,
+                    gym=gym,
+                    subscription=subscription,
+                    method=GymVisit.Method.NFC,
+                )
+
+                GymLocker.objects.assign(gym, user)
+
+        if subscription_error is not None:
+            raise subscription_error
 
         # esp32 open gate
         return Response(status=status.HTTP_200_OK)

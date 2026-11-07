@@ -1,12 +1,14 @@
 # gym_subscriptions/models.py
 
 import uuid
+from datetime import timedelta
 from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from commerce_products.models import CommerceProduct
 from users.models import User
 from gym_plans.models import GymMembershipPlan
+from gym.models import Gym
 from commerce_orders.models import OrderItem
 from core.errors import APIError, GymSubscriptionError
 from core.cache import invalidate_user_subscription_caches
@@ -41,34 +43,29 @@ class GymSubscriptionsManager(models.Manager):
 
         subscription: GymSubscription = (
             self.select_for_update(of=("self",))
-            .select_related("plan")
             .filter(
                 subscriber=subscriber,
+                gym=gym,
                 status=GymSubscription.Status.ACTIVE,
             )
             .first()
         )
+
+        if subscription is not None and subscription.is_expired:
+            subscription.expire(reason=subscription.expire_reason)
+            subscription = None
 
         if subscription is None:
             subscription = self._promote_next_for_gym(subscriber, gym)
         if subscription is None:
             raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
-        if subscription.is_expired:
-            subscription.expire(reason=subscription.expire_reason)
-            subscription = self._promote_next_for_gym(subscriber, gym)
-            if subscription is None or not subscription.is_active:
-                raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
-
-        if subscription.plan.gym.id != gym.id:
-            raise APIError(GymSubscriptionError.WRONG_GYM)
-
         subscription.remaining_visits -= 1
         subscription.save(update_fields=["remaining_visits", "updated_at"])
 
         if subscription.remaining_visits <= 0:
             subscription.expire(reason=subscription.expire_reason)
-            self._promote_next_any(subscriber)
+            self._promote_next_for_gym(subscriber, gym)
 
         invalidate_user_subscription_caches(subscriber.id, subscription.id)
         return subscription
@@ -83,6 +80,32 @@ class GymSubscriptionsManager(models.Manager):
         with transaction.atomic():
             subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
 
+            active: GymSubscription = (
+                self.select_for_update(of=("self",))
+                .filter(
+                    subscriber=subscriber,
+                    gym_id=plan.gym_id,
+                    status=GymSubscription.Status.ACTIVE,
+                )
+                .first()
+            )
+            if active is not None and active.is_expired:
+                active.expire(reason=active.expire_reason)
+                active = None
+
+            if self.filter(
+                subscriber=subscriber,
+                gym_id=plan.gym_id,
+                status=GymSubscription.Status.PENDING,
+            ).exists():
+                raise APIError(GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS)
+
+            if active is not None and (
+                active.expires_at > timezone.now() + timedelta(days=7)
+                and active.remaining_visits > 2
+            ):
+                raise APIError(GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS)
+
             subscription = self.create(
                 subscriber=subscriber,
                 plan=plan,
@@ -92,7 +115,7 @@ class GymSubscriptionsManager(models.Manager):
                 duration_months=plan.duration_months,
             )
 
-            if not self._has_active_subscription(subscriber):
+            if active is None:
                 self._activate_subscription(subscription)
 
             invalidate_user_subscription_caches(subscriber.id, subscription.id)
@@ -101,10 +124,10 @@ class GymSubscriptionsManager(models.Manager):
     def cancel_subscription(self, subscription):
         with transaction.atomic():
             subscriber_id = subscription.subscriber_id
-
             subscriber = User.objects.select_for_update().get(pk=subscriber_id)
-
-            subscription = self.select_for_update().get(pk=subscription.pk)
+            subscription: GymSubscription = self.select_for_update().get(
+                pk=subscription.pk
+            )
 
             if subscription.status in (
                 GymSubscription.Status.EXPIRED,
@@ -112,22 +135,23 @@ class GymSubscriptionsManager(models.Manager):
             ):
                 return subscription
 
+            was_active_sub = subscription.status == GymSubscription.Status.ACTIVE
             subscription.cancel()
-            self._promote_next_any(subscriber)
+            if was_active_sub:
+                self._promote_next_for_gym(subscriber, subscription.gym)
+
             return subscription
 
     def _promote_next_for_gym(self, subscriber, gym) -> "GymSubscription | None":
-        """Promote the oldest pending subscription for *this gym* only."""
-        if self._has_active_subscription(subscriber):
+        if self._has_active_subscription(subscriber, gym):
             return None
 
         next_subscription = (
             self.select_for_update(of=("self",))
-            .select_related("plan")
             .filter(
                 subscriber=subscriber,
                 status=GymSubscription.Status.PENDING,
-                plan__gym=gym,
+                gym=gym,
             )
             .order_by("created_at")
             .first()
@@ -139,34 +163,7 @@ class GymSubscriptionsManager(models.Manager):
         try:
             self._activate_subscription(next_subscription)
         except IntegrityError as e:
-            if "unique_active_subscription_per_user" in str(e):
-                return None
-            raise
-
-        return next_subscription
-
-    def _promote_next_any(self, subscriber) -> "GymSubscription | None":
-        if self._has_active_subscription(subscriber):
-            return None
-
-        next_subscription = (
-            self.select_for_update(of=("self",))
-            .select_related("plan")
-            .filter(
-                subscriber=subscriber,
-                status=GymSubscription.Status.PENDING,
-            )
-            .order_by("created_at")
-            .first()
-        )
-
-        if next_subscription is None:
-            return None
-
-        try:
-            self._activate_subscription(next_subscription)
-        except IntegrityError as e:
-            if "unique_active_subscription_per_user" in str(e):
+            if "unique_active_subscription_per_user_gym" in str(e):
                 return None
             raise
 
@@ -174,15 +171,20 @@ class GymSubscriptionsManager(models.Manager):
 
     def _activate_subscription(self, subscription: "GymSubscription"):
 
-        if self._has_active_subscription(subscription.subscriber, subscription.pk):
+        if self._has_active_subscription(
+            subscription.subscriber,
+            subscription.gym,
+            subscription.pk,
+        ):
             raise APIError(GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS)
 
         subscription.activate()
         return subscription
 
-    def _has_active_subscription(self, subscriber, exclude_pk=None):
+    def _has_active_subscription(self, subscriber, gym, exclude_pk=None):
         qs = self.filter(
             subscriber=subscriber,
+            gym=gym,
             status=GymSubscription.Status.ACTIVE,
         )
 
@@ -213,19 +215,29 @@ class GymSubscription(models.Model):
     subscriber = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
-        related_name="gym_subscriptions",
+        related_name="my_subscriptions",
+        editable=False,
     )
 
     plan = models.ForeignKey(
         GymMembershipPlan,
         on_delete=models.PROTECT,
         related_name="subscriptions",
+        editable=False,
+    )
+
+    gym = models.ForeignKey(
+        Gym,
+        on_delete=models.PROTECT,
+        related_name="subscriptions",
+        editable=False,
     )
 
     order_item = models.OneToOneField(
         OrderItem,
         on_delete=models.PROTECT,
         related_name="gym_subscription",
+        editable=False,
     )
 
     status = models.CharField(
@@ -264,11 +276,21 @@ class GymSubscription(models.Model):
 
         constraints = [
             models.UniqueConstraint(
-                fields=["subscriber"],
+                fields=["subscriber", "gym"],
                 condition=models.Q(status="ACTIVE"),
-                name="unique_active_subscription_per_user",
+                name="unique_active_subscription_per_user_gym",
+            ),
+            models.UniqueConstraint(
+                fields=["subscriber", "gym"],
+                condition=models.Q(status="PENDING"),
+                name="unique_pending_subscription_per_user_gym",
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            self.gym_id = self.plan.gym_id
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.subscriber_id} - {self.plan_id} [{self.status}]"
@@ -331,7 +353,6 @@ class GymSubscription(models.Model):
             self.status = self.Status.CANCELLED
             self.end_reason = self.EndReason.CANCELLED
             self.cancelled_at = timezone.now()
-
             self.save(
                 update_fields=["status", "end_reason", "cancelled_at", "updated_at"]
             )

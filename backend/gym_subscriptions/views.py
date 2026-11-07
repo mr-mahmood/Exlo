@@ -70,10 +70,10 @@ class MySubscriptionDetailAPIView(APIView):
 
 
 class CancelSubscriptionAPIView(APIView):
-    serializer_class = GymSubscriptionReadSerializer
-
     def post(self, request, subscription_id):
 
+        # this cancell a user subscription with there demand and remove it
+        # its diffrent from refunding
         subscription = GymSubscription.objects.get_subscription(
             subscription_id=subscription_id,
             subscriber=request.user,
@@ -81,3 +81,12 @@ class CancelSubscriptionAPIView(APIView):
 
         GymSubscription.objects.cancel_subscription(subscription)
         return Response(status=status.HTTP_200_OK)
+
+
+class RefundSubscriptionAPIView(APIView):
+    def post(self, request, subscription_id):
+        # TODO: implement the avalability of canceling and refunding
+        # with rule that all suncription from active and pendings
+        # can be refund if they are within there first 48 hours and have not been used(no check in and visit consuming)
+        # if the condition fullfill then we refund and cancel the sunsription if not we return error
+        pass

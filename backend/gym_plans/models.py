@@ -69,7 +69,7 @@ class GymMembershipPlan(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
     duration_months = models.IntegerField(default=1)
-    visit_limit = models.IntegerField(default=0)
+    visit_limit = models.IntegerField(default=4)
     is_active = models.BooleanField(default=True)
 
     price = models.PositiveBigIntegerField(default=0)
@@ -89,6 +89,17 @@ class GymMembershipPlan(models.Model):
             models.Index(fields=["gym", "is_active"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["deleted_at"]),
+        ]
+
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(duration_months__gte=1),
+                name="gym_plan_min_duration_one_month",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(visit_limit__gte=4),
+                name="gym_plan_min_visits_four",
+            ),
         ]
 
     def __str__(self):

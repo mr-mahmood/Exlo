@@ -158,7 +158,7 @@ class SubscriptionSweepTaskTest(TestCase):
             self.users[0], status="ACTIVE", expires_at=self.now - timedelta(days=1),
         )
         first_pending = self.make_subscription(self.users[0], status="PENDING")
-        later_pending = self.make_subscription(self.users[0], status="PENDING")
+        later_pending = self.make_subscription(self.users[0], plan=self.plan_b, status="PENDING")
 
         self.run_sweep()
 
@@ -181,6 +181,22 @@ class SubscriptionSweepTaskTest(TestCase):
         self.run_sweep()
 
         self.assertEqual(list(GymSubscription.objects.order_by("pk").values()), original)
+
+    def test_sweep_does_not_change_other_gym_active_subscription(self):
+        stale = self.make_subscription(
+            self.users[0], status="ACTIVE", expires_at=self.now - timedelta(days=1),
+        )
+        other = self.make_subscription(
+            self.users[0], plan=self.plan_b, status="ACTIVE",
+            expires_at=self.now + timedelta(days=5),
+        )
+
+        self.run_sweep()
+
+        stale.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(stale.status, "EXPIRED")
+        self.assertEqual(other.status, "ACTIVE")
 
     def test_sweep_without_subscriptions_succeeds(self):
         self.run_sweep()

@@ -4,20 +4,22 @@ from django.utils import timezone
 from celery import shared_task
 
 from gym_subscriptions.models import GymSubscription
+from users.models import User
 
 
 @shared_task
 def sweep_gym_subscriptions():
     now = timezone.now()
 
-    stale_ids = list(
+    stale_subscriptions = list(
         GymSubscription.objects.filter(status=GymSubscription.Status.ACTIVE)
         .filter(Q(expires_at__lte=now) | Q(remaining_visits__lte=0))
-        .values_list("id", flat=True)
+        .values_list("id", "subscriber_id")
     )
 
-    for subscription_id in stale_ids:
+    for subscription_id, subscriber_id in stale_subscriptions:
         with transaction.atomic():
+            subscriber = User.objects.select_for_update().get(pk=subscriber_id)
             subscription: GymSubscription = (
                 GymSubscription.objects.select_for_update()
                 .filter(
@@ -32,4 +34,4 @@ def sweep_gym_subscriptions():
 
             reason = subscription.expire_reason
             subscription.expire(reason=reason)
-            GymSubscription.objects._promote_next_any(subscription.subscriber)
+            GymSubscription.objects._promote_next_for_gym(subscriber, subscription.gym)
