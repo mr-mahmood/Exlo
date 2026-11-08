@@ -53,21 +53,12 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Custom manager
     objects: OrderManager = OrderManager()
 
     class Meta:
         db_table = "order"
         ordering = ["-created_at"]
+
         indexes = [
             models.Index(fields=["buyer"]),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(subtotal_amount__gte=0)
-                & models.Q(discount_amount__gte=0)
-                & models.Q(tax_amount__gte=0)
-                & models.Q(total_amount__gte=0),
-                name="order_amounts_nonnegative",
-            ),
         ]

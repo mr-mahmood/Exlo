@@ -32,12 +32,6 @@ class Gym(models.Model):
         max_length=255,
     )
 
-    gym_code = models.CharField(
-        max_length=6,
-        unique=True,
-        editable=False,
-    )
-
     province = models.CharField(
         max_length=255,
         null=True,
@@ -74,7 +68,6 @@ class Gym(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Custom manager
     objects: GymManager = GymManager()
 
     class Meta:
@@ -83,28 +76,11 @@ class Gym(models.Model):
 
         indexes = [
             models.Index(fields=["name"]),
-            models.Index(fields=["gym_code"]),
             models.Index(fields=["created_at"]),
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.gym_code})"
-
-    def _generate_unique_gym_code(self):
-        while True:
-            CHARACTERS = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
-            LENGTH = 6
-
-            code = "".join(secrets.choice(CHARACTERS) for _ in range(LENGTH))
-
-            if not Gym.objects.filter(gym_code=code):
-                return code
-
-    def save(self, *args, **kwargs):
-        """Auto-generate gym_code on creation."""
-        if not self.gym_code:
-            self.gym_code = self._generate_unique_gym_code()
-        super().save(*args, **kwargs)
+        return f"{self.name}"
 
     def activate(self):
         if self.is_active == False:

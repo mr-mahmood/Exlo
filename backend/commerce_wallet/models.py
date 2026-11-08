@@ -30,7 +30,6 @@ class Wallet(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Custom manager
     objects: WalletManager = WalletManager()
 
     class Meta:
@@ -45,7 +44,7 @@ class Wallet(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.owner.full_name} -> {self.balance:,} Rial"
+        return f"{self.owner.phone_number} -> {self.balance:,} Rial"
 
     def credit(self, amount):
         self.balance += amount

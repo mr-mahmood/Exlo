@@ -69,7 +69,6 @@ class GymAnnouncement(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Custom manager
     objects: GymAnnouncementManager = GymAnnouncementManager()
 
     class Meta:

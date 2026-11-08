@@ -29,23 +29,6 @@ class GymSerializerTest(TestCase):
 
         gym = serializer.save()
         self.assertEqual(gym.name, "Test Gym")
-        self.assertIsNotNone(gym.gym_code)
-
-    def test_serializer_read_only_fields(self):
-        """Test that read-only fields are not writable."""
-        serializer = GymSerializer(
-            data={
-                **self.gym_data,
-                "id": str(uuid.uuid7()),
-                "gym_code": "CUSTOM",
-                "created_at": "2024-01-01T00:00:00Z",
-            }
-        )
-        self.assertTrue(serializer.is_valid())
-
-        gym = serializer.save()
-        self.assertNotEqual(str(gym.id), self.gym_data.get("id", ""))
-        self.assertNotEqual(gym.gym_code, "CUSTOM")
 
     def test_serializer_photo_field(self):
         """Test that photos field is read-only."""

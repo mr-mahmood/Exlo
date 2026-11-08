@@ -14,7 +14,6 @@ class GymSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "name",
-            "gym_code",
             "province",
             "city",
             "address",
@@ -26,7 +25,6 @@ class GymSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "gym_code",
             "photos",
             "created_at",
         ]

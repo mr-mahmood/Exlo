@@ -13,7 +13,7 @@ class RefundManager(models.Manager):
 class Refund(models.Model):
     class Status(models.TextChoices):
         PENDING_REVIEW = "PENDING_REVIEW"
-        SUCCEEDED = "SUCCEEDED"
+        APPROVED = "APPROVED"
         REJECTED = "REJECTED"
 
     id = models.UUIDField(
@@ -44,7 +44,6 @@ class Refund(models.Model):
 
     requested_at = models.DateTimeField(auto_now_add=True)
     request_reason = models.TextField()
-
     review_note = models.TextField(null=True, blank=True)
     reviewed_at = models.DateTimeField(null=True, blank=True)
     reviewed_by_admin = models.ForeignKey(
@@ -60,15 +59,8 @@ class Refund(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # Custom manager
     objects: RefundManager = RefundManager()
 
     class Meta:
         db_table = "refund"
         ordering = ["-created_at"]
-        constraints = [
-            models.CheckConstraint(
-                condition=Q(amount__gt=0),
-                name="refund_amount_positive",
-            ),
-        ]

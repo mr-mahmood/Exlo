@@ -162,7 +162,6 @@ class User(AbstractUser):
     USERNAME_FIELD = "phone_number"
     REQUIRED_FIELDS = ["first_name", "last_name"]
 
-    # Custom manager
     objects: UserManager = UserManager()
 
     class Meta:

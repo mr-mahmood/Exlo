@@ -11,16 +11,8 @@ class GymMembershipPlanManager(models.Manager):
 
     @transaction.atomic
     def create_plan(self, **extra_fields) -> "GymMembershipPlan":
-        # Create commerce product first
-        commerce_product = CommerceProduct.objects.create(
-            product_type=CommerceProduct.ProductType.GYM_MEMBERSHIP
-        )
-
-        # Create the plan with commerce_product as id
-        plan = self.model(
-            id=commerce_product,
-            **extra_fields,
-        )
+        commerce_product = CommerceProduct.objects.create_gym_membership_product()
+        plan = self.model(id=commerce_product, **extra_fields)
         plan.save(using=self._db)
         return plan
 
@@ -78,7 +70,6 @@ class GymMembershipPlan(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
 
-    # Custom manager
     objects: GymMembershipPlanManager = GymMembershipPlanManager()
 
     class Meta:

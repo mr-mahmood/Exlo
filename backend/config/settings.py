@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "commerce_products",
     "commerce_orders",
     "commerce_payments",
+    "commerce_payments_gateway",
     "commerce_refunds",
     "commerce_wallet",
     "commerce_wallet_ledger",

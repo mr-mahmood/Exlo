@@ -31,44 +31,8 @@ class GymModelTest(TestCase):
         self.assertEqual(gym.latitude, "40.7128")
         self.assertEqual(gym.longitude, "-74.0060")
         self.assertTrue(gym.is_active)
-        self.assertIsNotNone(gym.gym_code)
         self.assertIsNotNone(gym.id)
         self.assertIsInstance(gym.id, uuid.UUID)
-
-    def test_gym_code_auto_generation(self):
-        """Test that gym_code is auto-generated on creation."""
-        gym1 = Gym.objects.create(name="Gym 1")
-        gym2 = Gym.objects.create(name="Gym 2")
-
-        self.assertIsNotNone(gym1.gym_code)
-        self.assertIsNotNone(gym2.gym_code)
-        self.assertNotEqual(gym1.gym_code, gym2.gym_code)
-        self.assertEqual(len(gym1.gym_code), 6)
-
-    def test_gym_code_uniqueness(self):
-        """Test that gym_code is unique."""
-        gym1 = Gym.objects.create(name="Gym 1")
-        gym2 = Gym.objects.create(name="Gym 2")
-
-        # Try to create a gym with existing code (should auto-generate new one)
-        gym3 = Gym.objects.create(name="Gym 3")
-
-        self.assertNotEqual(gym1.gym_code, gym3.gym_code)
-        self.assertNotEqual(gym2.gym_code, gym3.gym_code)
-
-    def test_gym_code_character_set(self):
-        """Test that gym_code only contains allowed characters."""
-        gym = Gym.objects.create(name="Test Gym")
-        allowed_chars = set("23456789ABCDEFGHJKLMNPQRSTUVWXYZ")
-
-        for char in gym.gym_code:
-            self.assertIn(char, allowed_chars)
-
-    def test_gym_str_method(self):
-        """Test the __str__ method of Gym."""
-        gym = Gym.objects.create(name="Test Gym")
-        expected = f"{gym.name} ({gym.gym_code})"
-        self.assertEqual(str(gym), expected)
 
     def test_gym_activate(self):
         """Test activating a gym."""

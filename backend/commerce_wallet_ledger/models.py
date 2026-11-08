@@ -73,30 +73,9 @@ class WalletLedger(models.Model):
     balance_before = models.PositiveBigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
-    # Custom manager
     objects: WalletLedgerManager = WalletLedgerManager()
 
     class Meta:
         db_table = "wallet_ledger"
         ordering = ["-created_at"]
         indexes = [models.Index(fields=["wallet", "-created_at"])]
-
-        constraints = [
-            models.CheckConstraint(
-                name="wallet_ledger_amount_positive",
-                condition=models.Q(amount__gt=0),
-            ),
-            models.CheckConstraint(
-                name="wallet_ledger_balance_before_nonnegative",
-                condition=models.Q(balance_before__gte=0),
-            ),
-            models.CheckConstraint(
-                name="wallet_ledger_refund_credit_only",
-                condition=(
-                    models.Q(reason="REFUND")
-                    & models.Q(refund__isnull=False)
-                    & models.Q(entry_type="CREDIT")
-                )
-                | (models.Q(refund__isnull=True) & ~models.Q(reason="REFUND")),
-            ),
-        ]

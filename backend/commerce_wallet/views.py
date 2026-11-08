@@ -11,7 +11,8 @@ from commerce_wallet.models import Wallet
 from commerce_wallet_ledger.models import WalletLedger
 from commerce_wallet.serializers import WalletSerializer
 from commerce_wallet.validators import parse_topup_amount
-from commerce_payments.models import Payment, PaymentGateway
+from commerce_payments.models import Payment
+from commerce_payments_gateway.models import PaymentGateway
 from commerce_payments.services import ZibalIPG, ZibalEBank
 from core.errors import APIError, PaymentError, PaymentGatewayError
 
