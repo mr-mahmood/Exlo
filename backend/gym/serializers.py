@@ -26,6 +26,7 @@ class GymSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id",
             "photos",
+            "is_active",
             "created_at",
         ]
 

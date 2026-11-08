@@ -102,7 +102,7 @@ class GymUpdateAPIView(APIView):
 
 
 class GymDeleteAPIView(APIView):
-    permission_classes = [IsAdminOrGymOwner]
+    permission_classes = [IsAdmin]
 
     def delete(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=False)
@@ -114,7 +114,7 @@ class GymDeleteAPIView(APIView):
 
 
 class GymRestoreAPIView(APIView):
-    permission_classes = [IsAdminOrGymOwner]
+    permission_classes = [IsAdmin]
 
     def post(self, request, gym_id):
         gym = Gym.objects.get_gym(gym_id=gym_id, active_only=False)

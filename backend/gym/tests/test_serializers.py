@@ -37,3 +37,31 @@ class GymSerializerTest(TestCase):
 
         self.assertIn("photos", serializer.data)
         self.assertEqual(serializer.data["photos"], [])
+
+    def test_serializer_cannot_set_active_state_on_create(self):
+        serializer = GymSerializer(data={**self.gym_data, "is_active": False})
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertNotIn("is_active", serializer.validated_data)
+
+        gym = serializer.save()
+        gym.refresh_from_db()
+        self.assertTrue(gym.is_active)
+        self.assertTrue(serializer.data["is_active"])
+
+    def test_serializer_cannot_change_active_state_on_update(self):
+        for active in (True, False):
+            with self.subTest(is_active=active):
+                gym = Gym.objects.create(**self.gym_data, is_active=active)
+                serializer = GymSerializer(
+                    gym,
+                    data={"city": "Updated City", "is_active": not active},
+                    partial=True,
+                )
+                self.assertTrue(serializer.is_valid(), serializer.errors)
+                self.assertNotIn("is_active", serializer.validated_data)
+                serializer.save()
+
+                gym.refresh_from_db()
+                self.assertEqual(gym.city, "Updated City")
+                self.assertEqual(gym.is_active, active)
+                self.assertEqual(serializer.data["is_active"], active)
