@@ -10,7 +10,7 @@ from django.core.cache import cache
 from django.db import IntegrityError, connections
 from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from core.errors import APIError, GymSubscriptionError
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
@@ -69,7 +69,7 @@ class GymSubscriptionTestBase(TestCase):
             price=30000,
         )
 
-    def create_order_item(self, user, plan):
+    def create_order(self, user, plan):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
@@ -78,33 +78,24 @@ class GymSubscriptionTestBase(TestCase):
             tax_amount=0,
             total_amount=100000,
             paid_at=timezone.now(),
-        )
-
-        return OrderItem.objects.create(
             commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={
+            product_snapshot={
                 "id": str(plan.pk),
                 "name": plan.name,
                 "gym_id": str(plan.gym_id),
                 "duration_months": plan.duration_months,
                 "visit_limit": plan.visit_limit,
             },
-            quantity=1,
-            unit_price=100000,
-            subtotal_amount=100000,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=100000,
         )
 
+        return order
+
     def create_subscription(self, user, plan):
-        order_item = self.create_order_item(user, plan)
+        order = self.create_order(user, plan)
 
         return GymSubscription.objects.create_subscription(
             subscriber=user,
-            order_item=order_item,
+            order=order,
         )
 
     def create_raw_subscription(
@@ -121,7 +112,7 @@ class GymSubscriptionTestBase(TestCase):
         cancelled_at=None,
         created_at=None,
     ):
-        order_item = self.create_order_item(user, plan)
+        order = self.create_order(user, plan)
 
         # New design: remaining_visits and duration_months are set at creation
         # from the plan. Default to plan values unless explicitly overridden.
@@ -133,7 +124,7 @@ class GymSubscriptionTestBase(TestCase):
         subscription = GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
-            order_item=order_item,
+            order=order,
             status=status,
             remaining_visits=remaining_visits,
             duration_months=duration_months,
@@ -442,12 +433,12 @@ class GymSubscriptionCreationTests(GymSubscriptionTestBase):
         self.assertGreaterEqual(subscription.started_at, before)
         self.assertLessEqual(subscription.started_at, after)
 
-    def test_create_subscription_links_order_item(self):
+    def test_create_subscription_links_order(self):
         subscription = self.create_subscription(self.user, self.plan)
 
-        self.assertIsNotNone(subscription.order_item_id)
+        self.assertIsNotNone(subscription.order_id)
         self.assertEqual(
-            subscription.order_item.order.buyer_id,
+            subscription.order.buyer_id,
             self.user.id,
         )
         self.assertEqual(subscription.plan_id, self.plan.pk)
@@ -1978,15 +1969,11 @@ class GymSubscriptionRecoveryConcurrencyTests(TransactionTestCase):
             buyer=self.user, status=Order.Status.PAID,
             subtotal_amount=1000, discount_amount=0, tax_amount=0,
             total_amount=1000, paid_at=timezone.now(),
-        )
-        order_item = OrderItem.objects.create(
-            order=order, commerce_product=plan.id,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={}, quantity=1, unit_price=1000,
-            subtotal_amount=1000, discount_amount=0, tax_amount=0, total_amount=1000,
+            commerce_product=plan.id,
+            product_snapshot={},
         )
         self.pending = GymSubscription.objects.create(
-            subscriber=self.user, plan=plan, order_item=order_item,
+            subscriber=self.user, plan=plan, order=order,
             status="PENDING", duration_months=1, remaining_visits=30,
         )
 

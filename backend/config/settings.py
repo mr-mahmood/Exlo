@@ -68,7 +68,6 @@ INSTALLED_APPS = [
     "commerce_orders",
     "commerce_payments",
     "commerce_refunds",
-    "commerce_commissions",
     "commerce_wallet",
     "commerce_wallet_ledger",
 ]
@@ -126,10 +125,7 @@ POSTGRES_DB = os.getenv("POSTGRES_DB", "exlo")
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=(
-            f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@"
-            f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-        ),
+        default=(f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@" f"{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"),
         conn_max_age=0,
         ssl_require=False,
     )
@@ -145,9 +141,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
-    },
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},

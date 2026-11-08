@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from core.errors import (
     GymSubscriptionError,
     UserAccountError,
@@ -106,7 +106,7 @@ class ViewTestBase(TestCase):
     def tearDown(self):
         cache.clear()
 
-    def _make_order_item(self, user, plan):
+    def _make_order(self, user, plan):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
@@ -115,25 +115,16 @@ class ViewTestBase(TestCase):
             tax_amount=0,
             total_amount=0,
             paid_at=timezone.now(),
+            commerce_product=plan.id,
+            product_snapshot={},
         )
 
-        return OrderItem.objects.create(
-            commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=0,
-            subtotal_amount=0,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=0,
-        )
+        return order
 
     def create_active_subscription(self, user, plan):
         return GymSubscription.objects.create_subscription(
             subscriber=user,
-            order_item=self._make_order_item(user, plan),
+            order=self._make_order(user, plan),
         )
 
     def url(self, gym_id):

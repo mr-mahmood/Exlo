@@ -29,7 +29,6 @@ class CommerceProduct(models.Model):
         db_table = "commerce_product"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["product_type"]),
             models.Index(fields=["created_at"]),
             models.Index(fields=["product_type", "created_at"]),
         ]

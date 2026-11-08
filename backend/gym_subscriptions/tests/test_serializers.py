@@ -4,7 +4,7 @@
 from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
@@ -42,26 +42,15 @@ class GymSubscriptionSerializerTestBase(TestCase):
             tax_amount=0,
             total_amount=100000,
             paid_at=timezone.now(),
-        )
-
-        self.order_item = OrderItem.objects.create(
             commerce_product=self.plan.id,
-            order=self.order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={"id": str(self.plan.pk), "name": self.plan.name},
-            quantity=1,
-            unit_price=100000,
-            subtotal_amount=100000,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=100000,
+            product_snapshot={"id": str(self.plan.pk), "name": self.plan.name},
         )
 
     def make_subscription(self, **overrides):
         defaults = dict(
             subscriber=self.user,
             plan=self.plan,
-            order_item=self.order_item,
+            order=self.order,
             status=GymSubscription.Status.PENDING,
             remaining_visits=0,
         )
@@ -364,23 +353,13 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
             tax_amount=0,
             total_amount=100000,
             paid_at=timezone.now(),
-        )
-        order_item_2 = OrderItem.objects.create(
             commerce_product=self.plan.id,
-            order=order_2,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=100000,
-            subtotal_amount=100000,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=100000,
+            product_snapshot={},
         )
         GymSubscription.objects.create(
             subscriber=self.user,
             plan=self.plan,
-            order_item=order_item_2,
+            order=order_2,
             status=GymSubscription.Status.CANCELLED,
             end_reason=GymSubscription.EndReason.CANCELLED,
             cancelled_at=timezone.now(),
@@ -409,7 +388,7 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
 # ============================================================================
 class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase):
     def test_serializer_does_not_fetch_per_row_when_prefetched(self):
-        order_items = []
+        orders = []
         for _ in range(5):
             order = Order.objects.create(
                 buyer=self.user,
@@ -419,26 +398,15 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                 tax_amount=0,
                 total_amount=100000,
                 paid_at=timezone.now(),
+                commerce_product=self.plan.id,
+                product_snapshot={},
             )
-            order_items.append(
-                OrderItem.objects.create(
-                    commerce_product=self.plan.id,
-                    order=order,
-                    item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-                    item_snapshot={},
-                    quantity=1,
-                    unit_price=100000,
-                    subtotal_amount=100000,
-                    discount_amount=0,
-                    tax_amount=0,
-                    total_amount=100000,
-                )
-            )
-        for oi in order_items:
+            orders.append(order)
+        for oi in orders:
             GymSubscription.objects.create(
                 subscriber=self.user,
                 plan=self.plan,
-                order_item=oi,
+                order=oi,
                 status=GymSubscription.Status.EXPIRED,
             )
 
@@ -448,7 +416,7 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
             list(GymSubscriptionReadSerializer(qs, many=True).data)
 
     def test_serializer_fires_extra_queries_without_prefetch(self):
-        order_items = []
+        orders = []
         for _ in range(3):
             order = Order.objects.create(
                 buyer=self.user,
@@ -458,26 +426,15 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                 tax_amount=0,
                 total_amount=100000,
                 paid_at=timezone.now(),
+                commerce_product=self.plan.id,
+                product_snapshot={},
             )
-            order_items.append(
-                OrderItem.objects.create(
-                    commerce_product=self.plan.id,
-                    order=order,
-                    item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-                    item_snapshot={},
-                    quantity=1,
-                    unit_price=100000,
-                    subtotal_amount=100000,
-                    discount_amount=0,
-                    tax_amount=0,
-                    total_amount=100000,
-                )
-            )
-        for oi in order_items:
+            orders.append(order)
+        for oi in orders:
             GymSubscription.objects.create(
                 subscriber=self.user,
                 plan=self.plan,
-                order_item=oi,
+                order=oi,
                 status=GymSubscription.Status.EXPIRED,
             )
 

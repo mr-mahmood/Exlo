@@ -88,17 +88,14 @@ class WalletTopUpCallbackAPIView(APIView):
                 # -------------------------------------------------
                 try:
                     gateway: PaymentGateway = (
-                        PaymentGateway.objects.select_for_update(
-                            of=("self", "payment", "payment__wallet")
-                        )
-                        .select_related("payment", "payment__wallet")
+                        PaymentGateway.objects.select_for_update(of=("self", "payment"))
+                        .select_related("payment")
                         .get(track_id=track_id)
                     )
                 except PaymentGateway.DoesNotExist:
                     raise APIError(PaymentGatewayError.GATEWAY_NOT_FOUND)
 
                 payment: Payment = gateway.payment
-                wallet: Wallet = payment.wallet
 
                 # -------------------------------------------------
                 # Validate the callback against the locked payment.
@@ -106,8 +103,11 @@ class WalletTopUpCallbackAPIView(APIView):
                 if (
                     str(payment.id) != str(order_id)
                     or payment.purpose != Payment.Purpose.WALLET_TOP_UP
+                    or payment.wallet_id is None
                 ):
                     raise APIError(PaymentError.PAYMENT_NOT_FOUND)
+
+                wallet: Wallet = Wallet.objects.select_for_update().get(pk=payment.wallet_id)
 
                 # -------------------------------------------------
                 # Idempotency check.
@@ -118,17 +118,13 @@ class WalletTopUpCallbackAPIView(APIView):
                     return redirect("/wallet/payment/result?status=success")
                 if payment.status == Payment.Status.FAILED:
                     return redirect("/wallet/payment/result?status=failed")
-                if payment.status == Payment.Status.CANCELLED:
-                    return redirect("/wallet/payment/result?status=cancelled")
-                if payment.status == Payment.Status.REFUNDED:
-                    return redirect("/wallet/payment/result?status=refunded")
 
                 # -------------------------------------------------
                 # Validate gateway callback status.
                 # -------------------------------------------------
                 if gateway_status not in ("1", "2"):
                     if gateway_status == "3":
-                        payment.mark_cancelled()
+                        payment.mark_failed()
                         return redirect("/wallet/payment/result?status=cancelled")
                     payment.mark_failed()
                     return redirect("/wallet/payment/result?status=failed")
@@ -158,10 +154,13 @@ class WalletTopUpCallbackAPIView(APIView):
                 #   2. rollback everything and refund the payment
                 # ---------------------------------------------------------
                 payment_verified = True
+                balance_before = wallet.balance
+                wallet.credit(payment.amount)
                 WalletLedger.objects.create_top_up_ledger(
                     wallet=wallet,
                     payment=payment,
                     amount=payment.amount,
+                    balance_before=balance_before,
                 )
                 payment.mark_succeeded()
                 gateway.mark_verified(
@@ -202,7 +201,9 @@ class WalletTopUpCallbackAPIView(APIView):
                 amount=payment.amount,
                 description=(f"wallet topup refund for payment={payment.id}"),
             )
+            if not refund_resp or refund_resp.get("result") != 100:
+                raise APIError(PaymentError.GATEWAY_ERROR)
 
-            payment.mark_refunded()
+            payment.mark_failed()
             # TODO: queue refund SMS notification
             return redirect("/wallet/payment/result?status=refunded")

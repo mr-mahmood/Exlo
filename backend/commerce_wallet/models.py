@@ -37,18 +37,21 @@ class Wallet(models.Model):
         db_table = "wallet"
         ordering = ["-created_at"]
 
-        indexes = [
-            models.Index(fields=["created_at"]),
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(balance__gte=0),
+                name="wallet_balance_nonnegative",
+            ),
         ]
 
     def __str__(self):
         return f"{self.owner.full_name} -> {self.balance:,} Rial"
 
-    def _credit(self, amount):
+    def credit(self, amount):
         self.balance += amount
         self.save(update_fields=["balance", "updated_at"])
 
-    def _debit(self, amount):
+    def debit(self, amount):
         if self.balance - amount < 0:
             raise APIError(WalletError.BALANCE_NOT_ENOUGH)
 

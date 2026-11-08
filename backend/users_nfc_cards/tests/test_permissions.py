@@ -4,7 +4,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from gym.models import Gym
 from gym_auth.models import UserGymRole
 from gym_plans.models import GymMembershipPlan
@@ -126,10 +126,10 @@ class PermissionTestBase(TestCase):
     def create_active_subscription(self, user, plan):
         return GymSubscription.objects.create_subscription(
             subscriber=user,
-            order_item=self._make_order_item(user, plan),
+            order=self._make_order(user, plan),
         )
 
-    def _make_order_item(self, user, plan):
+    def _make_order(self, user, plan):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
@@ -138,20 +138,11 @@ class PermissionTestBase(TestCase):
             tax_amount=0,
             total_amount=0,
             paid_at=timezone.now(),
+            commerce_product=plan.id,
+            product_snapshot={},
         )
 
-        return OrderItem.objects.create(
-            commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=0,
-            subtotal_amount=0,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=0,
-        )
+        return order
 
 
 class HasPermissionTests(PermissionTestBase):
@@ -352,7 +343,7 @@ class HasObjectPermissionTests(PermissionTestBase):
     def test_owner_permission_ignores_pending_target_subscription(self):
         sub = GymSubscription.objects.create_subscription(
             subscriber=self.target,
-            order_item=self._make_order_item(
+            order=self._make_order(
                 self.target,
                 self.plan_a,
             ),

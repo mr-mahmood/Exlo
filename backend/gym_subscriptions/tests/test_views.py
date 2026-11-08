@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from core.cache import USER_SUBSCRIPTION, cache_key
 from core.errors import GymSubscriptionError
 from gym.models import Gym
@@ -58,7 +58,7 @@ class SubscriptionViewTestBase(TestCase):
     def authenticate(self, user):
         self.client.force_authenticate(user=user)
 
-    def make_order_item(self, user, plan):
+    def make_order(self, user, plan):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
@@ -67,19 +67,10 @@ class SubscriptionViewTestBase(TestCase):
             tax_amount=0,
             total_amount=100000,
             paid_at=timezone.now(),
-        )
-        return OrderItem.objects.create(
             commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={"id": str(plan.pk), "name": plan.name},
-            quantity=1,
-            unit_price=100000,
-            subtotal_amount=100000,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=100000,
+            product_snapshot={"id": str(plan.pk), "name": plan.name},
         )
+        return order
 
     def make_subscription(
         self,
@@ -93,11 +84,11 @@ class SubscriptionViewTestBase(TestCase):
         end_reason=None,
         cancelled_at=None
     ):
-        order_item = self.make_order_item(user, plan)
+        order = self.make_order(user, plan)
         return GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
-            order_item=order_item,
+            order=order,
             status=status,
             remaining_visits=remaining_visits,
             started_at=started_at,

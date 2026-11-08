@@ -18,8 +18,7 @@ from gym_announcements.models import GymAnnouncement
 from gym_auth.models import UserGymRole
 from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
-from commerce_orders.models import Order, OrderItem
-from commerce_products.models import CommerceProduct
+from commerce_orders.models import Order
 from django.conf import settings
 
 
@@ -98,17 +97,11 @@ class GymAnnouncementViewsTest(TestCase):
             visit_limit=30,
             price=10000,
         )
-        order = Order.objects.create(buyer=user)
-        item = OrderItem.objects.create(
-            commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-        )
+        order = Order.objects.create(buyer=user, commerce_product=plan.id, product_snapshot={})
         return GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
-            order_item=item,
+            order=order,
             status=GymSubscription.Status.ACTIVE,
             remaining_visits=30,
             started_at=timezone.now(),

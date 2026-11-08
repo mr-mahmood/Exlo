@@ -7,7 +7,7 @@ from unittest.mock import patch
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from core.errors import APIError, GymVisitsError
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
@@ -52,22 +52,12 @@ class GymVisitModelTestBase(TestCase):
             tax_amount=0,
             total_amount=0,
             paid_at=timezone.now(),
-        )
-        item = OrderItem.objects.create(
             commerce_product=self.plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=0,
-            subtotal_amount=0,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=0,
+            product_snapshot={},
         )
         return GymSubscription.objects.create_subscription(
             subscriber=user,
-            order_item=item,
+            order=order,
         )
 
 

@@ -9,8 +9,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from commerce_orders.models import Order, OrderItem
-from commerce_products.models import CommerceProduct
+from commerce_orders.models import Order
 from config.celery import app
 from gym.models import Gym
 from gym_plans.models import GymMembershipPlan
@@ -89,15 +88,11 @@ class SubscriptionSweepTaskTest(TestCase):
             buyer=user, status=Order.Status.PAID,
             subtotal_amount=1000, discount_amount=0, tax_amount=0,
             total_amount=1000, paid_at=self.now,
-        )
-        item = OrderItem.objects.create(
-            order=order, commerce_product=plan.id,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={}, quantity=1, unit_price=1000,
-            subtotal_amount=1000, discount_amount=0, tax_amount=0, total_amount=1000,
+            commerce_product=plan.id,
+            product_snapshot={},
         )
         return GymSubscription.objects.create(
-            subscriber=user, plan=plan, order_item=item,
+            subscriber=user, plan=plan, order=order,
             **{"duration_months": 1, "remaining_visits": 30, **values},
         )
 

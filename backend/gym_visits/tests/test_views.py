@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
-from commerce_orders.models import CommerceProduct, Order, OrderItem
+from commerce_orders.models import Order
 from core.errors import (
     APIError,
     GymDeviceError,
@@ -85,7 +85,7 @@ class NfcFlowTestBase(TestCase):
 
     # ------------------------------ helpers ------------------------------
 
-    def _make_order_item(self, user, plan):
+    def _make_order(self, user, plan):
         order = Order.objects.create(
             buyer=user,
             status=Order.Status.PAID,
@@ -94,20 +94,11 @@ class NfcFlowTestBase(TestCase):
             tax_amount=0,
             total_amount=0,
             paid_at=timezone.now(),
+            commerce_product=plan.id,
+            product_snapshot={},
         )
 
-        return OrderItem.objects.create(
-            commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=0,
-            subtotal_amount=0,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=0,
-        )
+        return order
 
     def make_active_subscription(
         self,
@@ -120,7 +111,7 @@ class NfcFlowTestBase(TestCase):
         return GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
-            order_item=self._make_order_item(user, plan),
+            order=self._make_order(user, plan),
             status=GymSubscription.Status.ACTIVE,
             expires_at=timezone.now() + timedelta(days=expires_in_days),
             remaining_visits=remaining,
@@ -130,7 +121,7 @@ class NfcFlowTestBase(TestCase):
     def create_subscription(self, user, plan):
         return GymSubscription.objects.create_subscription(
             subscriber=user,
-            order_item=self._make_order_item(user, plan),
+            order=self._make_order(user, plan),
         )
 
     def make_pending_subscription(self, user, plan):
@@ -1708,23 +1699,13 @@ class CheckInConcurrencyTests(TransactionTestCase):
             tax_amount=0,
             total_amount=1000,
             paid_at=timezone.now(),
-        )
-        item = OrderItem.objects.create(
             commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=1000,
-            subtotal_amount=1000,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=1000,
+            product_snapshot={},
         )
         subscription = GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
-            order_item=item,
+            order=order,
             status=GymSubscription.Status.ACTIVE,
             expires_at=timezone.now() + timedelta(days=30),
             remaining_visits=2,
@@ -1802,23 +1783,13 @@ class CheckOutConcurrencyTests(TransactionTestCase):
             tax_amount=0,
             total_amount=1000,
             paid_at=timezone.now(),
-        )
-        item = OrderItem.objects.create(
             commerce_product=plan.id,
-            order=order,
-            item_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-            item_snapshot={},
-            quantity=1,
-            unit_price=1000,
-            subtotal_amount=1000,
-            discount_amount=0,
-            tax_amount=0,
-            total_amount=1000,
+            product_snapshot={},
         )
         GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
-            order_item=item,
+            order=order,
             status=GymSubscription.Status.ACTIVE,
             expires_at=timezone.now() + timedelta(days=30),
             remaining_visits=2,

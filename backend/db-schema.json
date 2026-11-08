@@ -1,145 +1,9 @@
 {
   "tables": [
     {
-      "id": "eYenza6o9zUC_qsFl11jN",
-      "name": "referral_commission",
-      "comment": "",
-      "color": "#175e7a",
-      "fields": [
-        {
-          "id": "30KW61J0py5zAk4DmFJd2",
-          "name": "id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": true,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "XDIbK5TqO5eetCu8ncF07",
-          "name": "referral_id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "KD6AiobrvI8JQu0kGyF1w",
-          "name": "order_id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": true,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "EX7G83DHxUySnoabGhUzU",
-          "name": "status",
-          "type": "VARCHAR",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": "PENDING\nCREDITED\nFAILED",
-          "size": "255"
-        },
-        {
-          "id": "X6eu4lzt5TVP73WP_Gg24",
-          "name": "base_amount",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "TTiO2o3j2-6cK8RCD3EnG",
-          "name": "commission_rate",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "C4G9kguGDYSB_QGD2S3nH",
-          "name": "amount",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "-uHQk_SPT1fRaDs7DkhOr",
-          "name": "created_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "w4s1xmJFGbpP4JaQYEtk8",
-          "name": "updated_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "gKkNVfhEpOh5I-5mVbCuy",
-          "name": "credited_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        }
-      ],
-      "indices": [],
-      "uniqueConstraints": [],
-      "locked": false,
-      "collapsed": false,
-      "x": 2362.046585027845,
-      "y": 8746.897008724376,
-      "hidden": false
-    },
-    {
       "id": "XvjwExdpch3I4YPCakti5",
       "name": "refund",
-      "comment": "",
+      "comment": "At most one refund request per order. Rejected is terminal and cannot be reopened. Approval cancels the matching gym/coach subscription and credits buyer wallet in one DB transaction; on error the transaction rolls back and refund stays PENDING_REVIEW. SUCCEEDED means approved and credited. No refund_method: all refunds are paid to the buyer wallet. No partial refund and no FAILED state.",
       "color": "#175e7a",
       "fields": [
         {
@@ -156,15 +20,39 @@
         },
         {
           "id": "HozZbb1bVNWOc5s_3lKdU",
-          "name": "order_item_id",
+          "name": "order_id",
           "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": true,
+          "notNull": true,
+          "increment": false,
+          "comment": ""
+        },
+        {
+          "id": "jNJl5HtkX7GPxGz1_vPCoA",
+          "name": "payment_id",
+          "type": "UUID",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": true,
+          "notNull": true,
+          "increment": false,
+          "comment": "Must reference the single successful order payment."
+        },
+        {
+          "id": "zwqygrcfW2Kmg9ublI7zrw",
+          "name": "amount",
+          "type": "DECIMAL",
           "default": "",
           "check": "",
           "primary": false,
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": ""
+          "comment": "Full product amount; equals successful payment.amount - payment.gateway_fee_amount (equals order.total_amount). Credit this full amount to buyer wallet."
         },
         {
           "id": "rvMbl0hSrOVmwXEPG1W98",
@@ -174,7 +62,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": "",
           "size": "",
@@ -184,13 +72,13 @@
           "id": "AKGy_BM0Fw2tHpXPhSsx5",
           "name": "status",
           "type": "VARCHAR",
-          "default": "",
+          "default": "PENDING_REVIEW",
           "check": "",
           "primary": false,
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": "PENDING_REVIEW\nAPPROVED\nREJECTED",
+          "comment": "PENDING_REVIEW\nSUCCEEDED\nREJECTED",
           "size": "255"
         },
         {
@@ -213,7 +101,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         },
@@ -237,7 +125,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         },
@@ -249,7 +137,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         },
@@ -289,7 +177,7 @@
     {
       "id": "hrXIHZfDwPSOaGfJkKnXq",
       "name": "wallet_ledger",
-      "comment": "",
+      "comment": "Append-only wallet ledger. amount must be positive, entry_type is CREDIT or DEBIT. Allowed reasons: TOP_UP, ORDER_PAYMENT, REFUND, SALE_REVENUE. Unique refund_id is intentional. Seller revenue reversals, if required, must use SALE_REVENUE with entry_type DEBIT and order_id; do not reuse refund_id for a second ledger row.",
       "color": "#175e7a",
       "fields": [
         {
@@ -330,7 +218,7 @@
         },
         {
           "id": "_5gO78FFyKKQAIfWTS9cJ",
-          "name": "order_item_id",
+          "name": "order_id",
           "type": "UUID",
           "default": "",
           "check": "",
@@ -338,7 +226,7 @@
           "unique": false,
           "notNull": false,
           "increment": false,
-          "comment": "its for when we charge the seller account with the money of the things they sell so we need to know the order items one by one and put them here so we can say +20,000$ for order item 2 in order 19\nits also have reason=SALE_REVENUE",
+          "comment": "Order reference for seller sales and other order-related wallet entries; does not reference an order item.",
           "size": "",
           "values": []
         },
@@ -352,19 +240,7 @@
           "unique": true,
           "notNull": false,
           "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "WX8oOwvzSJEk4NHLbaJrq",
-          "name": "referral_commission_id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": true,
-          "notNull": false,
-          "increment": false,
-          "comment": ""
+          "comment": "Unique nullable reference: one refund creates at most one buyer wallet REFUND credit; prevents duplicate refund wallet credit."
         },
         {
           "id": "Wpu1vOUkXqmw_jmYFtYsw",
@@ -413,7 +289,7 @@
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": "TOP_UP\nORDER_PAYMENT\nREFUND\nREFERRAL_COMMISSION\nSALE_REVENUE",
+          "comment": "TOP_UP\nORDER_PAYMENT\nREFUND\nSALE_REVENUE",
           "size": "255"
         },
         {
@@ -452,7 +328,7 @@
     {
       "id": "BK4yaAGPPm1cNXCNEcWf2",
       "name": "wallet",
-      "comment": "",
+      "comment": "Exactly one wallet per user; enforce with unique owner_id / Django OneToOneField.",
       "color": "#175e7a",
       "fields": [
         {
@@ -474,7 +350,7 @@
           "default": "",
           "check": "",
           "primary": false,
-          "unique": false,
+          "unique": true,
           "notNull": true,
           "increment": false,
           "comment": ""
@@ -527,7 +403,7 @@
     {
       "id": "fPRXqmk_Em_159FsDaTWe",
       "name": "payment_gateway_transaction",
-      "comment": "",
+      "comment": "One-to-one gateway metadata for an ONLINE_GATEWAY payment attempt.",
       "color": "#175e7a",
       "fields": [
         {
@@ -549,7 +425,7 @@
           "default": "",
           "check": "",
           "primary": false,
-          "unique": false,
+          "unique": true,
           "notNull": true,
           "increment": false,
           "comment": ""
@@ -562,7 +438,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": "",
           "size": "",
@@ -576,7 +452,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": "",
           "size": "255"
@@ -589,9 +465,9 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
-          "comment": "",
+          "comment": "Only store masked card number returned by the provider; never a full PAN.",
           "size": "255"
         },
         {
@@ -670,7 +546,7 @@
     {
       "id": "AUCH7fKnsZXyXrjKfYgRI",
       "name": "payment",
-      "comment": "",
+      "comment": "One record per payment attempt. Exactly one method per order payment (WALLET or ONLINE_GATEWAY), no split payments. An order can have failed attempts but at most one SUCCEEDED attempt; enforce with a conditional unique constraint. WALLET_TOP_UP has wallet_id set, order_id null; ORDER_PAYMENT has order_id set. Refunds do not change payment status.",
       "color": "#175e7a",
       "fields": [
         {
@@ -741,13 +617,13 @@
           "id": "_uA-_m3AMy-SnKenZZEhI",
           "name": "status",
           "type": "VARCHAR",
-          "default": "",
+          "default": "PENDING",
           "check": "",
           "primary": false,
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": "PENDING\nSUCCEEDED\nFAILED\nCANCELLED\nREFUNDED",
+          "comment": "PENDING\nSUCCEEDED\nFAILED",
           "size": "255"
         },
         {
@@ -760,7 +636,19 @@
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": ""
+          "comment": "Full amount actually charged, including any added gateway fee; for an order payment: order.total_amount + gateway_fee_amount."
+        },
+        {
+          "id": "KoLPdIHHWCOYiDhGnTbBUQ",
+          "name": "gateway_fee_amount",
+          "type": "DECIMAL",
+          "default": "0",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "Nonnegative surcharge paid by buyer. Zero for wallet payment. Not included in refund to the buyer; for order payments, amount = order.total_amount + gateway_fee_amount."
         },
         {
           "id": "BksHQnBKHJcHJnHaYDPrq",
@@ -794,7 +682,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         },
@@ -806,35 +694,9 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
-        },
-        {
-          "id": "GAVzTTJzw_km7DfRJlUrS",
-          "name": "cancelled_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "utppriqYog9pWOMacCprd",
-          "name": "refunded_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": "",
-          "size": "",
-          "values": []
         }
       ],
       "indices": [],
@@ -846,207 +708,9 @@
       "hidden": false
     },
     {
-      "id": "7mDTIshYvPmGD0Q4WefVO",
-      "name": "order_item",
-      "comment": "",
-      "color": "#175e7a",
-      "fields": [
-        {
-          "id": "TQ0s3Y5VF4IXRxDoJvM30",
-          "name": "id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": true,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "AfyUivjnJ3x0S1HVYEUSe",
-          "name": "commerce_product_id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "_8cmkY9Hnt2ThdL-ACuc5",
-          "name": "order_id",
-          "type": "UUID",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "ohyQfcIneXyiRtZ7CeT-X",
-          "name": "is_refundable",
-          "type": "BOOLEAN",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "MpJoSzWocYfKRIhxOIx9K",
-          "name": "item_type",
-          "type": "VARCHAR",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": "",
-          "size": "255"
-        },
-        {
-          "id": "__Or5I4GrMVUIb5TW6ycs",
-          "name": "item_snapshot",
-          "type": "JSON",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "EUbmbtEDAGjsQc1AcxxVN",
-          "name": "quantity",
-          "type": "INTEGER",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "ooryGpd3oedJJ0oKgXVNp",
-          "name": "unit_price",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "ijBOvI5t2y9irbfQd0NqX",
-          "name": "subtotal_amount",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "Ymzm4pA49WPJWj4RwQdjx",
-          "name": "discount_amount",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "R5mRPLvHBX15BtMIrB4zY",
-          "name": "tax_amount",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "axaQzwIfNkPxmCcKFBqmG",
-          "name": "total_amount",
-          "type": "DECIMAL",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "cdT9VUwUPqrKHWUnzSl2w",
-          "name": "created_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        },
-        {
-          "id": "u4VzvqLEjdx-NkZUUyAbK",
-          "name": "updated_at",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": false,
-          "increment": false,
-          "comment": "",
-          "size": "",
-          "values": []
-        },
-        {
-          "id": "tZenLcJ4KpYHhFQQrP80G",
-          "name": "refundable_until",
-          "type": "TIMESTAMP",
-          "default": "",
-          "check": "",
-          "primary": false,
-          "unique": false,
-          "notNull": true,
-          "increment": false,
-          "comment": ""
-        }
-      ],
-      "indices": [],
-      "uniqueConstraints": [],
-      "locked": false,
-      "collapsed": false,
-      "x": 1641.727675197063,
-      "y": 6760,
-      "hidden": false
-    },
-    {
       "id": "Ej5t3Jy1uy6APACLIlRjg",
       "name": "order",
-      "comment": "",
+      "comment": "One order purchases exactly one unit of one commerce_product. Domain-specific gym/coach refund eligibility is checked by its API; do not store refund policy columns here. total_amount excludes any gateway surcharge, which belongs to payment.gateway_fee_amount. No expiration state.",
       "color": "#175e7a",
       "fields": [
         {
@@ -1074,16 +738,40 @@
           "comment": ""
         },
         {
-          "id": "lqpTevpua82dPc_5vmZTj",
-          "name": "status",
-          "type": "VARCHAR",
+          "id": "4VWdFcQxW0iiasmO3PA4Zg",
+          "name": "commerce_product_id",
+          "type": "UUID",
           "default": "",
           "check": "",
           "primary": false,
           "unique": false,
           "notNull": true,
           "increment": false,
-          "comment": "",
+          "comment": "Exactly one product per order; quantity is always one."
+        },
+        {
+          "id": "TPIqpgsWWA2A8tlUdRqVIg",
+          "name": "product_snapshot",
+          "type": "JSON",
+          "default": "",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "Immutable purchased plan/service details at purchase time, including the product type and terms."
+        },
+        {
+          "id": "lqpTevpua82dPc_5vmZTj",
+          "name": "status",
+          "type": "VARCHAR",
+          "default": "PENDING",
+          "check": "",
+          "primary": false,
+          "unique": false,
+          "notNull": true,
+          "increment": false,
+          "comment": "PENDING\nPAID\nCANCELLED\nREFUNDED",
           "size": "255"
         },
         {
@@ -1142,7 +830,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         },
@@ -3356,7 +3044,7 @@
     {
       "id": "4NLV1goHk9bjnrInaLCBp",
       "name": "coach_subscription",
-      "comment": "",
+      "comment": "Direct link to order. Refund policy and eligibility are checked by the respective domain API. Successful refund cancels this subscription as part of the same transaction as crediting buyer wallet.",
       "color": "#175e7a",
       "fields": [
         {
@@ -3397,15 +3085,15 @@
         },
         {
           "id": "t-MtjaI8IfwK2khnJyWlI",
-          "name": "order_item_id",
+          "name": "order_id",
           "type": "UUID",
           "default": "",
           "check": "",
           "primary": false,
-          "unique": false,
+          "unique": true,
           "notNull": true,
           "increment": false,
-          "comment": ""
+          "comment": "Unique order creating this paid entitlement (one product, quantity one)."
         },
         {
           "id": "74OgonCwY0x-cdb8SCN-j",
@@ -3476,7 +3164,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         }
@@ -3864,7 +3552,7 @@
     {
       "id": "1NWanuqGzoaewC6Zv3zkR",
       "name": "gym_members_subscriptions",
-      "comment": "",
+      "comment": "Direct link to order. Refund policy and eligibility are checked by the respective domain API. Successful refund cancels this subscription as part of the same transaction as crediting buyer wallet.",
       "color": "#175e7a",
       "fields": [
         {
@@ -3905,15 +3593,15 @@
         },
         {
           "id": "whzxEVoKtCTmxrRCG2KiY",
-          "name": "order_item_id",
+          "name": "order_id",
           "type": "UUID",
           "default": "",
           "check": "",
           "primary": false,
-          "unique": false,
+          "unique": true,
           "notNull": true,
           "increment": false,
-          "comment": ""
+          "comment": "Unique order creating this paid entitlement (one product, quantity one)."
         },
         {
           "id": "A5oioG5MiVCnc8Izklut1",
@@ -3935,7 +3623,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": "",
           "size": ""
@@ -4008,7 +3696,7 @@
           "check": "",
           "primary": false,
           "unique": false,
-          "notNull": true,
+          "notNull": false,
           "increment": false,
           "comment": ""
         }
@@ -7426,57 +7114,6 @@
       "deleteConstraint": "No action"
     },
     {
-      "id": "xYa2FhTvXWqaTEJ_6dV1R",
-      "name": "fk_order_id_order_item",
-      "startTableId": "Ej5t3Jy1uy6APACLIlRjg",
-      "endTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "fields": [
-        {
-          "startFieldId": "uR4LHWP2bpLzdKFesCVOi",
-          "endFieldId": "_8cmkY9Hnt2ThdL-ACuc5"
-        }
-      ],
-      "startFieldId": "uR4LHWP2bpLzdKFesCVOi",
-      "endFieldId": "_8cmkY9Hnt2ThdL-ACuc5",
-      "cardinality": "one_to_many",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
-      "id": "G-QHlSZ5zMTiDsMWLpPxe",
-      "name": "fk_coach_subscription_order_item_id_order_item",
-      "startTableId": "4NLV1goHk9bjnrInaLCBp",
-      "endTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "fields": [
-        {
-          "startFieldId": "t-MtjaI8IfwK2khnJyWlI",
-          "endFieldId": "TQ0s3Y5VF4IXRxDoJvM30"
-        }
-      ],
-      "startFieldId": "t-MtjaI8IfwK2khnJyWlI",
-      "endFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-      "cardinality": "one_to_one",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
-      "id": "-qwDYM4v8rpF4WSQexxMr",
-      "name": "fk_gym_members_subscriptions_order_item_id_order_item",
-      "startTableId": "1NWanuqGzoaewC6Zv3zkR",
-      "endTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "fields": [
-        {
-          "startFieldId": "whzxEVoKtCTmxrRCG2KiY",
-          "endFieldId": "TQ0s3Y5VF4IXRxDoJvM30"
-        }
-      ],
-      "startFieldId": "whzxEVoKtCTmxrRCG2KiY",
-      "endFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-      "cardinality": "one_to_one",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
       "id": "kQr2cSRpOZbZCmG8tqSFN",
       "name": "fk_gym_membership_plans_commerce_product_id_commerce_product",
       "startTableId": "dFtoPCHF4X41JPCaDMJmR",
@@ -7540,23 +7177,6 @@
       ],
       "startFieldId": "eRVcWrC1ALvLozQAN3mRf",
       "endFieldId": "NO5bBFbaEoq7diPnZYiDa",
-      "cardinality": "one_to_many",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
-      "id": "2dp6t2LiPS4rOlyk9afiY",
-      "name": "fk_commerce_product_id_order_item",
-      "startTableId": "_Yg2MdklRIXF0lLOErHj4",
-      "endTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "fields": [
-        {
-          "startFieldId": "fv9kArfWONQQOLIMrYJWZ",
-          "endFieldId": "AfyUivjnJ3x0S1HVYEUSe"
-        }
-      ],
-      "startFieldId": "fv9kArfWONQQOLIMrYJWZ",
-      "endFieldId": "AfyUivjnJ3x0S1HVYEUSe",
       "cardinality": "one_to_many",
       "updateConstraint": "No action",
       "deleteConstraint": "No action"
@@ -7647,23 +7267,6 @@
       "deleteConstraint": "No action"
     },
     {
-      "id": "53iJx9utZnAHkvZSFDzSd",
-      "name": "fk_order_item_id_refund",
-      "startTableId": "7mDTIshYvPmGD0Q4WefVO",
-      "endTableId": "XvjwExdpch3I4YPCakti5",
-      "fields": [
-        {
-          "startFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-          "endFieldId": "HozZbb1bVNWOc5s_3lKdU"
-        }
-      ],
-      "startFieldId": "TQ0s3Y5VF4IXRxDoJvM30",
-      "endFieldId": "HozZbb1bVNWOc5s_3lKdU",
-      "cardinality": "one_to_many",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
       "id": "Pm8Xyr0etnlGc0A2C8l9M",
       "name": "fk_wallet_ledger_refund_id_refund",
       "startTableId": "hrXIHZfDwPSOaGfJkKnXq",
@@ -7694,40 +7297,6 @@
       "startFieldId": "7pGG3m7mqMWqL5D3lyynK",
       "endFieldId": "x1iu1AoaiO0uGN-vgPeKT",
       "cardinality": "one_to_many",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
-      "id": "jWqaFcgLlCR4i4gf-VOTA",
-      "name": "fk_user_referrals_id_referral_commission",
-      "startTableId": "PI2KIm7miN_zqtxNZL-TB",
-      "endTableId": "eYenza6o9zUC_qsFl11jN",
-      "fields": [
-        {
-          "startFieldId": "RH_GjKGNXNZQ0VU8VPGOn",
-          "endFieldId": "XDIbK5TqO5eetCu8ncF07"
-        }
-      ],
-      "startFieldId": "RH_GjKGNXNZQ0VU8VPGOn",
-      "endFieldId": "XDIbK5TqO5eetCu8ncF07",
-      "cardinality": "one_to_many",
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action"
-    },
-    {
-      "id": "LYU6uHh_QIBaeC5tR8K0a",
-      "name": "fk_wallet_ledger_referral_commission_id_referral_commission",
-      "startTableId": "hrXIHZfDwPSOaGfJkKnXq",
-      "endTableId": "eYenza6o9zUC_qsFl11jN",
-      "fields": [
-        {
-          "startFieldId": "WX8oOwvzSJEk4NHLbaJrq",
-          "endFieldId": "30KW61J0py5zAk4DmFJd2"
-        }
-      ],
-      "startFieldId": "WX8oOwvzSJEk4NHLbaJrq",
-      "endFieldId": "30KW61J0py5zAk4DmFJd2",
-      "cardinality": "one_to_one",
       "updateConstraint": "No action",
       "deleteConstraint": "No action"
     },
@@ -8208,23 +7777,6 @@
       "id": "L-x5T62d4aoQKXIFJZbOP"
     },
     {
-      "startTableId": "Ej5t3Jy1uy6APACLIlRjg",
-      "startFieldId": "uR4LHWP2bpLzdKFesCVOi",
-      "endTableId": "eYenza6o9zUC_qsFl11jN",
-      "endFieldId": "KD6AiobrvI8JQu0kGyF1w",
-      "cardinality": "one_to_one",
-      "fields": [
-        {
-          "startFieldId": "uR4LHWP2bpLzdKFesCVOi",
-          "endFieldId": "KD6AiobrvI8JQu0kGyF1w"
-        }
-      ],
-      "updateConstraint": "No action",
-      "deleteConstraint": "No action",
-      "name": "fk_order_id_referral_commission",
-      "id": "fMx9IMgQTFxFBD8wLVvtf"
-    },
-    {
       "startTableId": "_O74dc6oXcQyjqTwE4AQN",
       "startFieldId": "LjxihYH4B4pT3J2u8aEHS",
       "endTableId": "8OZ149tJZf1gWkmAY9kPX",
@@ -8240,6 +7792,108 @@
       "deleteConstraint": "No action",
       "name": "fk_gym_id_gym_locks",
       "id": "L2JzT8rkfFRm92H2YY04M"
+    },
+    {
+      "id": "d0cbTncbVNCxjwBRV4jvqg",
+      "name": "fk_order_commerce_product_id_commerce_product",
+      "startTableId": "Ej5t3Jy1uy6APACLIlRjg",
+      "endTableId": "_Yg2MdklRIXF0lLOErHj4",
+      "fields": [
+        {
+          "startFieldId": "4VWdFcQxW0iiasmO3PA4Zg",
+          "endFieldId": "fv9kArfWONQQOLIMrYJWZ"
+        }
+      ],
+      "startFieldId": "4VWdFcQxW0iiasmO3PA4Zg",
+      "endFieldId": "fv9kArfWONQQOLIMrYJWZ",
+      "cardinality": "many_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action"
+    },
+    {
+      "id": "tNXbIU9SWLmvANfqNWT_lw",
+      "name": "fk_refund_order_id_order",
+      "startTableId": "XvjwExdpch3I4YPCakti5",
+      "endTableId": "Ej5t3Jy1uy6APACLIlRjg",
+      "fields": [
+        {
+          "startFieldId": "HozZbb1bVNWOc5s_3lKdU",
+          "endFieldId": "uR4LHWP2bpLzdKFesCVOi"
+        }
+      ],
+      "startFieldId": "HozZbb1bVNWOc5s_3lKdU",
+      "endFieldId": "uR4LHWP2bpLzdKFesCVOi",
+      "cardinality": "one_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action"
+    },
+    {
+      "id": "1F9fnX_GXTKLpvwGymSdeQ",
+      "name": "fk_refund_payment_id_payment",
+      "startTableId": "XvjwExdpch3I4YPCakti5",
+      "endTableId": "AUCH7fKnsZXyXrjKfYgRI",
+      "fields": [
+        {
+          "startFieldId": "jNJl5HtkX7GPxGz1_vPCoA",
+          "endFieldId": "ZbMP5aTzAP1yeznHiCcP-"
+        }
+      ],
+      "startFieldId": "jNJl5HtkX7GPxGz1_vPCoA",
+      "endFieldId": "ZbMP5aTzAP1yeznHiCcP-",
+      "cardinality": "one_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action"
+    },
+    {
+      "id": "VxeGunOhUd6S7pDm0ahPsA",
+      "name": "fk_wallet_ledger_order_id_order",
+      "startTableId": "hrXIHZfDwPSOaGfJkKnXq",
+      "endTableId": "Ej5t3Jy1uy6APACLIlRjg",
+      "fields": [
+        {
+          "startFieldId": "_5gO78FFyKKQAIfWTS9cJ",
+          "endFieldId": "uR4LHWP2bpLzdKFesCVOi"
+        }
+      ],
+      "startFieldId": "_5gO78FFyKKQAIfWTS9cJ",
+      "endFieldId": "uR4LHWP2bpLzdKFesCVOi",
+      "cardinality": "many_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action"
+    },
+    {
+      "id": "eSCLEE1wV3WKBRyH70FN6A",
+      "name": "fk_coach_subscription_order_id_order",
+      "startTableId": "4NLV1goHk9bjnrInaLCBp",
+      "endTableId": "Ej5t3Jy1uy6APACLIlRjg",
+      "fields": [
+        {
+          "startFieldId": "t-MtjaI8IfwK2khnJyWlI",
+          "endFieldId": "uR4LHWP2bpLzdKFesCVOi"
+        }
+      ],
+      "startFieldId": "t-MtjaI8IfwK2khnJyWlI",
+      "endFieldId": "uR4LHWP2bpLzdKFesCVOi",
+      "cardinality": "one_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action"
+    },
+    {
+      "id": "lh2vdOv-XPyph1O5Oo_0IQ",
+      "name": "fk_gym_members_subscriptions_order_id_order",
+      "startTableId": "1NWanuqGzoaewC6Zv3zkR",
+      "endTableId": "Ej5t3Jy1uy6APACLIlRjg",
+      "fields": [
+        {
+          "startFieldId": "whzxEVoKtCTmxrRCG2KiY",
+          "endFieldId": "uR4LHWP2bpLzdKFesCVOi"
+        }
+      ],
+      "startFieldId": "whzxEVoKtCTmxrRCG2KiY",
+      "endFieldId": "uR4LHWP2bpLzdKFesCVOi",
+      "cardinality": "one_to_one",
+      "updateConstraint": "No action",
+      "deleteConstraint": "No action"
     }
   ],
   "notes": [],
@@ -8328,5 +7982,5 @@
   "database": "postgresql",
   "types": [],
   "enums": [],
-  "title": "Fittnes app Diagram 2"
+  "title": "EXLO"
 }

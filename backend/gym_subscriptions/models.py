@@ -9,7 +9,7 @@ from commerce_products.models import CommerceProduct
 from users.models import User
 from gym_plans.models import GymMembershipPlan
 from gym.models import Gym
-from commerce_orders.models import OrderItem
+from commerce_orders.models import Order
 from core.errors import APIError, GymSubscriptionError
 from core.cache import invalidate_user_subscription_caches
 
@@ -61,11 +61,11 @@ class GymSubscriptionsManager(models.Manager):
         return subscription
 
     # This function caller must prefetch the product chain, before calling this function
-    def create_subscription(self, subscriber, order_item: OrderItem):
-        if order_item.item_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
+    def create_subscription(self, subscriber, order: Order):
+        if order.commerce_product.product_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
             raise APIError(GymSubscriptionError.INVALID_ORDER_ITEM)
 
-        plan: GymMembershipPlan = order_item.commerce_product.gym_membership_plan
+        plan: GymMembershipPlan = order.commerce_product.gym_membership_plan
 
         with transaction.atomic():
             subscriber = User.objects.select_for_update().get(pk=subscriber.pk)
@@ -99,7 +99,7 @@ class GymSubscriptionsManager(models.Manager):
             subscription = self.create(
                 subscriber=subscriber,
                 plan=plan,
-                order_item=order_item,
+                order=order,
                 status=GymSubscription.Status.PENDING,
                 remaining_visits=plan.visit_limit,
                 duration_months=plan.duration_months,
@@ -223,8 +223,8 @@ class GymSubscription(models.Model):
         editable=False,
     )
 
-    order_item = models.OneToOneField(
-        OrderItem,
+    order = models.OneToOneField(
+        Order,
         on_delete=models.PROTECT,
         related_name="gym_subscription",
         editable=False,

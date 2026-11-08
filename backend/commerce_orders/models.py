@@ -2,14 +2,10 @@
 
 import uuid
 from django.db import models
-from django.utils import timezone
 from users.models import User
 from commerce_products.models import CommerceProduct
 
 
-# ============================================================================
-# orders
-# ============================================================================
 class OrderManager(models.Manager):
     pass
 
@@ -19,6 +15,7 @@ class Order(models.Model):
         PENDING = "PENDING"
         PAID = "PAID"
         CANCELLED = "CANCELLED"
+        REFUNDED = "REFUNDED"
 
     id = models.UUIDField(
         primary_key=True,
@@ -26,11 +23,19 @@ class Order(models.Model):
         editable=False,
     )
 
+    commerce_product = models.ForeignKey(
+        CommerceProduct,
+        on_delete=models.PROTECT,
+        related_name="orders",
+    )
+
     buyer = models.ForeignKey(
         User,
         on_delete=models.PROTECT,
         related_name="orders",
     )
+
+    product_snapshot = models.JSONField()
 
     status = models.CharField(
         max_length=50,
@@ -47,69 +52,22 @@ class Order(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    cancelled_at = models.DateTimeField(null=True, blank=True)
 
     # Custom manager
     objects: OrderManager = OrderManager()
 
     class Meta:
-        db_table = "orders"
+        db_table = "order"
         ordering = ["-created_at"]
-
-
-# ============================================================================
-# order items
-# ============================================================================
-class OrderItemManager(models.Manager):
-    pass
-
-
-class OrderItem(models.Model):
-    id = models.UUIDField(
-        primary_key=True,
-        default=uuid.uuid7,
-        editable=False,
-    )
-
-    commerce_product = models.ForeignKey(
-        CommerceProduct,
-        on_delete=models.PROTECT,
-        related_name="order_items",
-    )
-
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.PROTECT,
-        related_name="items",
-    )
-
-    item_type = models.CharField(
-        max_length=255,
-        choices=CommerceProduct.ProductType.choices,
-    )
-
-    item_snapshot = models.JSONField()
-
-    quantity = models.PositiveIntegerField(default=1)
-    unit_price = models.PositiveBigIntegerField(default=0)
-    subtotal_amount = models.PositiveBigIntegerField(default=0)
-    discount_amount = models.PositiveBigIntegerField(default=0)
-    tax_amount = models.PositiveBigIntegerField(default=0)
-    total_amount = models.PositiveBigIntegerField(default=0)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    refundable_until = models.DateTimeField(null=True, blank=True)
-
-    # Custom manager
-    objects: OrderItemManager = OrderItemManager()
-
-    class Meta:
-        db_table = "order_items"
-        ordering = ["-created_at"]
-
-    @property
-    def is_refundable(self):
-        return (
-            self.refundable_until is not None and self.refundable_until > timezone.now()
-        )
+        indexes = [
+            models.Index(fields=["buyer"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(subtotal_amount__gte=0)
+                & models.Q(discount_amount__gte=0)
+                & models.Q(tax_amount__gte=0)
+                & models.Q(total_amount__gte=0),
+                name="order_amounts_nonnegative",
+            ),
+        ]
