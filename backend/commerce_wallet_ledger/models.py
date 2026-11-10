@@ -19,6 +19,18 @@ class WalletLedgerManager(models.Manager):
             reason=WalletLedger.Reason.TOP_UP,
         )
 
+    def create_refund_ledger(self, *, wallet: Wallet, refund: Refund, amount, balance_before):
+        return self.create(
+            wallet=wallet,
+            payment=refund.payment,
+            order_id=refund.payment.order_id,
+            refund=refund,
+            entry_type=WalletLedger.EntryType.CREDIT,
+            reason=WalletLedger.Reason.REFUND,
+            amount=amount,
+            balance_before=balance_before,
+        )
+
 
 class WalletLedger(models.Model):
     class EntryType(models.TextChoices):

@@ -85,15 +85,20 @@ class SubscriptionSweepTaskTest(TestCase):
     def make_subscription(self, user, *, plan=None, **values):
         plan = plan or self.plan_a
         order = Order.objects.create(
-            buyer=user, status=Order.Status.PAID,
+            buyer=user, status=Order.Status.SUCCEEDED,
             subtotal_amount=1000, discount_amount=0, tax_amount=0,
-            total_amount=1000, paid_at=self.now,
+            total_amount=1000, succeeded_at=self.now,
             commerce_product=plan.id,
             product_snapshot={},
         )
         return GymSubscription.objects.create(
             subscriber=user, plan=plan, order=order,
-            **{"duration_months": 1, "remaining_visits": 30, **values},
+            **{
+                "duration_months": plan.duration_months,
+                "initial_visits": plan.visit_limit,
+                "remaining_visits": plan.visit_limit,
+                **values,
+            },
         )
 
     def run_sweep(self):

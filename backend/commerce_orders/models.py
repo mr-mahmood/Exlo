@@ -13,9 +13,8 @@ class OrderManager(models.Manager):
 class Order(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING"
-        PAID = "PAID"
-        CANCELLED = "CANCELLED"
-        REFUNDED = "REFUNDED"
+        SUCCEEDED = "SUCCEEDED"
+        FAILED = "FAILED"
 
     id = models.UUIDField(
         primary_key=True,
@@ -48,8 +47,7 @@ class Order(models.Model):
     tax_amount = models.PositiveBigIntegerField(default=0)
     total_amount = models.PositiveBigIntegerField(default=0)
 
-    paid_at = models.DateTimeField(null=True, blank=True)
-
+    succeeded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

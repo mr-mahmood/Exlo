@@ -109,12 +109,12 @@ class ViewTestBase(TestCase):
     def _make_order(self, user, plan):
         order = Order.objects.create(
             buyer=user,
-            status=Order.Status.PAID,
+            status=Order.Status.SUCCEEDED,
             subtotal_amount=0,
             discount_amount=0,
             tax_amount=0,
             total_amount=0,
-            paid_at=timezone.now(),
+            succeeded_at=timezone.now(),
             commerce_product=plan.id,
             product_snapshot={},
         )

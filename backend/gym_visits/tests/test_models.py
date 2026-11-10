@@ -41,17 +41,15 @@ class GymVisitModelTestBase(TestCase):
             price=1000,
         )
 
-    def make_subscription(
-        self, user, *, status=GymSubscription.Status.ACTIVE, remaining=10
-    ):
+    def make_subscription(self, user, *, status=GymSubscription.Status.ACTIVE, remaining=10):
         order = Order.objects.create(
             buyer=user,
-            status=Order.Status.PAID,
+            status=Order.Status.SUCCEEDED,
             subtotal_amount=0,
             discount_amount=0,
             tax_amount=0,
             total_amount=0,
-            paid_at=timezone.now(),
+            succeeded_at=timezone.now(),
             commerce_product=self.plan.id,
             product_snapshot={},
         )
@@ -80,9 +78,7 @@ class CheckInTests(GymVisitModelTestBase):
 
     def test_raises_when_user_already_has_open_visit(self):
         sub = self.make_subscription(self.user)
-        GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
 
         with self.assertRaises(APIError) as ctx:
             GymVisit.objects.check_in(
@@ -114,9 +110,7 @@ class CheckInTests(GymVisitModelTestBase):
             with patch(
                 "gym_visits.models.GymVisitManager.filter",
                 wraps=(
-                    GymVisit.objects.filter.__self__.filter
-                    if hasattr(GymVisit.objects.filter, "__self__")
-                    else None
+                    GymVisit.objects.filter.__self__.filter if hasattr(GymVisit.objects.filter, "__self__") else None
                 ),
             ):
                 with self.assertRaises(APIError):
@@ -151,9 +145,7 @@ class CheckInTests(GymVisitModelTestBase):
         sub_a = self.make_subscription(self.user)
         sub_b = self.make_subscription(self.other_user)
 
-        GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub_a, method=GymVisit.Method.NFC
-        )
+        GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub_a, method=GymVisit.Method.NFC)
         GymVisit.objects.check_in(
             user=self.other_user,
             gym=self.gym,
@@ -161,9 +153,7 @@ class CheckInTests(GymVisitModelTestBase):
             method=GymVisit.Method.NFC,
         )
 
-        self.assertEqual(
-            GymVisit.objects.filter(checked_out_at__isnull=True).count(), 2
-        )
+        self.assertEqual(GymVisit.objects.filter(checked_out_at__isnull=True).count(), 2)
 
 
 class CheckInAcrossGymsTests(GymVisitModelTestBase):
@@ -193,9 +183,7 @@ class CheckInAcrossGymsTests(GymVisitModelTestBase):
 class CheckOutTests(GymVisitModelTestBase):
     def test_checks_out_open_visit(self):
         sub = self.make_subscription(self.user)
-        visit = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        visit = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
 
         visit.check_out(method=GymVisit.Method.NFC)
 
@@ -206,49 +194,35 @@ class CheckOutTests(GymVisitModelTestBase):
 
     def test_raises_when_already_checked_out(self):
         sub = self.make_subscription(self.user)
-        visit = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        visit = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
         visit.check_out(method=GymVisit.Method.NFC)
 
         with self.assertRaises(APIError) as ctx:
             visit.check_out(method=GymVisit.Method.NFC)
 
-        self.assertEqual(
-            ctx.exception.error_code, GymVisitsError.ALREADY_CHECKED_OUT[0]
-        )
+        self.assertEqual(ctx.exception.error_code, GymVisitsError.ALREADY_CHECKED_OUT[0])
 
     def test_raises_when_checkout_before_checkin(self):
         sub = self.make_subscription(self.user)
-        visit = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        visit = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
 
         # Force checked_in_at into the future so "now" is before it.
-        GymVisit.objects.filter(pk=visit.pk).update(
-            checked_in_at=timezone.now() + timedelta(hours=1)
-        )
+        GymVisit.objects.filter(pk=visit.pk).update(checked_in_at=timezone.now() + timedelta(hours=1))
         visit.refresh_from_db()
 
         with self.assertRaises(APIError) as ctx:
             visit.check_out(method=GymVisit.Method.NFC)
 
-        self.assertEqual(
-            ctx.exception.error_code, GymVisitsError.INVALID_CHECKOUT_TIME[0]
-        )
+        self.assertEqual(ctx.exception.error_code, GymVisitsError.INVALID_CHECKOUT_TIME[0])
 
     def test_duration_is_none_while_open(self):
         sub = self.make_subscription(self.user)
-        visit = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        visit = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
         self.assertIsNone(visit.duration)
 
     def test_duration_is_set_after_checkout(self):
         sub = self.make_subscription(self.user)
-        visit = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        visit = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
         time.sleep(0.5)
         visit.check_out(method=GymVisit.Method.NFC)
         visit.refresh_from_db()
@@ -257,14 +231,10 @@ class CheckOutTests(GymVisitModelTestBase):
 
     def test_second_check_in_after_checkout_succeeds(self):
         sub = self.make_subscription(self.user)
-        first = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        first = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
         first.check_out(method=GymVisit.Method.NFC)
 
-        second = GymVisit.objects.check_in(
-            user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC
-        )
+        second = GymVisit.objects.check_in(user=self.user, gym=self.gym, subscription=sub, method=GymVisit.Method.NFC)
 
         self.assertNotEqual(first.pk, second.pk)
         self.assertIsNone(second.checked_out_at)

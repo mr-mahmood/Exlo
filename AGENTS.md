@@ -582,13 +582,12 @@ Required skills:
 - caveman
 - i-have-adhd
 - ponytail
-- qmd
 
 Required CLI tool:
 - RTK
 
 Rules:
-1. Apply all five skill instruction sets on every request.
+1. Apply all four skill instruction sets on every request.
 2. Use RTK for supported shell commands.
 3. Do not skip mandatory skills because a task is simple.
 4. Preserve correctness over token optimization.

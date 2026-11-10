@@ -37,14 +37,10 @@ assert {CLEANUP_TASK_NAME!r} in app.tasks, "Session cleanup task is not register
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_beat_schedules_cleanup_daily(self):
-        entries = [
-            entry
-            for entry in app.conf.beat_schedule.values()
-            if entry["task"] == CLEANUP_TASK_NAME
-        ]
+        entries = [entry for entry in app.conf.beat_schedule.values() if entry["task"] == CLEANUP_TASK_NAME]
         self.assertEqual(len(entries), 1, "Session cleanup needs one Beat schedule")
         schedule = entries[0]["schedule"]
-        run_at = datetime(2026, 11, 6, 3, 20, tzinfo=ZoneInfo(settings.CELERY_TIMEZONE))
+        run_at = datetime(2026, 11, 6, 3, 10, tzinfo=ZoneInfo(settings.CELERY_TIMEZONE))
         previous_run = run_at - timedelta(days=1)
 
         for now, last_run, expected_due, next_run in (
@@ -91,18 +87,14 @@ class SessionCleanupTaskTest(TestCase):
 
     def test_cleanup_removes_only_sessions_inactive_for_more_than_30_days(self):
         self._create_session(self.now - timedelta(days=31))
-        self._create_session(
-            self.now - timedelta(days=30, microseconds=1), user=self.other_user
-        )
+        self._create_session(self.now - timedelta(days=30, microseconds=1), user=self.other_user)
         boundary_session = self._create_session(self.now - timedelta(days=30))
         recent_session = self._create_session(
             self.now - timedelta(days=30) + timedelta(microseconds=1),
             user=self.other_user,
         )
         active_session = self._create_session(self.now)
-        Session.objects.filter(pk=active_session.pk).update(
-            created_at=self.now - timedelta(days=60)
-        )
+        Session.objects.filter(pk=active_session.pk).update(created_at=self.now - timedelta(days=60))
 
         self._run_cleanup()
 

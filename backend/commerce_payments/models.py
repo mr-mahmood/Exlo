@@ -51,7 +51,7 @@ class Payment(models.Model):
 
     class Status(models.TextChoices):
         PENDING = "PENDING"
-        SUCCEEDED = "SUCCEEDED"
+        PAID = "PAID"
         FAILED = "FAILED"
 
     id = models.UUIDField(
@@ -77,19 +77,25 @@ class Payment(models.Model):
     )
 
     status = models.CharField(
-        max_length=100, choices=Status.choices, default=Status.PENDING
+        max_length=100,
+        choices=Status.choices,
+        default=Status.PENDING,
     )
-    payment_method = models.CharField(max_length=100, choices=Method.choices)
-    purpose = models.CharField(max_length=100, choices=Purpose.choices)
+
+    payment_method = models.CharField(
+        max_length=100,
+        choices=Method.choices,
+    )
+
+    purpose = models.CharField(
+        max_length=100,
+        choices=Purpose.choices,
+    )
 
     amount = models.PositiveBigIntegerField(default=0)
-    gateway_fee_amount = models.PositiveBigIntegerField(
-        default=settings.ZIBAL_IPG_FEE_MAX
-    )
+    gateway_fee_amount = models.PositiveBigIntegerField(default=settings.ZIBAL_IPG_FEE_MAX)
 
     paid_at = models.DateTimeField(null=True, blank=True)
-    failed_at = models.DateTimeField(null=True, blank=True)
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -100,18 +106,19 @@ class Payment(models.Model):
         ordering = ["-created_at"]
 
         indexes = [
-            models.Index(fields=["wallet", "-created_at"]),
+            models.Index(fields=["wallet"]),
         ]
 
     def __str__(self):
         return f"{self.purpose} -> {self.payment_method} -> {self.status}"
 
-    def mark_succeeded(self):
-        self.status = Payment.Status.SUCCEEDED
-        self.paid_at = timezone.now()
-        self.save(update_fields=["status", "paid_at", "updated_at"])
+    def mark_paid(self):
+        if self.status != Payment.Status.PAID:
+            self.status = Payment.Status.PAID
+            self.paid_at = timezone.now()
+            self.save(update_fields=["status", "paid_at", "updated_at"])
 
     def mark_failed(self):
-        self.status = Payment.Status.FAILED
-        self.failed_at = timezone.now()
-        self.save(update_fields=["status", "failed_at", "updated_at"])
+        if self.status != Payment.Status.FAILED:
+            self.status = Payment.Status.FAILED
+            self.save(update_fields=["status", "updated_at"])

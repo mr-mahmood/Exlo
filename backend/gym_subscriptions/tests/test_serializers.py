@@ -36,12 +36,12 @@ class GymSubscriptionSerializerTestBase(TestCase):
 
         self.order = Order.objects.create(
             buyer=self.user,
-            status=Order.Status.PAID,
+            status=Order.Status.SUCCEEDED,
             subtotal_amount=10000,
             discount_amount=0,
             tax_amount=0,
             total_amount=100000,
-            paid_at=timezone.now(),
+            succeeded_at=timezone.now(),
             commerce_product=self.plan.id,
             product_snapshot={"id": str(self.plan.pk), "name": self.plan.name},
         )
@@ -52,7 +52,9 @@ class GymSubscriptionSerializerTestBase(TestCase):
             plan=self.plan,
             order=self.order,
             status=GymSubscription.Status.PENDING,
-            remaining_visits=0,
+            initial_visits=self.plan.visit_limit,
+            remaining_visits=self.plan.visit_limit,
+            duration_months=self.plan.duration_months,
         )
         defaults.update(overrides)
         return GymSubscription.objects.create(**defaults)
@@ -72,6 +74,7 @@ class GymSubscriptionSerializerFieldsTests(GymSubscriptionSerializerTestBase):
             "gym",
             "status",
             "end_reason",
+            "initial_visits",
             "remaining_visits",
             "started_at",
             "expires_at",
@@ -80,6 +83,12 @@ class GymSubscriptionSerializerFieldsTests(GymSubscriptionSerializerTestBase):
             "updated_at",
         }
         self.assertEqual(set(data.keys()), expected_keys)
+
+    def test_initial_visits_reports_snapshot_when_visits_have_been_used(self):
+        sub = self.make_subscription(remaining_visits=29)
+        data = GymSubscriptionReadSerializer(sub).data
+        self.assertEqual(data["initial_visits"], 30)
+        self.assertEqual(data["remaining_visits"], 29)
 
     def test_id_is_string(self):
         sub = self.make_subscription()
@@ -347,12 +356,12 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
 
         order_2 = Order.objects.create(
             buyer=self.user,
-            status=Order.Status.PAID,
+            status=Order.Status.SUCCEEDED,
             subtotal_amount=100000,
             discount_amount=0,
             tax_amount=0,
             total_amount=100000,
-            paid_at=timezone.now(),
+            succeeded_at=timezone.now(),
             commerce_product=self.plan.id,
             product_snapshot={},
         )
@@ -360,6 +369,9 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
             subscriber=self.user,
             plan=self.plan,
             order=order_2,
+            initial_visits=self.plan.visit_limit,
+            remaining_visits=self.plan.visit_limit,
+            duration_months=self.plan.duration_months,
             status=GymSubscription.Status.CANCELLED,
             end_reason=GymSubscription.EndReason.CANCELLED,
             cancelled_at=timezone.now(),
@@ -392,12 +404,12 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
         for _ in range(5):
             order = Order.objects.create(
                 buyer=self.user,
-                status=Order.Status.PAID,
+                status=Order.Status.SUCCEEDED,
                 subtotal_amount=100000,
                 discount_amount=0,
                 tax_amount=0,
                 total_amount=100000,
-                paid_at=timezone.now(),
+                succeeded_at=timezone.now(),
                 commerce_product=self.plan.id,
                 product_snapshot={},
             )
@@ -407,6 +419,9 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                 subscriber=self.user,
                 plan=self.plan,
                 order=oi,
+                initial_visits=self.plan.visit_limit,
+                remaining_visits=0,
+                duration_months=self.plan.duration_months,
                 status=GymSubscription.Status.EXPIRED,
             )
 
@@ -420,12 +435,12 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
         for _ in range(3):
             order = Order.objects.create(
                 buyer=self.user,
-                status=Order.Status.PAID,
+                status=Order.Status.SUCCEEDED,
                 subtotal_amount=100000,
                 discount_amount=0,
                 tax_amount=0,
                 total_amount=100000,
-                paid_at=timezone.now(),
+                succeeded_at=timezone.now(),
                 commerce_product=self.plan.id,
                 product_snapshot={},
             )
@@ -435,6 +450,9 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
                 subscriber=self.user,
                 plan=self.plan,
                 order=oi,
+                initial_visits=self.plan.visit_limit,
+                remaining_visits=0,
+                duration_months=self.plan.duration_months,
                 status=GymSubscription.Status.EXPIRED,
             )
 

@@ -18,6 +18,7 @@ class GymSubscriptionReadSerializer(serializers.ModelSerializer):
             "gym",
             "status",
             "end_reason",
+            "initial_visits",
             "remaining_visits",
             "started_at",
             "expires_at",

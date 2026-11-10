@@ -1,3 +1,5 @@
+# gym_subscriptions/tasks.py_compile
+
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone

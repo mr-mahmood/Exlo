@@ -91,8 +91,7 @@ class GymSubscriptionsManager(models.Manager):
                 raise APIError(GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS)
 
             if active is not None and (
-                active.expires_at > timezone.now() + timedelta(days=7)
-                and active.remaining_visits > 2
+                active.expires_at > timezone.now() + timedelta(days=7) and active.remaining_visits > 2
             ):
                 raise APIError(GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS)
 
@@ -101,6 +100,7 @@ class GymSubscriptionsManager(models.Manager):
                 plan=plan,
                 order=order,
                 status=GymSubscription.Status.PENDING,
+                initial_visits=plan.visit_limit,
                 remaining_visits=plan.visit_limit,
                 duration_months=plan.duration_months,
             )
@@ -115,9 +115,7 @@ class GymSubscriptionsManager(models.Manager):
         with transaction.atomic():
             subscriber_id = subscription.subscriber_id
             subscriber = User.objects.select_for_update().get(pk=subscriber_id)
-            subscription: GymSubscription = self.select_for_update().get(
-                pk=subscription.pk
-            )
+            subscription: GymSubscription = self.select_for_update().get(pk=subscription.pk)
 
             if subscription.status in (
                 GymSubscription.Status.EXPIRED,
@@ -244,6 +242,7 @@ class GymSubscription(models.Model):
     )
 
     duration_months = models.PositiveIntegerField(default=1)
+    initial_visits = models.PositiveIntegerField(default=0, editable=False)
     remaining_visits = models.PositiveIntegerField(default=0)
 
     started_at = models.DateTimeField(null=True, blank=True)
@@ -309,6 +308,13 @@ class GymSubscription(models.Model):
     def is_active(self) -> bool:
         return self.status == self.Status.ACTIVE and not self.is_expired
 
+    @property
+    def is_refundable(self) -> bool:
+        condition1 = self.status in (self.Status.PENDING, self.Status.ACTIVE)
+        condition2 = self.remaining_visits == self.initial_visits
+        condition3 = self.created_at <= timezone.now() < (self.created_at + timedelta(hours=48))
+        return condition1 and condition2 and condition3
+
     def activate(self):
         if self.status == self.Status.PENDING:
             now = timezone.now()
@@ -319,16 +325,7 @@ class GymSubscription(models.Model):
             self.end_reason = None
             self.cancelled_at = None
 
-            self.save(
-                update_fields=[
-                    "status",
-                    "started_at",
-                    "expires_at",
-                    "end_reason",
-                    "cancelled_at",
-                    "updated_at",
-                ]
-            )
+            self.save(update_fields=["status", "started_at", "expires_at", "end_reason", "cancelled_at", "updated_at"])
             invalidate_user_subscription_caches(self.subscriber_id, self.pk)
 
     def expire(self, reason):
@@ -343,7 +340,5 @@ class GymSubscription(models.Model):
             self.status = self.Status.CANCELLED
             self.end_reason = self.EndReason.CANCELLED
             self.cancelled_at = timezone.now()
-            self.save(
-                update_fields=["status", "end_reason", "cancelled_at", "updated_at"]
-            )
+            self.save(update_fields=["status", "end_reason", "cancelled_at", "updated_at"])
             invalidate_user_subscription_caches(self.subscriber_id, self.pk)

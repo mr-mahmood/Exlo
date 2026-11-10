@@ -286,6 +286,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "cleanup-expired-user-sessions": {
         "task": "users_sessions.tasks.cleanup_expired_sessions",
+        "schedule": crontab(hour=3, minute=10),
+    },
+    "process-approved-refunds": {
+        "task": "commerce_refunds.tasks.process_approved_refunds",
         "schedule": crontab(hour=3, minute=20),
     },
 }
