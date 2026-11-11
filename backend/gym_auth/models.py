@@ -1,7 +1,7 @@
 # gym_auth/models.py
 
 import uuid
-from django.db import models
+from django.db import IntegrityError, models, transaction
 from users.models import User
 from gym.models import Gym
 from core.errors import APIError, UserGymRoleError
@@ -10,7 +10,13 @@ from core.errors import APIError, UserGymRoleError
 class UserGymRoleManager(models.Manager):
 
     def create_owner(self, user, gym):
-        return self._create_role(user, gym, UserGymRole.Role.OWNER)
+        try:
+            with transaction.atomic():
+                return self._create_role(user, gym, UserGymRole.Role.OWNER)
+        except IntegrityError as exc:
+            if getattr(getattr(exc.__cause__, "diag", None), "constraint_name", None) == "unique_owner_per_gym":
+                raise APIError(UserGymRoleError.OWNER_ALREADY_EXISTS) from exc
+            raise
 
     def create_coach(self, user, gym):
         return self._create_role(user, gym, UserGymRole.Role.COACH)
@@ -66,6 +72,14 @@ class UserGymRole(models.Model):
         ordering = ["-created_at"]
 
         unique_together = [["user", "gym", "role"]]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gym"],
+                condition=models.Q(role="OWNER"),
+                name="unique_owner_per_gym",
+            ),
+        ]
 
         indexes = [
             models.Index(fields=["user", "role"]),

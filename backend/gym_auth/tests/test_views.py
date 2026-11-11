@@ -266,6 +266,7 @@ class GymAuthViewsTest(TestCase):
                     self.assertEqual(UserGymRole.objects.count(), original)
 
     def test_create_role_accepts_trimmed_phone(self):
+        self.owner_role.delete()
         self.authenticate(self.admin_user)
         response = self.client.post(
             self.owner_create_url,
@@ -306,6 +307,20 @@ class GymAuthViewsTest(TestCase):
     def test_duplicate_owner_returns_api_error(self):
         self.assert_duplicate_role_rejected(
             self.owner_create_url, self.owner_role, self.admin_user
+        )
+
+    def test_second_owner_is_rejected_without_replacing_existing_owner(self):
+        self.authenticate(self.admin_user)
+        response = self.client.post(
+            self.owner_create_url, {"phone_number": self.regular_user.phone_number}
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error_code"], "ROLE_003")
+        self.assertFalse(response.json()["success"])
+        self.assertIsNone(response.json()["data"])
+        self.assertEqual(
+            list(UserGymRole.objects.filter(gym=self.gym, role="OWNER").values_list("pk", flat=True)),
+            [self.owner_role.pk],
         )
 
     def test_duplicate_coach_returns_api_error(self):
@@ -388,6 +403,7 @@ class GymAuthViewsTest(TestCase):
 
     def test_create_owner_admin(self):
         """Test that an admin can assign an owner."""
+        self.owner_role.delete()
         self.authenticate(self.admin_user)
 
         data = {"phone_number": self.regular_user.phone_number}
@@ -810,6 +826,30 @@ class GymRoleCreationConcurrencyTests(TransactionTestCase):
         self.gym = Gym.objects.create(
             name="Test Gym", province="Tehran", city="Tehran", address="Address"
         )
+
+    def test_concurrent_different_owners_create_only_one_owner(self):
+        other = User.objects.create_user(phone_number="09120000003")
+        barrier = Barrier(2)
+        url = reverse("gym_auth:gym-owner-create", kwargs={"gym_id": self.gym.pk})
+
+        def create_owner(phone):
+            client = APIClient()
+            client.force_authenticate(user=self.admin)
+            try:
+                barrier.wait(timeout=10)
+                response = client.post(url, {"phone_number": phone})
+                return response.status_code, response.json()
+            finally:
+                connections.close_all()
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [executor.submit(create_owner, user.phone_number) for user in (self.target, other)]
+            responses = [future.result(timeout=15) for future in futures]
+
+        self.assertEqual(sorted(code for code, _ in responses), [200, 400])
+        failure = next(payload for code, payload in responses if code == 400)
+        self.assertEqual(failure["error_code"], "ROLE_003")
+        self.assertEqual(UserGymRole.objects.filter(gym=self.gym, role="OWNER").count(), 1)
 
     def test_concurrent_duplicate_requests_create_one_role(self):
         for role, route in (

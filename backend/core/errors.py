@@ -775,6 +775,12 @@ class UserGymRoleError(APIError):
         status.HTTP_400_BAD_REQUEST,
     )
 
+    OWNER_ALREADY_EXISTS = (
+        "ROLE_003",
+        "This gym already has an owner.",
+        status.HTTP_400_BAD_REQUEST,
+    )
+
 
 # ============================================================================
 # GYM LOCKER

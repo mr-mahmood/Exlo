@@ -59,6 +59,26 @@ class UserGymRoleModelTests(TestCase):
             ).exists()
         )
 
+    def test_database_rejects_second_owner(self):
+        UserGymRole.objects.create_owner(user=self.user, gym=self.gym)
+        other = User.objects.create_user(phone_number="09120000001")
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            UserGymRole.objects.create(user=other, gym=self.gym, role="OWNER")
+
+    def test_database_rejects_promoting_staff_to_second_owner(self):
+        UserGymRole.objects.create_owner(user=self.user, gym=self.gym)
+        other = User.objects.create_user(phone_number="09120000001")
+        staff = UserGymRole.objects.create_staff(user=other, gym=self.gym)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            UserGymRole.objects.filter(pk=staff.pk).update(role="OWNER")
+
+    def test_multiple_coaches_and_staff_remain_allowed(self):
+        other = User.objects.create_user(phone_number="09120000001")
+        for create_role in (UserGymRole.objects.create_coach, UserGymRole.objects.create_staff):
+            first = create_role(user=self.user, gym=self.gym)
+            second = create_role(user=other, gym=self.gym)
+            self.assertNotEqual(first.pk, second.pk)
+
     def test_create_staff(self):
         UserGymRole.objects.create_staff(
             user=self.user,
