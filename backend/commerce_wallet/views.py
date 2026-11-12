@@ -32,21 +32,18 @@ class WalletTopUpAPIView(APIView):
     def post(self, request):
         amount = parse_topup_amount(request.data.get("amount"))
 
-        zibal = ZibalIPG()
-        callback_url = request.build_absolute_uri("/api/commerce/wallet/callback/")
-
         payment: Payment = Payment.objects.create_wallet_top_up(
             wallet=request.user.wallet,
             amount=amount,
-            gateway_fee_amount=zibal.fee,
         )
 
-        total_amount = amount + zibal.fee
+        zibal = ZibalIPG()
+        callback_url = request.build_absolute_uri("/api/commerce/wallet/callback/")
 
         # External API request
         try:
             response = zibal.request_payment(
-                amount=total_amount,
+                amount=payment.total_amount,
                 callback_url=callback_url,
                 order_id=str(payment.id),
                 mobile=request.user.phone_number,
@@ -66,18 +63,12 @@ class WalletTopUpAPIView(APIView):
             raise APIError(PaymentError.GATEWAY_ERROR)
 
         try:
-            PaymentGateway.objects.create(
-                payment=payment,
-                track_id=track_id,
-            )
+            PaymentGateway.objects.create(payment=payment, track_id=track_id)
         except Exception:
             payment.mark_failed()
             raise APIError(PaymentError.GATEWAY_ERROR)
 
-        return Response(
-            {"gateway_url": zibal.start_url(track_id=track_id)},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"gateway_url": zibal.start_url(track_id=track_id)}, status=status.HTTP_200_OK)
 
 
 @method_decorator(csrf_exempt, name="dispatch")

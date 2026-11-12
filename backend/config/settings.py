@@ -289,8 +289,12 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(hour=3, minute=10),
     },
     "process-approved-refunds": {
-        "task": "commerce_refunds.tasks.process_approved_refunds",
+        "task": "commerce_refunds.tasks.process_pending_refunds",
         "schedule": crontab(hour=3, minute=20),
+    },
+    "process-seller-settlements": {
+        "task": "commerce_orders.tasks.process_seller_settlements",
+        "schedule": crontab(hour=3, minute=30),
     },
 }
 

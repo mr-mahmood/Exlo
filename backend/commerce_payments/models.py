@@ -27,7 +27,7 @@ class PaymentManager(models.Manager):
             payment_method=Payment.Method.WALLET,
             purpose=Payment.Purpose.ORDER_PAYMENT,
             amount=amount,
-            gateway_fee_amount=0,
+            gateway_fee_amount=0,  # payments from wallet dont have gateway fee
         )
 
     def create_order_payment_gateway(self, *, order, amount) -> "Payment":
@@ -109,8 +109,48 @@ class Payment(models.Model):
             models.Index(fields=["wallet"]),
         ]
 
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="payment_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        purpose="WALLET_TOP_UP",
+                        payment_method="ONLINE_GATEWAY",
+                        wallet__isnull=False,
+                        order__isnull=True,
+                    )
+                    | models.Q(
+                        purpose="ORDER_PAYMENT",
+                        payment_method="WALLET",
+                        order__isnull=False,
+                        wallet__isnull=False,
+                        gateway_fee_amount=0,
+                    )
+                    | models.Q(
+                        purpose="ORDER_PAYMENT",
+                        payment_method="ONLINE_GATEWAY",
+                        order__isnull=False,
+                        wallet__isnull=True,
+                    )
+                ),
+                name="payment_valid_purpose_method_target",
+            ),
+            models.UniqueConstraint(
+                fields=["order"],
+                condition=models.Q(status="PAID", purpose="ORDER_PAYMENT"),
+                name="unique_paid_payment_per_order",
+            ),
+        ]
+
     def __str__(self):
         return f"{self.purpose} -> {self.payment_method} -> {self.status}"
+
+    @property
+    def total_amount(self) -> int:
+        return self.amount + self.gateway_fee_amount
 
     def mark_paid(self):
         if self.status != Payment.Status.PAID:

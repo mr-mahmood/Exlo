@@ -583,12 +583,8 @@ Required skills:
 - i-have-adhd
 - ponytail
 
-Required CLI tool:
-- RTK
-
 Rules:
-1. Apply all four skill instruction sets on every request.
-2. Use RTK for supported shell commands.
+1. Apply all 3 skill instruction sets on every request.
 3. Do not skip mandatory skills because a task is simple.
 4. Preserve correctness over token optimization.
 5. Follow explicit user instructions and security constraints.

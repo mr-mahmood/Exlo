@@ -35,12 +35,12 @@ class GymSubscriptionSerializerTestBase(TestCase):
         )
 
         self.order = Order.objects.create(
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
             buyer=self.user,
             status=Order.Status.SUCCEEDED,
             subtotal_amount=10000,
             discount_amount=0,
             tax_amount=0,
-            total_amount=100000,
             succeeded_at=timezone.now(),
             commerce_product=self.plan.id,
             product_snapshot={"id": str(self.plan.pk), "name": self.plan.name},
@@ -355,12 +355,12 @@ class GymSubscriptionSerializerManyTests(GymSubscriptionSerializerTestBase):
         self.make_subscription(status=GymSubscription.Status.PENDING)
 
         order_2 = Order.objects.create(
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
             buyer=self.user,
             status=Order.Status.SUCCEEDED,
             subtotal_amount=100000,
             discount_amount=0,
             tax_amount=0,
-            total_amount=100000,
             succeeded_at=timezone.now(),
             commerce_product=self.plan.id,
             product_snapshot={},
@@ -403,12 +403,12 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
         orders = []
         for _ in range(5):
             order = Order.objects.create(
+                seller=User.objects.get_or_create(phone_number="09999999999")[0],
                 buyer=self.user,
                 status=Order.Status.SUCCEEDED,
                 subtotal_amount=100000,
                 discount_amount=0,
                 tax_amount=0,
-                total_amount=100000,
                 succeeded_at=timezone.now(),
                 commerce_product=self.plan.id,
                 product_snapshot={},
@@ -434,12 +434,12 @@ class GymSubscriptionSerializerQueryCountTests(GymSubscriptionSerializerTestBase
         orders = []
         for _ in range(3):
             order = Order.objects.create(
+                seller=User.objects.get_or_create(phone_number="09999999999")[0],
                 buyer=self.user,
                 status=Order.Status.SUCCEEDED,
                 subtotal_amount=100000,
                 discount_amount=0,
                 tax_amount=0,
-                total_amount=100000,
                 succeeded_at=timezone.now(),
                 commerce_product=self.plan.id,
                 product_snapshot={},

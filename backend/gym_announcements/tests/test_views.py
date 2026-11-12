@@ -62,9 +62,7 @@ class GymAnnouncementViewsTest(TestCase):
             address="123 Test St",
         )
 
-        UserGymRole.objects.create(
-            user=self.gym_owner, gym=self.gym, role=UserGymRole.Role.OWNER
-        )
+        UserGymRole.objects.create(user=self.gym_owner, gym=self.gym, role=UserGymRole.Role.OWNER)
         self.member_subscription = self.make_subscription(self.gym_member, self.gym)
 
         # Create test announcements
@@ -97,7 +95,13 @@ class GymAnnouncementViewsTest(TestCase):
             visit_limit=30,
             price=10000,
         )
-        order = Order.objects.create(buyer=user, commerce_product=plan.id, product_snapshot={})
+        order = Order.objects.create(
+            seller=self.gym_owner,
+            buyer=user,
+            subtotal_amount=plan.price,
+            commerce_product=plan.id,
+            product_snapshot={},
+        )
         return GymSubscription.objects.create(
             subscriber=user,
             plan=plan,
@@ -109,9 +113,7 @@ class GymAnnouncementViewsTest(TestCase):
         )
 
     def list_url(self, gym=None):
-        return reverse(
-            "gym_announcements:list", kwargs={"gym_id": (gym or self.gym).id}
-        )
+        return reverse("gym_announcements:list", kwargs={"gym_id": (gym or self.gym).id})
 
     # ==================== LIST TESTS ====================
 
@@ -119,15 +121,11 @@ class GymAnnouncementViewsTest(TestCase):
         """Test that gym members can view published announcements."""
         self.authenticate(self.gym_member)
 
-        response = self.client.get(
-            reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id})
-        )
+        response = self.client.get(reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["announcements"]), 1)
-        self.assertEqual(
-            response.data["announcements"][0]["title"], "Published Announcement"
-        )
+        self.assertEqual(response.data["announcements"][0]["title"], "Published Announcement")
 
     def test_announcement_list_roles_and_nonmembers(self):
         staff = User.objects.create_user(phone_number="09127770001")
@@ -169,9 +167,7 @@ class GymAnnouncementViewsTest(TestCase):
 
     def test_announcement_list_unauthenticated_no_access(self):
         """Test that unauthenticated users cannot view announcements."""
-        response = self.client.get(
-            reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id})
-        )
+        response = self.client.get(reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id}))
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -180,9 +176,7 @@ class GymAnnouncementViewsTest(TestCase):
         self.authenticate(self.gym_member)
         non_existent_id = uuid.uuid7()
 
-        response = self.client.get(
-            reverse("gym_announcements:list", kwargs={"gym_id": non_existent_id})
-        )
+        response = self.client.get(reverse("gym_announcements:list", kwargs={"gym_id": non_existent_id}))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -199,9 +193,7 @@ class GymAnnouncementViewsTest(TestCase):
             )
 
         self.authenticate(self.gym_member)
-        response = self.client.get(
-            reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id})
-        )
+        response = self.client.get(reverse("gym_announcements:list", kwargs={"gym_id": self.gym.id}))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data["announcements"]), 50)
@@ -217,15 +209,11 @@ class GymAnnouncementViewsTest(TestCase):
             "content": "This is a new announcement.",
         }
 
-        response = self.client.post(
-            reverse("gym_announcements:create", kwargs={"gym_id": self.gym.id}), data
-        )
+        response = self.client.post(reverse("gym_announcements:create", kwargs={"gym_id": self.gym.id}), data)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data["announcement"]["title"], "New Announcement")
-        self.assertEqual(
-            response.data["announcement"]["status"], GymAnnouncement.Status.DRAFT
-        )
+        self.assertEqual(response.data["announcement"]["status"], GymAnnouncement.Status.DRAFT)
 
     def test_announcement_create_gym_member_denied(self):
         """Test that gym member cannot create announcements."""
@@ -236,9 +224,7 @@ class GymAnnouncementViewsTest(TestCase):
             "content": "This is a member announcement.",
         }
 
-        response = self.client.post(
-            reverse("gym_announcements:create", kwargs={"gym_id": self.gym.id}), data
-        )
+        response = self.client.post(reverse("gym_announcements:create", kwargs={"gym_id": self.gym.id}), data)
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -248,9 +234,7 @@ class GymAnnouncementViewsTest(TestCase):
 
         data = {"content": "This is a new announcement."}
 
-        response = self.client.post(
-            reverse("gym_announcements:create", kwargs={"gym_id": self.gym.id}), data
-        )
+        response = self.client.post(reverse("gym_announcements:create", kwargs={"gym_id": self.gym.id}), data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -473,19 +457,11 @@ class GymAnnouncementPublicationViewsTest(TestCase):
     def setUpTestData(cls):
         cls.owner = User.objects.create_user(phone_number="09120000001")
         cls.other_owner = User.objects.create_user(phone_number="09120000002")
-        cls.admin = User.objects.create_superuser(
-            phone_number="09120000003", password="adminpass123"
-        )
-        cls.gym = Gym.objects.create(
-            name="Test Gym", province="Tehran", city="Tehran", address="Address"
-        )
-        cls.other_gym = Gym.objects.create(
-            name="Other Gym", province="Tehran", city="Tehran", address="Address"
-        )
+        cls.admin = User.objects.create_superuser(phone_number="09120000003", password="adminpass123")
+        cls.gym = Gym.objects.create(name="Test Gym", province="Tehran", city="Tehran", address="Address")
+        cls.other_gym = Gym.objects.create(name="Other Gym", province="Tehran", city="Tehran", address="Address")
         for gym, owner in ((cls.gym, cls.owner), (cls.other_gym, cls.other_owner)):
-            UserGymRole.objects.create(
-                gym=gym, user=owner, role=UserGymRole.Role.OWNER
-            )
+            UserGymRole.objects.create(gym=gym, user=owner, role=UserGymRole.Role.OWNER)
 
     def setUp(self):
         cache.clear()
@@ -519,9 +495,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
         )
 
     def list_announcements(self, gym=None):
-        response = self.client.get(
-            reverse("gym_announcements:list", kwargs={"gym_id": (gym or self.gym).pk})
-        )
+        response = self.client.get(reverse("gym_announcements:list", kwargs={"gym_id": (gym or self.gym).pk}))
         self.assertEqual(response.status_code, 200)
         return response.json()["data"]["announcements"]
 
@@ -553,11 +527,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 self.assertEqual(announcement.status, target)
                 self.assertEqual(announcement.title, "Updated title")
                 self.assertEqual(announcement.content, "Updated content")
-                timestamp = (
-                    announcement.published_at
-                    if target == "PUBLISHED"
-                    else announcement.archived_at
-                )
+                timestamp = announcement.published_at if target == "PUBLISHED" else announcement.archived_at
                 self.assertIsNotNone(timestamp)
                 self.assertLessEqual(before, timestamp)
                 self.assertLessEqual(timestamp, after)
@@ -599,9 +569,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 self.assertFalse(payload["success"])
                 self.assertIsNone(payload["data"])
                 self.assertEqual(payload["error_code"], "ANNOU_003")
-                self.assertEqual(
-                    GymAnnouncement.objects.values().get(pk=announcement.pk), original
-                )
+                self.assertEqual(GymAnnouncement.objects.values().get(pk=announcement.pk), original)
                 self.assertEqual(callbacks, [])
                 self.assertEqual(cache_key(GYM_ANNOUNCEMENTS, self.gym.pk), key)
                 self.assertEqual(cache.get(key), warmed)
@@ -612,9 +580,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 announcement = self.make_announcement(state)
                 timestamps = (announcement.published_at, announcement.archived_at)
                 for _ in range(2):
-                    response = self.update(
-                        announcement, {"status": state, "title": "Edited title"}
-                    )
+                    response = self.update(announcement, {"status": state, "title": "Edited title"})
                     self.assertEqual(response.status_code, 200)
                     announcement.refresh_from_db()
                     self.assertEqual(announcement.status, state)
@@ -634,9 +600,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 announcement.refresh_from_db()
                 self.assertEqual(announcement.content, "Edited content")
                 self.assertEqual(announcement.status, state)
-                self.assertEqual(
-                    (announcement.published_at, announcement.archived_at), timestamps
-                )
+                self.assertEqual((announcement.published_at, announcement.archived_at), timestamps)
 
     def test_create_with_explicit_status_sets_server_timestamps(self):
         for state in ("DRAFT", "PUBLISHED", "ARCHIVED"):
@@ -655,9 +619,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 )
                 after = timezone.now()
                 self.assertEqual(response.status_code, 201)
-                announcement = GymAnnouncement.objects.get(
-                    pk=response.json()["data"]["announcement"]["id"]
-                )
+                announcement = GymAnnouncement.objects.get(pk=response.json()["data"]["announcement"]["id"])
                 self.assertEqual(announcement.status, state)
                 self.assertEqual(announcement.gym_id, self.gym.pk)
                 self.assertEqual(announcement.author_id, self.owner.pk)
@@ -681,9 +643,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 response = self.update(announcement, {"status": value, "title": "Bad"})
                 self.assertEqual(response.status_code, 400)
                 self.assertFalse(response.json()["success"])
-                self.assertEqual(
-                    GymAnnouncement.objects.values().get(pk=announcement.pk), original
-                )
+                self.assertEqual(GymAnnouncement.objects.values().get(pk=announcement.pk), original)
 
     def test_publish_and_archive_refresh_list_after_commit(self):
         announcement = self.make_announcement()
@@ -722,9 +682,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                     self.assertEqual(response.status_code, 200)
                     raise RuntimeError("roll back publication")
         self.assertEqual(callbacks, [])
-        self.assertEqual(
-            GymAnnouncement.objects.values().get(pk=announcement.pk), original
-        )
+        self.assertEqual(GymAnnouncement.objects.values().get(pk=announcement.pk), original)
         self.assertEqual(cache_key(GYM_ANNOUNCEMENTS, self.gym.pk), key)
         self.assertEqual(self.list_announcements(), [])
 

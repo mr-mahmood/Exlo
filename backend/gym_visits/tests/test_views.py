@@ -87,12 +87,12 @@ class NfcFlowTestBase(TestCase):
 
     def _make_order(self, user, plan):
         order = Order.objects.create(
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
             buyer=user,
             status=Order.Status.SUCCEEDED,
-            subtotal_amount=0,
+            subtotal_amount=1000,
             discount_amount=0,
             tax_amount=0,
-            total_amount=0,
             succeeded_at=timezone.now(),
             commerce_product=plan.id,
             product_snapshot={},
@@ -1654,12 +1654,12 @@ class CheckInConcurrencyTests(TransactionTestCase):
         user = User.objects.create_user(phone_number="09120000001")
         plan = GymMembershipPlan.objects.create_plan(name="Plan", gym=gym, duration_months=1, visit_limit=4, price=1000)
         order = Order.objects.create(
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
             buyer=user,
             status=Order.Status.SUCCEEDED,
             subtotal_amount=1000,
             discount_amount=0,
             tax_amount=0,
-            total_amount=1000,
             succeeded_at=timezone.now(),
             commerce_product=plan.id,
             product_snapshot={},
@@ -1731,12 +1731,12 @@ class CheckOutConcurrencyTests(TransactionTestCase):
             price=1000,
         )
         order = Order.objects.create(
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
             buyer=user,
             status=Order.Status.SUCCEEDED,
             subtotal_amount=1000,
             discount_amount=0,
             tax_amount=0,
-            total_amount=1000,
             succeeded_at=timezone.now(),
             commerce_product=plan.id,
             product_snapshot={},

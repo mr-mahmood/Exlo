@@ -43,12 +43,12 @@ class GymVisitModelTestBase(TestCase):
 
     def make_subscription(self, user, *, status=GymSubscription.Status.ACTIVE, remaining=10):
         order = Order.objects.create(
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
             buyer=user,
             status=Order.Status.SUCCEEDED,
-            subtotal_amount=0,
+            subtotal_amount=1000,
             discount_amount=0,
             tax_amount=0,
-            total_amount=0,
             succeeded_at=timezone.now(),
             commerce_product=self.plan.id,
             product_snapshot={},

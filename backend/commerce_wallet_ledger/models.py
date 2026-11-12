@@ -4,8 +4,6 @@ import uuid
 from django.db import models
 from commerce_wallet.models import Wallet
 from commerce_payments.models import Payment
-from commerce_refunds.models import Refund
-from commerce_orders.models import Order
 
 
 class WalletLedgerManager(models.Manager):
@@ -19,14 +17,22 @@ class WalletLedgerManager(models.Manager):
             reason=WalletLedger.Reason.TOP_UP,
         )
 
-    def create_refund_ledger(self, *, wallet: Wallet, refund: Refund, amount, balance_before):
+    def create_refund_ledger(self, *, wallet: Wallet, payment: Payment, amount, balance_before):
         return self.create(
             wallet=wallet,
-            payment=refund.payment,
-            order_id=refund.payment.order_id,
-            refund=refund,
+            payment=payment,
             entry_type=WalletLedger.EntryType.CREDIT,
             reason=WalletLedger.Reason.REFUND,
+            amount=amount,
+            balance_before=balance_before,
+        )
+
+    def create_seller_revenue_ledger(self, *, wallet: Wallet, payment: Payment, amount, balance_before):
+        return self.create(
+            wallet=wallet,
+            payment=payment,
+            entry_type=WalletLedger.EntryType.CREDIT,
+            reason=WalletLedger.Reason.SALE_REVENUE,
             amount=amount,
             balance_before=balance_before,
         )
@@ -59,24 +65,6 @@ class WalletLedger(models.Model):
         Payment,
         on_delete=models.PROTECT,
         related_name="ledger_entries",
-        null=True,
-        blank=True,
-    )
-
-    order = models.ForeignKey(
-        Order,
-        on_delete=models.PROTECT,
-        related_name="ledger_entries",
-        null=True,
-        blank=True,
-    )
-
-    refund = models.OneToOneField(
-        Refund,
-        on_delete=models.PROTECT,
-        related_name="ledger_entry",
-        null=True,
-        blank=True,
     )
 
     entry_type = models.CharField(max_length=255, choices=EntryType.choices)
@@ -90,4 +78,35 @@ class WalletLedger(models.Model):
     class Meta:
         db_table = "wallet_ledger"
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["wallet", "-created_at"])]
+
+        indexes = [
+            models.Index(fields=["wallet"]),
+        ]
+
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="wallet_ledger_amount_positive",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(reason="ORDER_PAYMENT", entry_type="DEBIT")
+                    | models.Q(
+                        reason__in=["TOP_UP", "REFUND", "SALE_REVENUE"],
+                        entry_type="CREDIT",
+                    )
+                ),
+                name="wallet_ledger_valid_direction",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(entry_type="DEBIT")
+                    | models.Q(amount__lte=models.F("balance_before"))
+                ),
+                name="wallet_ledger_debit_within_balance",
+            ),
+            models.UniqueConstraint(
+                fields=["payment", "reason"],
+                name="unique_wallet_ledger_reason_per_payment",
+            ),
+        ]

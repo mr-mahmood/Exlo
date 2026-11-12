@@ -16,7 +16,6 @@ from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
 from users.models import User
 
-
 SWEEP_TASK_NAME = "gym_subscriptions.tasks.sweep_gym_subscriptions"
 
 
@@ -41,10 +40,7 @@ assert scheduled_name in app.tasks, "Scheduled subscription sweep is not registe
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_beat_schedules_registered_name_daily_at_three(self):
-        entries = [
-            entry for entry in app.conf.beat_schedule.values()
-            if entry["task"] == SWEEP_TASK_NAME
-        ]
+        entries = [entry for entry in app.conf.beat_schedule.values() if entry["task"] == SWEEP_TASK_NAME]
         self.assertEqual(len(entries), 1)
         schedule = entries[0]["schedule"]
         run_at = datetime(2026, 11, 6, 3, tzinfo=ZoneInfo(settings.CELERY_TIMEZONE))
@@ -67,32 +63,43 @@ class SubscriptionSweepTaskTest(TestCase):
         app.loader.import_default_modules()
         self.sweep_task = app.tasks[SWEEP_TASK_NAME]
         self.now = datetime(2026, 11, 6, 12, tzinfo=ZoneInfo("UTC"))
-        self.users = [
-            User.objects.create_user(phone_number=f"0912000000{number}")
-            for number in range(5)
-        ]
+        self.users = [User.objects.create_user(phone_number=f"0912000000{number}") for number in range(5)]
         gym_a = Gym.objects.create(name="Gym A")
         gym_b = Gym.objects.create(name="Gym B")
         self.plan_a = GymMembershipPlan.objects.create_plan(
-            gym=gym_a, name="Plan A", description="Monthly membership",
-            duration_months=1, visit_limit=30, price=1000,
+            gym=gym_a,
+            name="Plan A",
+            description="Monthly membership",
+            duration_months=1,
+            visit_limit=30,
+            price=1000,
         )
         self.plan_b = GymMembershipPlan.objects.create_plan(
-            gym=gym_b, name="Plan B", description="Monthly membership",
-            duration_months=1, visit_limit=30, price=1000,
+            gym=gym_b,
+            name="Plan B",
+            description="Monthly membership",
+            duration_months=1,
+            visit_limit=30,
+            price=1000,
         )
 
     def make_subscription(self, user, *, plan=None, **values):
         plan = plan or self.plan_a
         order = Order.objects.create(
-            buyer=user, status=Order.Status.SUCCEEDED,
-            subtotal_amount=1000, discount_amount=0, tax_amount=0,
-            total_amount=1000, succeeded_at=self.now,
+            seller=User.objects.get_or_create(phone_number="09999999999")[0],
+            buyer=user,
+            status=Order.Status.SUCCEEDED,
+            subtotal_amount=1000,
+            discount_amount=0,
+            tax_amount=0,
+            succeeded_at=self.now,
             commerce_product=plan.id,
             product_snapshot={},
         )
         return GymSubscription.objects.create(
-            subscriber=user, plan=plan, order=order,
+            subscriber=user,
+            plan=plan,
+            order=order,
             **{
                 "duration_months": plan.duration_months,
                 "initial_visits": plan.visit_limit,
@@ -108,27 +115,41 @@ class SubscriptionSweepTaskTest(TestCase):
 
     def test_registered_sweep_expires_only_stale_active_subscriptions(self):
         expired_by_time = self.make_subscription(
-            self.users[0], status="ACTIVE", remaining_visits=10,
+            self.users[0],
+            status="ACTIVE",
+            remaining_visits=10,
             expires_at=self.now - timedelta(microseconds=1),
         )
         expired_by_visits = self.make_subscription(
-            self.users[1], plan=self.plan_b, status="ACTIVE", remaining_visits=0,
+            self.users[1],
+            plan=self.plan_b,
+            status="ACTIVE",
+            remaining_visits=0,
             expires_at=self.now + timedelta(days=1),
         )
         boundary = self.make_subscription(
-            self.users[2], status="ACTIVE", expires_at=self.now,
+            self.users[2],
+            status="ACTIVE",
+            expires_at=self.now,
         )
         healthy = self.make_subscription(
-            self.users[3], status="ACTIVE", remaining_visits=1,
+            self.users[3],
+            status="ACTIVE",
+            remaining_visits=1,
             expires_at=self.now + timedelta(microseconds=1),
         )
         pending = self.make_subscription(self.users[4], status="PENDING")
         cancelled = self.make_subscription(
-            self.users[0], status="CANCELLED", end_reason="CANCELLED",
+            self.users[0],
+            status="CANCELLED",
+            end_reason="CANCELLED",
             cancelled_at=self.now - timedelta(days=1),
         )
         already_expired = self.make_subscription(
-            self.users[1], status="EXPIRED", end_reason="VISITS", remaining_visits=0,
+            self.users[1],
+            status="EXPIRED",
+            end_reason="VISITS",
+            remaining_visits=0,
         )
         unchanged = {
             sub.pk: GymSubscription.objects.values().get(pk=sub.pk)
@@ -148,14 +169,14 @@ class SubscriptionSweepTaskTest(TestCase):
                 self.assertEqual(subscription.end_reason, reason)
                 self.assertEqual(subscription.remaining_visits, visits)
         for subscription_id, original in unchanged.items():
-            self.assertEqual(
-                GymSubscription.objects.values().get(pk=subscription_id), original
-            )
+            self.assertEqual(GymSubscription.objects.values().get(pk=subscription_id), original)
         self.assertEqual(GymSubscription.objects.count(), 7)
 
     def test_sweep_promotes_same_gym_queue_and_is_safe_to_repeat(self):
         expired = self.make_subscription(
-            self.users[0], status="ACTIVE", expires_at=self.now - timedelta(days=1),
+            self.users[0],
+            status="ACTIVE",
+            expires_at=self.now - timedelta(days=1),
         )
         first_pending = self.make_subscription(self.users[0], status="PENDING")
         later_pending = self.make_subscription(self.users[0], plan=self.plan_b, status="PENDING")
@@ -184,10 +205,14 @@ class SubscriptionSweepTaskTest(TestCase):
 
     def test_sweep_does_not_change_other_gym_active_subscription(self):
         stale = self.make_subscription(
-            self.users[0], status="ACTIVE", expires_at=self.now - timedelta(days=1),
+            self.users[0],
+            status="ACTIVE",
+            expires_at=self.now - timedelta(days=1),
         )
         other = self.make_subscription(
-            self.users[0], plan=self.plan_b, status="ACTIVE",
+            self.users[0],
+            plan=self.plan_b,
+            status="ACTIVE",
             expires_at=self.now + timedelta(days=5),
         )
 
@@ -204,7 +229,9 @@ class SubscriptionSweepTaskTest(TestCase):
 
     def test_sweep_refreshes_expired_and_promoted_subscription_caches(self):
         active = self.make_subscription(
-            self.users[0], status="ACTIVE", remaining_visits=10,
+            self.users[0],
+            status="ACTIVE",
+            remaining_visits=10,
             expires_at=self.now - timedelta(days=1),
         )
         pending = self.make_subscription(self.users[0], status="PENDING")
@@ -215,10 +242,7 @@ class SubscriptionSweepTaskTest(TestCase):
         def read_states():
             response = client.get(list_url)
             self.assertEqual(response.status_code, 200)
-            list_states = {
-                item["id"]: item["status"]
-                for item in response.data["subscriptions"]
-            }
+            list_states = {item["id"]: item["status"] for item in response.data["subscriptions"]}
             detail_states = {}
             for subscription in (active, pending):
                 detail_url = reverse(

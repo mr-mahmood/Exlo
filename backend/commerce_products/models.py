@@ -6,9 +6,7 @@ from django.db import models
 
 class CommerceProductManager(models.Manager):
     def create_gym_membership_product(self):
-        return CommerceProduct.objects.create(
-            product_type=CommerceProduct.ProductType.GYM_MEMBERSHIP,
-        )
+        return CommerceProduct.objects.create(product_type=CommerceProduct.ProductType.GYM_MEMBERSHIP)
 
 
 class CommerceProduct(models.Model):
@@ -34,9 +32,8 @@ class CommerceProduct(models.Model):
         db_table = "commerce_product"
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["created_at"]),
-            models.Index(fields=["product_type", "created_at"]),
+            models.Index(fields=["product_type"]),
         ]
 
     def __str__(self):
-        return f"{self.id}"
+        return f"{self.product_type} Product, id: {self.id}"
