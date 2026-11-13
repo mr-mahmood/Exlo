@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import timedelta
-from django.db import IntegrityError, models, transaction
+from django.db import models, transaction
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 from commerce_products.models import CommerceProduct
@@ -15,7 +15,6 @@ from core.cache import invalidate_user_subscription_caches
 
 
 class GymSubscriptionsManager(models.Manager):
-
     def get_subscription(self, subscription_id, subscriber):
         try:
             return self.select_related(
@@ -46,21 +45,14 @@ class GymSubscriptionsManager(models.Manager):
             subscription = None
 
         if subscription is None:
-            subscription = self._promote_next_for_gym(subscriber, gym)
-        if subscription is None:
+            subscription = self._activate_pending_for_check_in(subscriber, gym)
+        if subscription is None or not subscription.is_active:
             raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)
 
-        subscription.remaining_visits -= 1
-        subscription.save(update_fields=["remaining_visits", "updated_at"])
-
-        if subscription.remaining_visits <= 0:
-            subscription.expire(reason=subscription.expire_reason)
-            self._promote_next_for_gym(subscriber, gym)
-
+        subscription.consume_visit()
         invalidate_user_subscription_caches(subscriber.id, subscription.id)
         return subscription
 
-    # This function caller must prefetch the product chain, before calling this function
     def create_subscription(self, subscriber, order: Order):
         if order.commerce_product.product_type != CommerceProduct.ProductType.GYM_MEMBERSHIP:
             raise APIError(GymSubscriptionError.INVALID_ORDER_ITEM)
@@ -105,81 +97,22 @@ class GymSubscriptionsManager(models.Manager):
                 duration_months=plan.duration_months,
             )
 
-            if active is None:
-                self._activate_subscription(subscription)
-
             invalidate_user_subscription_caches(subscriber.id, subscription.id)
             return subscription
 
-    def cancel_subscription(self, subscription):
-        with transaction.atomic():
-            subscriber_id = subscription.subscriber_id
-            subscriber = User.objects.select_for_update().get(pk=subscriber_id)
-            subscription: GymSubscription = self.select_for_update().get(pk=subscription.pk)
-
-            if subscription.status in (
-                GymSubscription.Status.EXPIRED,
-                GymSubscription.Status.CANCELLED,
-            ):
-                return subscription
-
-            was_active_sub = subscription.status == GymSubscription.Status.ACTIVE
-            subscription.cancel()
-            if was_active_sub:
-                self._promote_next_for_gym(subscriber, subscription.gym)
-
-            return subscription
-
-    def _promote_next_for_gym(self, subscriber, gym) -> "GymSubscription | None":
-        if self._has_active_subscription(subscriber, gym):
-            return None
-
-        next_subscription = (
-            self.select_for_update(of=("self",))
-            .filter(
-                subscriber=subscriber,
-                status=GymSubscription.Status.PENDING,
-                gym=gym,
-            )
-            .order_by("created_at")
-            .first()
-        )
-
-        if next_subscription is None:
-            return None
-
+    def _activate_pending_for_check_in(self, subscriber, gym) -> "GymSubscription | None":
+        # The caller holds the user lock and has already ruled out an active subscription.
         try:
-            self._activate_subscription(next_subscription)
-        except IntegrityError as e:
-            if "unique_active_subscription_per_user_gym" in str(e):
-                return None
-            raise
-
-        return next_subscription
-
-    def _activate_subscription(self, subscription: "GymSubscription"):
-
-        if self._has_active_subscription(
-            subscription.subscriber,
-            subscription.gym,
-            subscription.pk,
-        ):
-            raise APIError(GymSubscriptionError.ACTIVE_SUBSCRIPTION_EXISTS)
+            subscription = self.select_for_update(of=("self",)).get(
+                subscriber=subscriber,
+                gym=gym,
+                status=GymSubscription.Status.PENDING,
+            )
+        except self.model.DoesNotExist:
+            return None
 
         subscription.activate()
         return subscription
-
-    def _has_active_subscription(self, subscriber, gym, exclude_pk=None):
-        qs = self.filter(
-            subscriber=subscriber,
-            gym=gym,
-            status=GymSubscription.Status.ACTIVE,
-        )
-
-        if exclude_pk is not None:
-            qs = qs.exclude(pk=exclude_pk)
-
-        return qs.exists()
 
 
 class GymSubscription(models.Model):
@@ -314,6 +247,12 @@ class GymSubscription(models.Model):
         condition2 = self.remaining_visits == self.initial_visits
         condition3 = self.created_at <= timezone.now() < (self.created_at + timedelta(hours=48))
         return condition1 and condition2 and condition3
+
+    def consume_visit(self):
+        self.remaining_visits -= 1
+        self.save(update_fields=["remaining_visits", "updated_at"])
+        if self.remaining_visits == 0:
+            self.expire(reason=self.expire_reason)
 
     def activate(self):
         if self.status == self.Status.PENDING:

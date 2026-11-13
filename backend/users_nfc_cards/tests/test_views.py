@@ -448,11 +448,12 @@ class AssignRequestViewTests(ViewTestBase):
                 self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
                 self.assertIsNone(cache.get(f"nfc_card_assign_{gym.pk}"))
 
-    def test_only_current_active_subscription_at_selected_gym_qualifies(self):
+    def test_ineligible_memberships_are_rejected_and_valid_active_membership_qualifies(self):
         subscription = self.create_active_subscription(self.target, self.plan_a)
         cases = (
-            (GymSubscription.Status.PENDING, subscription.expires_at, 30),
-            (GymSubscription.Status.CANCELLED, subscription.expires_at, 30),
+            (GymSubscription.Status.PENDING, None, 0),
+            (GymSubscription.Status.CANCELLED, None, 30),
+            (GymSubscription.Status.EXPIRED, timezone.now() + timedelta(days=1), 30),
             (GymSubscription.Status.ACTIVE, timezone.now() - timedelta(seconds=1), 30),
             (GymSubscription.Status.ACTIVE, subscription.expires_at, 0),
         )
@@ -474,6 +475,23 @@ class AssignRequestViewTests(ViewTestBase):
         subscription.remaining_visits = 1
         subscription.save(update_fields=["status", "expires_at", "remaining_visits"])
         self.assertEqual(self.assign_request(self.admin).status_code, 201)
+
+    def test_pending_membership_qualifies_without_activation_or_visit_consumption(self):
+        subscription = GymSubscription.objects.create_subscription(
+            subscriber=self.target,
+            order=self._make_order(self.target, self.plan_a),
+        )
+
+        response = self.assign_request(self.admin)
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(cache.get(f"nfc_card_assign_{self.gym_a.pk}"), self.target.pk)
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, GymSubscription.Status.PENDING)
+        self.assertEqual(subscription.remaining_visits, 30)
+        self.assertIsNone(subscription.started_at)
+        self.assertIsNone(subscription.expires_at)
+        self.assertFalse(UserNfcCard.objects.filter(user=self.target).exists())
 
     def test_other_gym_subscription_does_not_authorize_assignment(self):
         self.create_active_subscription(self.target, self.plan_a)

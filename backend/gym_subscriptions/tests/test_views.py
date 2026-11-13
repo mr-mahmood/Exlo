@@ -569,28 +569,6 @@ class SubscriptionCancelTests(SubscriptionViewTestBase):
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_cancelling_active_promotes_oldest_pending(self):
-        active = self.make_subscription(
-            self.user,
-            self.plan,
-            status=GymSubscription.Status.ACTIVE,
-            remaining_visits=10,
-            expires_at=timezone.now() + timedelta(days=10),
-        )
-        first_pending = self.make_subscription(
-            self.user,
-            self.plan_2,
-            status=GymSubscription.Status.PENDING,
-        )
-
-        self.authenticate(self.user)
-        response = self.client.post(self.cancel_url(active.id))
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        active.refresh_from_db()
-        first_pending.refresh_from_db()
-        self.assertEqual(active.status, GymSubscription.Status.CANCELLED)
-        self.assertEqual(first_pending.status, GymSubscription.Status.ACTIVE)
 
     def test_cancel_does_not_change_other_users_subscription(self):
         mine = self.make_subscription(
@@ -648,7 +626,7 @@ class SubscriptionCacheInvalidationTests(SubscriptionViewTestBase):
         self.assertEqual(pending.status, "ACTIVE")
         self.assert_subscription_states([(pending, "ACTIVE")])
 
-    def test_cancellation_refreshes_cancelled_and_promoted_details(self):
+    def test_cancellation_refreshes_cancelled_and_preserves_pending_details(self):
         active = self.make_subscription(
             self.user, self.plan, status=GymSubscription.Status.ACTIVE,
             remaining_visits=10, expires_at=timezone.now() + timedelta(days=10),
@@ -666,8 +644,8 @@ class SubscriptionCacheInvalidationTests(SubscriptionViewTestBase):
         active.refresh_from_db()
         pending.refresh_from_db()
         self.assertEqual(active.status, "CANCELLED")
-        self.assertEqual(pending.status, "ACTIVE")
-        self.assert_subscription_states([(active, "CANCELLED"), (pending, "ACTIVE")])
+        self.assertEqual(pending.status, "PENDING")
+        self.assert_subscription_states([(active, "CANCELLED"), (pending, "PENDING")])
 
     def test_expiry_refreshes_cached_list_and_detail(self):
         active = self.make_subscription(

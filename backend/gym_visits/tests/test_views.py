@@ -949,7 +949,7 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         for subscription, expected_status in expected:
             self.assertEqual(states[str(subscription.pk)], expected_status)
 
-    def test_last_visit_promotes_same_gym_and_preserves_other_gym_queue(self):
+    def test_last_visit_keeps_reserves_pending(self):
         active = self.make_active_subscription(self.user, self.plan_a, remaining=1)
         pending_b = self.make_pending_subscription(self.user, self.make_plan_b())
         later_a = self.make_pending_subscription(self.user, self.plan_a)
@@ -970,11 +970,11 @@ class SubscriptionPromotionTests(NfcFlowTestBase):
         self.assertEqual(active.remaining_visits, 0)
         self.assertEqual(pending_b.status, "PENDING")
         self.assertEqual(pending_b.remaining_visits, 30)
-        self.assertEqual(later_a.status, "ACTIVE")
+        self.assertEqual(later_a.status, "PENDING")
         visit = GymVisit.objects.get(user=self.user)
         self.assertEqual(visit.gym_id, self.gym_a.pk)
         self.assertEqual(visit.subscription_id, active.pk)
-        self.assert_subscription_api_states((active, "EXPIRED"), (pending_b, "PENDING"), (later_a, "ACTIVE"))
+        self.assert_subscription_api_states((active, "EXPIRED"), (pending_b, "PENDING"), (later_a, "PENDING"))
 
         self.assertEqual(
             self.check_out(gym=self.gym_a, token=self.token_a, uid="CARD1").status_code,

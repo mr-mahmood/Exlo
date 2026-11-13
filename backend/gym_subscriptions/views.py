@@ -74,12 +74,11 @@ class CancelSubscriptionAPIView(APIView):
 
         # this cancell a user subscription with there demand and remove it
         # its diffrent from refunding
-        subscription = GymSubscription.objects.get_subscription(
+        subscription:GymSubscription = GymSubscription.objects.get_subscription(
             subscription_id=subscription_id,
             subscriber=request.user,
         )
-
-        GymSubscription.objects.cancel_subscription(subscription)
+        subscription.cancel()
         return Response(status=status.HTTP_200_OK)
 
 

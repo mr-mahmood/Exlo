@@ -125,7 +125,8 @@ class WalletTopUpCallbackAPIView(APIView):
                 payment.mark_failed()
                 return redirect("/wallet/payment/result?status=failed")
 
-            # Zibal confirmed payment.
+            # Zibal confirmed payment
+            # we should make the payment paid and not roll it back
             payment.mark_paid()
             gateway.mark_verified(
                 ref_num=response.get("refNumber"),

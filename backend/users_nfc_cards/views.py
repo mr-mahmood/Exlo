@@ -1,4 +1,5 @@
 from django.core.cache import cache
+from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -22,10 +23,10 @@ class UserNfcCardAssignRequestView(APIView):
         user.validate_account_status()
 
         if not GymSubscription.objects.filter(
+            Q(status=GymSubscription.Status.PENDING)
+            | Q(status=GymSubscription.Status.ACTIVE, expires_at__gt=timezone.now()),
             subscriber=user,
             gym_id=gym_id,
-            status=GymSubscription.Status.ACTIVE,
-            expires_at__gt=timezone.now(),
             remaining_visits__gt=0,
         ).exists():
             raise APIError(GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION)

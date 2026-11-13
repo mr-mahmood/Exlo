@@ -172,7 +172,7 @@ class SubscriptionSweepTaskTest(TestCase):
             self.assertEqual(GymSubscription.objects.values().get(pk=subscription_id), original)
         self.assertEqual(GymSubscription.objects.count(), 7)
 
-    def test_sweep_promotes_same_gym_queue_and_is_safe_to_repeat(self):
+    def test_sweep_leaves_reserves_pending_and_is_safe_to_repeat(self):
         expired = self.make_subscription(
             self.users[0],
             status="ACTIVE",
@@ -188,13 +188,10 @@ class SubscriptionSweepTaskTest(TestCase):
         later_pending.refresh_from_db()
         self.assertEqual(expired.status, "EXPIRED")
         self.assertEqual(expired.end_reason, "TIME")
-        self.assertEqual(first_pending.status, "ACTIVE")
+        self.assertEqual(first_pending.status, "PENDING")
         self.assertEqual(first_pending.remaining_visits, 30)
-        self.assertEqual(first_pending.started_at, self.now)
-        self.assertEqual(
-            first_pending.expires_at,
-            datetime(2026, 12, 6, 12, tzinfo=ZoneInfo("UTC")),
-        )
+        self.assertIsNone(first_pending.started_at)
+        self.assertIsNone(first_pending.expires_at)
         self.assertEqual(later_pending.status, "PENDING")
         self.assertIsNone(later_pending.started_at)
         original = list(GymSubscription.objects.order_by("pk").values())
@@ -227,7 +224,7 @@ class SubscriptionSweepTaskTest(TestCase):
         self.run_sweep()
         self.assertFalse(GymSubscription.objects.exists())
 
-    def test_sweep_refreshes_expired_and_promoted_subscription_caches(self):
+    def test_sweep_refreshes_expired_cache_and_preserves_pending(self):
         active = self.make_subscription(
             self.users[0],
             status="ACTIVE",
@@ -263,6 +260,6 @@ class SubscriptionSweepTaskTest(TestCase):
         active.refresh_from_db()
         pending.refresh_from_db()
         self.assertEqual(active.status, "EXPIRED")
-        self.assertEqual(pending.status, "ACTIVE")
-        expected_after = {str(active.pk): "EXPIRED", str(pending.pk): "ACTIVE"}
+        self.assertEqual(pending.status, "PENDING")
+        expected_after = {str(active.pk): "EXPIRED", str(pending.pk): "PENDING"}
         self.assertEqual(read_states(), (expected_after, expected_after))
