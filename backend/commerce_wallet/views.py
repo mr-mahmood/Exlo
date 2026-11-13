@@ -77,15 +77,15 @@ class WalletTopUpCallbackAPIView(APIView):
     permission_classes = []
 
     def get(self, request):
-        track_id = str(request.GET.get("trackId"))
-        order_id = str(request.GET.get("orderId"))
+        track_id = request.GET.get("trackId")
+        order_id = request.GET.get("orderId")
 
         with transaction.atomic():
 
             # 1. Lock gateway and payment
             try:
                 gateway: PaymentGateway = PaymentGateway.objects.select_for_update().get(track_id=track_id)
-            except PaymentGateway.DoesNotExist:
+            except (PaymentGateway.DoesNotExist, TypeError, ValueError):
                 raise APIError(PaymentGatewayError.GATEWAY_NOT_FOUND)
 
             payment: Payment = Payment.objects.select_for_update().get(pk=gateway.payment_id)
@@ -113,8 +113,8 @@ class WalletTopUpCallbackAPIView(APIView):
             response = zibal.verify_payment(track_id=track_id)
 
             if not response:
-                payment.mark_failed()
-                return redirect("/wallet/payment/result?status=failed")
+                # TODO: Keep uncertain verification pending so a later callback can recover paid funds; revisit reconciliation.
+                return redirect("/wallet/payment/result?status=pending")
 
             if response.get("result") not in (100, 201):
                 payment.mark_failed()

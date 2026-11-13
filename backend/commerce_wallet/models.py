@@ -47,12 +47,14 @@ class Wallet(models.Model):
         return f"{self.owner.phone_number} -> {self.balance:,} Rial"
 
     def credit(self, amount):
-        self.balance += amount
-        self.save(update_fields=["balance", "updated_at"])
+        if amount > 0:
+            self.balance += amount
+            self.save(update_fields=["balance", "updated_at"])
 
     def debit(self, amount):
-        if self.balance - amount < 0:
-            raise APIError(WalletError.BALANCE_NOT_ENOUGH)
+        if amount > 0:
+            if self.balance - amount < 0:
+                raise APIError(WalletError.BALANCE_NOT_ENOUGH)
 
-        self.balance -= amount
-        self.save(update_fields=["balance", "updated_at"])
+            self.balance -= amount
+            self.save(update_fields=["balance", "updated_at"])

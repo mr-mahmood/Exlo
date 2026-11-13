@@ -159,6 +159,6 @@ class Payment(models.Model):
             self.save(update_fields=["status", "paid_at", "updated_at"])
 
     def mark_failed(self):
-        if self.status != Payment.Status.FAILED:
+        if self.status == Payment.Status.PENDING:
             self.status = Payment.Status.FAILED
             self.save(update_fields=["status", "updated_at"])
