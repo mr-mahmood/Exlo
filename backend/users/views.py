@@ -9,7 +9,7 @@ from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
 from users_referrals.models import Referral
 from users_sessions.models import Session
-from authentication.otp_service import generate_otp, verify_otp
+from authentication.otp_service import OTPPurpose, generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
 from authentication.throttles import OTPPhoneThrottle, OTPIPThrottle
 from core.errors import APIError, OTPError, SignUpError, UserAccountError
@@ -131,7 +131,7 @@ class PhoneChangeOldRequestAPIView(APIView):
         user: User = request.user
 
         # Generate OTP for current phone
-        result = generate_otp(user.phone_number)
+        generate_otp(phone_number=user.phone_number, purpose=OTPPurpose.OLD_PHONE, user_id=user.pk)
 
         # Set state: step 1
         cache_key = f"phone_change_step_{user.id}"
@@ -144,10 +144,7 @@ class PhoneChangeOldRequestAPIView(APIView):
             timeout=300,
         )
 
-        if result:
-            return Response(status=status.HTTP_200_OK)
-        else:
-            raise APIError(OTPError.OLD_PHONE_OTP_FAILED)
+        return Response(status=status.HTTP_200_OK)
 
 
 class PhoneChangeOldVerifyAPIView(APIView):
@@ -171,7 +168,7 @@ class PhoneChangeOldVerifyAPIView(APIView):
             raise APIError(OTPError.INVALID_STEP)
 
         # Verify OTP
-        verify_otp(user.phone_number, otp)
+        verify_otp(phone_number=user.phone_number, otp_code=otp, purpose=OTPPurpose.OLD_PHONE, user_id=user.pk)
 
         # Update state: step 2
         cache.set(
@@ -205,7 +202,12 @@ class PhoneChangeNewRequestAPIView(APIView):
         if not state:
             raise APIError(OTPError.OTP_NOT_FOUND)
 
-        if state.get("step") != "old_verified":
+        step = state.get("step")
+        if step == "new_otp_sent":
+            new_phone = validate_phone(new_phone, skip_duplicate_check=True)
+            if new_phone != state.get("new_phone"):
+                raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
+        elif step != "old_verified":
             raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
 
         new_phone = validate_phone(new_phone, instance=user)
@@ -214,7 +216,10 @@ class PhoneChangeNewRequestAPIView(APIView):
             raise APIError(UserAccountError.SAME_PHONE_AS_CURRENT)
 
         # Generate OTP for new phone
-        result = generate_otp(new_phone)
+        generate_otp(phone_number=new_phone, purpose=OTPPurpose.NEW_PHONE, user_id=user.pk)
+
+        if step == "new_otp_sent":
+            return Response(status=status.HTTP_200_OK)
 
         # Update state: step 3 (store new phone)
         cache.set(
@@ -227,10 +232,7 @@ class PhoneChangeNewRequestAPIView(APIView):
             timeout=300,
         )
 
-        if result:
-            return Response(status=status.HTTP_200_OK)
-        else:
-            raise APIError(OTPError.NEW_PHONE_OTP_FAILED)
+        return Response(status=status.HTTP_200_OK)
 
 
 class PhoneChangeNewVerifyAPIView(APIView):
@@ -266,7 +268,7 @@ class PhoneChangeNewVerifyAPIView(APIView):
             raise
 
         # Verify OTP from new phone
-        verify_otp(new_phone, otp)
+        verify_otp(phone_number=new_phone, otp_code=otp, purpose=OTPPurpose.NEW_PHONE, user_id=user.pk)
 
         old_phone = user.phone_number
         try:

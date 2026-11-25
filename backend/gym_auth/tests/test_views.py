@@ -14,6 +14,7 @@ from gym_auth.models import UserGymRole
 from users.models import User
 from django.core.cache import cache
 from core.cache import GYM_USERS, cache_key
+from core.errors import UserAccountError, UserGymRoleError, UserValidationError
 
 
 class GymAuthViewsTest(TestCase):
@@ -253,11 +254,11 @@ class GymAuthViewsTest(TestCase):
         original = UserGymRole.objects.count()
         for url in (self.owner_create_url, self.coach_create_url, self.staff_create_url):
             for data, expected_status, error_code in (
-                ({}, 400, "VAL-001"),
-                ({"user": str(self.regular_user.pk)}, 400, "VAL-001"),
-                ({"phone_number": "123"}, 400, "VAL-001"),
-                ({"phone_number": 9121112222}, 400, "VAL-001"),
-                ({"phone_number": "09120000000"}, 404, "USER-001"),
+                ({}, 400, UserValidationError.INVALID_PHONE_NUMBER[0]),
+                ({"user": str(self.regular_user.pk)}, 400, UserValidationError.INVALID_PHONE_NUMBER[0]),
+                ({"phone_number": "123"}, 400, UserValidationError.INVALID_PHONE_NUMBER[0]),
+                ({"phone_number": 9121112222}, 400, UserValidationError.INVALID_PHONE_NUMBER[0]),
+                ({"phone_number": "09120000000"}, 404, UserAccountError.USER_NOT_EXIST[0]),
             ):
                 with self.subTest(url=url, data=data):
                     response = self.client.post(url, data)
@@ -298,7 +299,7 @@ class GymAuthViewsTest(TestCase):
         payload = response.json()
         self.assertFalse(payload["success"])
         self.assertIsNone(payload["data"])
-        self.assertEqual(payload["error_code"], "ROLE_002")
+        self.assertEqual(payload["error_code"], UserGymRoleError.ROLE_ALREADY_EXISTS[0])
         self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), original)
         self.assertEqual(callbacks, [])
         self.assertEqual(cache_key(GYM_USERS, self.gym.pk), key)
@@ -315,7 +316,7 @@ class GymAuthViewsTest(TestCase):
             self.owner_create_url, {"phone_number": self.regular_user.phone_number}
         )
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error_code"], "ROLE_003")
+        self.assertEqual(response.json()["error_code"], UserGymRoleError.OWNER_ALREADY_EXISTS[0])
         self.assertFalse(response.json()["success"])
         self.assertIsNone(response.json()["data"])
         self.assertEqual(
@@ -383,7 +384,7 @@ class GymAuthViewsTest(TestCase):
             with self.subTest(url=url):
                 response = self.client.post(url, {"phone_number": self.regular_user.phone_number})
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-                self.assertEqual(response.json()["error_code"], "USER-002")
+                self.assertEqual(response.json()["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])
                 self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), before)
                 self.assertEqual(cache.get(key), warmed)
 
@@ -398,7 +399,7 @@ class GymAuthViewsTest(TestCase):
             with self.subTest(role=role.role):
                 response = self.client.post(url, {"phone_number": role.user.phone_number})
                 self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-                self.assertNotEqual(response.json()["error_code"], "ROLE_002")
+                self.assertNotEqual(response.json()["error_code"], UserGymRoleError.ROLE_ALREADY_EXISTS[0])
         self.assertEqual(list(UserGymRole.objects.order_by("pk").values()), original)
 
     def test_create_owner_admin(self):
@@ -848,7 +849,7 @@ class GymRoleCreationConcurrencyTests(TransactionTestCase):
 
         self.assertEqual(sorted(code for code, _ in responses), [200, 400])
         failure = next(payload for code, payload in responses if code == 400)
-        self.assertEqual(failure["error_code"], "ROLE_003")
+        self.assertEqual(failure["error_code"], UserGymRoleError.OWNER_ALREADY_EXISTS[0])
         self.assertEqual(UserGymRole.objects.filter(gym=self.gym, role="OWNER").count(), 1)
 
     def test_concurrent_duplicate_requests_create_one_role(self):
@@ -879,7 +880,7 @@ class GymRoleCreationConcurrencyTests(TransactionTestCase):
                 failure = next(payload for code, payload in responses if code == 400)
                 self.assertFalse(failure["success"])
                 self.assertIsNone(failure["data"])
-                self.assertEqual(failure["error_code"], "ROLE_002")
+                self.assertEqual(failure["error_code"], UserGymRoleError.ROLE_ALREADY_EXISTS[0])
                 self.assertEqual(
                     UserGymRole.objects.filter(
                         user=self.target, gym=self.gym, role=role

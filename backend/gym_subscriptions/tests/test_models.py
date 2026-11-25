@@ -1238,7 +1238,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         pending = self.create_raw_subscription(self.user, self.plan_3)
         with self.assertRaises(APIError) as raised:
             GymSubscription.objects.consume_visit(self.user, self.gym)
-        self.assertEqual(raised.exception.error_code, "SUBS_003")
+        self.assertEqual(raised.exception.error_code, GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0])
         pending.refresh_from_db()
         self.assertEqual(pending.status, "PENDING")
         self.assertEqual(pending.remaining_visits, 20)
@@ -1248,7 +1248,7 @@ class GymSubscriptionCheckInTests(GymSubscriptionTestBase):
         pending = self.create_raw_subscription(self.user_2, self.plan_3)
         with self.assertRaises(APIError) as raised:
             GymSubscription.objects.consume_visit(self.user, self.gym_2)
-        self.assertEqual(raised.exception.error_code, "SUBS_003")
+        self.assertEqual(raised.exception.error_code, GymSubscriptionError.NO_ACTIVE_SUBSCRIPTION[0])
         pending.refresh_from_db()
         self.assertEqual(pending.status, "PENDING")
         self.assertEqual(pending.remaining_visits, 20)

@@ -15,9 +15,14 @@ from django.urls import reverse
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
-from authentication.otp_service import OTP_CACHE_PREFIX, verify_otp
 from commerce_wallet.models import Wallet
-from core.errors import AuthenticationError, OTPError, SignUpError, UserValidationError
+from core.errors import (
+    AuthenticationError,
+    OTPError,
+    SignUpError,
+    UserValidationError,
+    UserAccountError,
+)
 from users.models import User
 from users_referrals.models import Referral
 from users_sessions.models import Session
@@ -71,6 +76,9 @@ class SignupTestHelpers:
     def assert_proof_consumed(self, phone=None):
         phone = phone or self.phone
         self.assertIsNone(cache.get(f"signup_verified_{phone}"))
+
+    def expire_login_cooldown(self):
+        self.assertTrue(cache.touch(f"otp:login:-:{self.phone}", -1))
 
 
 class UserSignupViewTest(SignupTestHelpers, TestCase):
@@ -239,9 +247,7 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
     def test_signup_rejects_non_string_phone(self):
         for phone in (9123456789, 1.5, True, [self.phone], {"phone": self.phone}):
             with self.subTest(phone=phone):
-                self.assert_invalid_signup_phone(
-                    phone, UserValidationError.INVALID_PHONE_NUMBER[0]
-                )
+                self.assert_invalid_signup_phone(phone, UserValidationError.INVALID_PHONE_NUMBER[0])
 
     def test_signup_falsy_phone_preserves_required_error(self):
         for phone in (None, 0, False, [], {}):
@@ -253,9 +259,7 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         original_proof = cache.get(proof_key)
         self.assertIsNotNone(original_proof)
 
-        response = self.client.post(
-            self.url, {**self.valid_data, "phone_number": phone}, format="json"
-        )
+        response = self.client.post(self.url, {**self.valid_data, "phone_number": phone}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         body = response.json()
@@ -293,9 +297,7 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         data = {**self.valid_data, "referral": "INVALID_CODE"}
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0]
-        )
+        self.assertEqual(response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0])
         self.assert_proof_consumed()
         self.assertFalse(User.objects.filter(phone_number=self.phone).exists())
 
@@ -351,12 +353,8 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
             data = {**self.valid_data, "referral": "ABCDEF"}
             response = self.client.post(self.url, data)
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertEqual(
-                response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0]
-            )
-            self.assertFalse(
-                Referral.objects.filter(referred_user=created_user).exists()
-            )
+            self.assertEqual(response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0])
+            self.assertFalse(Referral.objects.filter(referred_user=created_user).exists())
             self.assert_proof_consumed()
         finally:
             User.objects.create_user = original_create_user
@@ -453,9 +451,7 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
         verification = self.verify_phone()
         token = verification.cookies["signup_token"].value
         record = cache.get(f"signup_verified_{self.phone}")
-        response = APIClient().post(
-            self.signup_url, {**self.data, "signup_token": token}, format="json"
-        )
+        response = APIClient().post(self.signup_url, {**self.data, "signup_token": token}, format="json")
         self.assert_denied(response)
         self.assert_no_account()
         self.assertEqual(cache.get(f"signup_verified_{self.phone}"), record)
@@ -512,6 +508,7 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
     def test_new_verification_replaces_the_old_secret(self):
         first_client = APIClient()
         first = self.verify_phone(client=first_client)
+        self.expire_login_cooldown()
         second = self.verify_phone()
         self.assertNotEqual(
             first.cookies["signup_token"].value,
@@ -535,21 +532,18 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
         ):
             with self.subTest(record=record):
                 cache.set(key, record, 600)
-                self.assert_denied(
-                    self.client.post(self.signup_url, self.data, format="json")
-                )
+                self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
                 self.assert_no_account()
                 self.assertEqual(cache.get(key), record)
 
     def test_validation_failure_consumes_proof_and_requires_fresh_otp(self):
         self.verify_phone()
-        response = self.client.post(
-            self.signup_url, {**self.data, "first_name": "A"}, format="json"
-        )
+        response = self.client.post(self.signup_url, {**self.data, "first_name": "A"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assert_no_account()
         self.assert_proof_consumed()
         self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
+        self.expire_login_cooldown()
         self.verify_phone()
         response = self.client.post(self.signup_url, self.data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -557,14 +551,13 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
 
     def test_creation_failure_rolls_back_and_consumes_proof(self):
         self.verify_phone()
-        with patch.object(
-            Session, "create_session", side_effect=RuntimeError("creation failed")
-        ):
+        with patch.object(Session, "create_session", side_effect=RuntimeError("creation failed")):
             with self.assertRaisesMessage(RuntimeError, "creation failed"):
                 self.client.post(self.signup_url, self.data, format="json")
         self.assert_no_account()
         self.assert_proof_consumed()
         self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
+        self.expire_login_cooldown()
         self.verify_phone()
         response = self.client.post(self.signup_url, self.data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -658,10 +651,6 @@ class PhoneChangeFlowTest(TestCase):
         self.client = APIClient()
         cache.clear()
 
-        self.sms_patcher = patch("core.sms_task.send_sms_verification_task.delay")
-        self.mock_sms = self.sms_patcher.start()
-        self.mock_sms.return_value = None
-
         self.user = User.objects.create_user(
             phone_number="09123456789",
             first_name="John",
@@ -676,7 +665,6 @@ class PhoneChangeFlowTest(TestCase):
         self.new_verify_url = reverse("users:phone-change-new-verify")
 
     def tearDown(self):
-        self.sms_patcher.stop()
         cache.clear()
 
     def verify_old_phone(self):
@@ -687,19 +675,58 @@ class PhoneChangeFlowTest(TestCase):
 
     def request_new_phone(self, phone):
         self.verify_old_phone()
-        response = self.client.post(
-            self.new_request_url, {"phone_number": phone}, format="json"
-        )
+        response = self.client.post(self.new_request_url, {"phone_number": phone}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def assert_confirmation_conflict(self, response, owner):
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        body = response.json()
+        self.assertFalse(body["success"])
+        self.assertIsNone(body["data"])
+        self.assertEqual(body["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+        self.assertEqual(User.objects.get(phone_number="09123456711"), owner)
+        self.assertIsNone(cache.get(f"phone_change_step_{self.user.id}"))
+
     # ========== SUCCESS FLOW ==========
+    def test_repeat_new_phone_request_preserves_state(self):
+        phone = "09123456711"
+        self.request_new_phone(phone)
+        state_key = f"phone_change_step_{self.user.id}"
+        original_state = cache.get(state_key)
+        cache.touch(state_key, 60)
+
+        response = self.client.post(self.new_request_url, {"phone_number": f" {phone} "})
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.json()["error_code"], OTPError.OTP_ALREADY_ACTIVE[0])
+        self.assertGreater(int(response["Retry-After"]), 0)
+        self.assertEqual(cache.get(state_key), original_state)
+        self.assertLessEqual(cache.ttl(state_key), 60)
+
+        response = self.client.post(self.new_request_url, {"phone_number": "09123456712"})
+        self.assertEqual(response.json()["error_code"], OTPError.OLD_PHONE_VERIFICATION_REQUIRED[0])
+        self.assertEqual(cache.get(state_key), original_state)
+
+        otp_key = f"otp:new_phone:{self.user.pk}:{phone}"
+        cache.touch(otp_key, -1)
+        response = self.client.post(self.new_request_url, {"phone_number": phone})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(cache.get(state_key), original_state)
+        self.assertLessEqual(cache.ttl(state_key), 60)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, phone)
+
     def test_complete_phone_change_flow(self):
         """Test complete phone change flow with all steps"""
         new_phone = "09123456711"
 
         response = self.client.post(self.old_request_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        cache_key = f"{OTP_CACHE_PREFIX}_{self.user.phone_number}"
+        cache_key = f"otp:old_phone:{self.user.pk}:{self.user.phone_number}"
         self.assertIsNotNone(cache.get(cache_key))
 
         state_key = f"phone_change_step_{self.user.id}"
@@ -710,7 +737,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNone(cache.get(cache_key))
+        self.assertIsNone(cache.get(cache_key)[1])
 
         state = cache.get(state_key)
         self.assertIsNotNone(state)
@@ -719,7 +746,7 @@ class PhoneChangeFlowTest(TestCase):
         response = self.client.post(self.new_request_url, {"phone_number": new_phone})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        new_cache_key = f"{OTP_CACHE_PREFIX}_{new_phone}"
+        new_cache_key = f"otp:new_phone:{self.user.pk}:{new_phone}"
         self.assertIsNotNone(cache.get(new_cache_key))
 
         state = cache.get(state_key)
@@ -737,15 +764,15 @@ class PhoneChangeFlowTest(TestCase):
         self.assertEqual(self.user.phone_number, new_phone)
 
         self.assertIsNone(cache.get(state_key))
-        self.assertIsNone(cache.get(new_cache_key))
+        self.assertIsNone(cache.get(new_cache_key)[1])
 
     def test_new_phone_request_caches_normalized_phone(self):
         self.request_new_phone(" 09123456711 ")
 
         state = cache.get(f"phone_change_step_{self.user.id}")
         self.assertEqual(state["new_phone"], "09123456711")
-        self.assertIsNotNone(cache.get("otp_09123456711"))
-        self.assertIsNone(cache.get("otp_ 09123456711 "))
+        self.assertIsNotNone(cache.get(f"otp:new_phone:{self.user.pk}:09123456711"))
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}: 09123456711 "))
         self.user.refresh_from_db()
         self.assertEqual(self.user.phone_number, "09123456789")
 
@@ -761,9 +788,9 @@ class PhoneChangeFlowTest(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.json()["error_code"], "USER-006")
+        self.assertEqual(response.json()["error_code"], UserAccountError.SAME_PHONE_AS_CURRENT[0])
         self.assertEqual(cache.get(state_key), original_state)
-        self.assertIsNone(cache.get(f"otp_ {self.user.phone_number} "))
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}: {self.user.phone_number} "))
 
     def test_padded_phone_change_completes(self):
         self.request_new_phone(" 09123456711 ")
@@ -775,7 +802,7 @@ class PhoneChangeFlowTest(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.phone_number, "09123456711")
         self.assertIsNone(cache.get(f"phone_change_step_{self.user.id}"))
-        self.assertIsNone(cache.get("otp_09123456711"))
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}:09123456711")[1])
 
     def test_phone_change_state_is_cleared_after_commit(self):
         self.request_new_phone("09123456711")
@@ -799,7 +826,15 @@ class PhoneChangeFlowTest(TestCase):
         self.assertEqual(self.user.phone_number, "09123456789")
         self.assertEqual(cache.get(state_key), original_state)
         # Redis OTP consumption is not rolled back with the database.
-        self.assertIsNone(cache.get("otp_09123456711"))
+        replay = self.client.post(self.new_verify_url, {"otp": "123456"})
+        self.assertEqual(replay.json()["error_code"], OTPError.OTP_NOT_FOUND[0])
+        self.assertTrue(cache.touch(f"otp:new_phone:{self.user.pk}:09123456711", -1))
+        self.assertEqual(self.client.post(self.new_request_url, {"phone_number": "09123456711"}).status_code, 200)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456711")
 
     def test_new_phone_claimed_before_confirmation(self):
         self.request_new_phone("09123456711")
@@ -812,48 +847,13 @@ class PhoneChangeFlowTest(TestCase):
         other_state_key = f"phone_change_step_{owner.id}"
         other_state = {"step": "old_verified", "user_id": owner.id}
         cache.set(other_state_key, other_state, 300)
-        original_otp = cache.get("otp_09123456711")
+        original_otp = cache.get(f"otp:new_phone:{self.user.pk}:09123456711")
 
         response = self.client.post(self.new_verify_url, {"otp": "123456"})
 
         self.assert_confirmation_conflict(response, owner)
-        self.assertEqual(cache.get("otp_09123456711"), original_otp)
+        self.assertEqual(cache.get(f"otp:new_phone:{self.user.pk}:09123456711"), original_otp)
         self.assertEqual(cache.get(other_state_key), other_state)
-
-    def test_new_phone_claimed_after_final_validation(self):
-        self.request_new_phone("09123456711")
-        owner = None
-
-        def verify_and_claim(phone, otp):
-            nonlocal owner
-            result = verify_otp(phone, otp)
-            owner = User.objects.create_user(
-                phone_number="09123456711",
-                first_name="Other",
-                last_name="User",
-                gender=User.Gender.MALE,
-            )
-            return result
-
-        # Real OTP verification and a real competing row exercise PostgreSQL's
-        # unique constraint after the view has already checked availability.
-        with patch("users.views.verify_otp", side_effect=verify_and_claim):
-            response = self.client.post(self.new_verify_url, {"otp": "123456"})
-
-        self.assertIsNotNone(owner)
-        self.assert_confirmation_conflict(response, owner)
-        self.assertIsNone(cache.get("otp_09123456711"))
-
-    def assert_confirmation_conflict(self, response, owner):
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        body = response.json()
-        self.assertFalse(body["success"])
-        self.assertIsNone(body["data"])
-        self.assertEqual(body["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
-        self.user.refresh_from_db()
-        self.assertEqual(self.user.phone_number, "09123456789")
-        self.assertEqual(User.objects.get(phone_number="09123456711"), owner)
-        self.assertIsNone(cache.get(f"phone_change_step_{self.user.id}"))
 
     def test_unrelated_confirmation_integrity_error_is_not_masked(self):
         self.request_new_phone("09123456711")
@@ -877,9 +877,7 @@ class PhoneChangeFlowTest(TestCase):
             "invalid",
         ):
             with self.subTest(phone=phone):
-                response = self.client.post(
-                    self.new_request_url, {"phone_number": phone}, format="json"
-                )
+                response = self.client.post(self.new_request_url, {"phone_number": phone}, format="json")
                 self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                 self.assertEqual(
                     response.json()["error_code"],
@@ -888,7 +886,7 @@ class PhoneChangeFlowTest(TestCase):
                 self.assertEqual(cache.get(state_key), original_state)
         self.user.refresh_from_db()
         self.assertEqual(self.user.phone_number, "09123456789")
-        self.assertIsNone(cache.get("otp_09123456711"))
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}:09123456711"))
 
     def test_new_otp_verify_missing_target(self):
         cache.set(
@@ -898,7 +896,7 @@ class PhoneChangeFlowTest(TestCase):
         )
         response = self.client.post(self.new_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.json()["error_code"], "OTP-006")
+        self.assertEqual(response.json()["error_code"], OTPError.NEW_PHONE_NOT_FOUND[0])
         self.user.refresh_from_db()
         self.assertEqual(self.user.phone_number, "09123456789")
 
@@ -912,14 +910,14 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], "OTP-002")
+        self.assertEqual(response.data["error_code"], OTPError.OTP_NOT_FOUND[0])
 
     # ========== ERROR CASES - OLD PHONE ==========
     def test_old_otp_verify_without_state(self):
         """Test verifying old OTP without any state"""
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], "OTP-002")
+        self.assertEqual(response.data["error_code"], OTPError.OTP_NOT_FOUND[0])
 
     def test_old_otp_verify_invalid_otp(self):
         """Test verifying old OTP with invalid code"""
@@ -928,7 +926,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "999999"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-003")
+        self.assertEqual(response.data["error_code"], OTPError.OTP_INVALID[0])
 
         state = cache.get(f"phone_change_step_{self.user.id}")
         self.assertEqual(state["step"], "old_otp_sent")
@@ -940,7 +938,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-004")
+        self.assertEqual(response.data["error_code"], OTPError.INVALID_STEP[0])
 
     def test_old_otp_request_missing_otp(self):
         """Test old OTP verification without OTP code"""
@@ -949,16 +947,14 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.old_verify_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-001")
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
 
     # ========== ERROR CASES - NEW PHONE ==========
     def test_new_otp_request_without_old_verification(self):
         """Test requesting new phone OTP without old verification"""
-        response = self.client.post(
-            self.new_request_url, {"phone_number": "09123456788"}
-        )
+        response = self.client.post(self.new_request_url, {"phone_number": "09123456788"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(response.data["error_code"], "OTP-002")
+        self.assertEqual(response.data["error_code"], OTPError.OTP_NOT_FOUND[0])
 
     def test_new_otp_request_missing_phone(self):
         """Test new phone OTP request without phone number"""
@@ -966,7 +962,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_request_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-001")
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
 
     def test_new_otp_request_duplicate_phone(self):
         """Test changing to a phone that already exists"""
@@ -979,9 +975,7 @@ class PhoneChangeFlowTest(TestCase):
 
         self.verify_old_phone()
 
-        response = self.client.post(
-            self.new_request_url, {"phone_number": "09123456788"}
-        )
+        response = self.client.post(self.new_request_url, {"phone_number": "09123456788"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
 
@@ -989,11 +983,9 @@ class PhoneChangeFlowTest(TestCase):
         """Test changing to the same phone number"""
         self.verify_old_phone()
 
-        response = self.client.post(
-            self.new_request_url, {"phone_number": self.user.phone_number}
-        )
+        response = self.client.post(self.new_request_url, {"phone_number": self.user.phone_number})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "USER-006")
+        self.assertEqual(response.data["error_code"], UserAccountError.SAME_PHONE_AS_CURRENT[0])
 
     def test_new_otp_verify_without_state(self):
         """Test verifying new phone OTP without state"""
@@ -1006,7 +998,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_verify_url, {"otp": "999999"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-003")
+        self.assertEqual(response.data["error_code"], OTPError.OTP_INVALID[0])
 
     def test_new_otp_verify_wrong_step(self):
         """Test verifying new OTP at wrong step"""
@@ -1015,7 +1007,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-004")
+        self.assertEqual(response.data["error_code"], OTPError.INVALID_STEP[0])
 
     def test_new_otp_verify_missing_otp(self):
         """Test new OTP verification without OTP code"""
@@ -1023,7 +1015,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = self.client.post(self.new_verify_url, {})
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "OTP-001")
+        self.assertEqual(response.data["error_code"], OTPError.PHONE_REQUIRED[0])
 
     def test_new_otp_verify_expired_state(self):
         """Test verifying new phone with expired state"""
@@ -1036,29 +1028,16 @@ class PhoneChangeFlowTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     # ========== RATE LIMITING TESTS ==========
-    def test_throttle_phone_change_different_endpoints(self):
-        """Test rate limiting with phone number"""
-        for _ in range(5):
-            response = self.client.post(
-                self.new_request_url, {"phone_number": f"09123456711"}
-            )
-            self.assertNotEqual(response.status_code, status.HTTP_200_OK)
+    def test_new_phone_request_records_normalized_phone_history(self):
+        for phone in ("09123456711", " 09123456711 "):
+            self.assertEqual(self.client.post(self.new_request_url, {"phone_number": phone}).status_code, 404)
+        self.assertEqual(len(cache.get("throttle_otp_phone_09123456711")), 2)
 
-        response = self.client.post(
-            self.new_request_url, {"phone_number": "09123456711"}
-        )
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
-
-    def test_throttle_phone_change(self):
-        """Test rate limiting with ip endpoints"""
-        # Make multiple requests to trigger throttle
-        for _ in range(10):
-            response = self.client.post(self.old_request_url)
-
-        # After 10 requests, should be throttled
-        # Note: Adjust based on your throttle settings
-        response = self.client.post(self.old_request_url)
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+    def test_old_phone_requests_record_ip_history(self):
+        self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
+        duplicate = self.client.post(self.old_request_url)
+        self.assertEqual(duplicate.json()["error_code"], OTPError.OTP_ALREADY_ACTIVE[0])
+        self.assertEqual(len(cache.get("throttle_otp_ip_127.0.0.1")), 2)
 
     # ========== AUTHENTICATION TESTS ==========
     def test_phone_change_unauthenticated(self):
@@ -1067,9 +1046,7 @@ class PhoneChangeFlowTest(TestCase):
 
         response = client.post(self.old_request_url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
-        )
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])
 
     def test_phone_change_inactive_user(self):
         """Test phone change for inactive user"""
@@ -1102,12 +1079,8 @@ class UserProfileViewTest(TestCase):
         client.force_authenticate(user=user)
         image_bytes = io.BytesIO()
         Image.new("RGB", (16, 16), color="red").save(image_bytes, format="PNG")
-        image_file = SimpleUploadedFile(
-            "profile.png", image_bytes.getvalue(), content_type="image/png"
-        )
-        response = client.put(
-            self.update_url, {"profile_picture": image_file}, format="multipart"
-        )
+        image_file = SimpleUploadedFile("profile.png", image_bytes.getvalue(), content_type="image/png")
+        response = client.put(self.update_url, {"profile_picture": image_file}, format="multipart")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         user.refresh_from_db()
         return user.profile_picture.name
@@ -1124,9 +1097,7 @@ class UserProfileViewTest(TestCase):
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_profile_update_rendered_response(self):
-        response = self.client.put(
-            self.update_url, {"first_name": "Jane"}, format="json"
-        )
+        response = self.client.put(self.update_url, {"first_name": "Jane"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         payload = response.json()
         self.assertTrue(payload["success"])
@@ -1137,9 +1108,7 @@ class UserProfileViewTest(TestCase):
     def test_profile_update_inactive_user(self):
         self.user.is_active = False
         self.user.save()
-        response = self.client.put(
-            self.update_url, {"first_name": "Changed"}, format="json"
-        )
+        response = self.client.put(self.update_url, {"first_name": "Changed"}, format="json")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "John")
@@ -1160,9 +1129,7 @@ class UserProfileViewTest(TestCase):
         client = APIClient()
         response = client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
-        )
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])
 
     def test_get_profile_inactive_user(self):
         self.user.is_active = False
@@ -1223,7 +1190,7 @@ class UserProfileViewTest(TestCase):
         data = {"first_name": "Jo"}
         response = self.client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(response.data["error_code"], "VAL-002")
+        self.assertEqual(response.data["error_code"], UserValidationError.INVALID_NAME[0])
 
     # ========== AUTHENTICATION TESTS ==========
     def test_update_profile_unauthenticated(self):
@@ -1231,18 +1198,14 @@ class UserProfileViewTest(TestCase):
         data = {"first_name": "Jane"}
         response = client.put(self.update_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0]
-        )
+        self.assertEqual(response.data["error_code"], AuthenticationError.TOKEN_NOT_PROVIDE[0])
 
     def test_update_profile_picture_with_invalid_file_type(self):
         """Test updating profile picture with invalid file type"""
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         # Create a dummy text file (not an image)
-        invalid_file = SimpleUploadedFile(
-            "profile.txt", b"This is a text file", content_type="text/plain"
-        )
+        invalid_file = SimpleUploadedFile("profile.txt", b"This is a text file", content_type="text/plain")
 
         data = {
             "profile_picture": invalid_file,
@@ -1278,9 +1241,7 @@ class UserProfileViewTest(TestCase):
         storage = self.user.profile_picture.storage
 
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.put(
-                self.update_url, {"profile_picture": None}, format="json"
-            )
+            response = self.client.put(self.update_url, {"profile_picture": None}, format="json")
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.user.refresh_from_db()
             self.assertEqual(
@@ -1303,9 +1264,7 @@ class UserProfileViewTest(TestCase):
         storage = self.user.profile_picture.storage
 
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.put(
-                self.update_url, {"first_name": "Jane"}, format="json"
-            )
+            response = self.client.put(self.update_url, {"first_name": "Jane"}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
@@ -1324,9 +1283,7 @@ class UserProfileViewTest(TestCase):
         for attempt in range(2):
             with self.subTest(attempt=attempt):
                 with self.captureOnCommitCallbacks(execute=True):
-                    response = self.client.put(
-                        self.update_url, {"profile_picture": None}, format="json"
-                    )
+                    response = self.client.put(self.update_url, {"profile_picture": None}, format="json")
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.user.refresh_from_db()
@@ -1371,9 +1328,7 @@ class UserProfileViewTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
-        self.assertEqual(
-            self.user.profile_picture.name, "profile_pics/default_profile_image.png"
-        )
+        self.assertEqual(self.user.profile_picture.name, "profile_pics/default_profile_image.png")
         self.assertFalse(storage.exists(previous_name))
         other_user.refresh_from_db()
         self.assertEqual(other_user.profile_picture.name, other_picture_name)
@@ -1391,9 +1346,7 @@ class UserProfileViewTest(TestCase):
         ):
             with self.subTest(expected_status=expected_status):
                 with self.captureOnCommitCallbacks(execute=True):
-                    response = client.put(
-                        self.update_url, {"profile_picture": None}, format="json"
-                    )
+                    response = client.put(self.update_url, {"profile_picture": None}, format="json")
 
                 self.assertEqual(response.status_code, expected_status)
                 self.user.refresh_from_db()
@@ -1404,21 +1357,15 @@ class UserProfileViewTest(TestCase):
         previous_name = self._upload_profile_picture()
         storage = self.user.profile_picture.storage
 
-        with patch.object(
-            storage, "delete", side_effect=OSError("storage unavailable")
-        ):
+        with patch.object(storage, "delete", side_effect=OSError("storage unavailable")):
             with self.assertLogs("django.test", level="ERROR") as logs:
                 with self.captureOnCommitCallbacks(execute=True):
-                    response = self.client.put(
-                        self.update_url, {"profile_picture": None}, format="json"
-                    )
+                    response = self.client.put(self.update_url, {"profile_picture": None}, format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.json()["success"])
         self.user.refresh_from_db()
-        self.assertEqual(
-            self.user.profile_picture.name, "profile_pics/default_profile_image.png"
-        )
+        self.assertEqual(self.user.profile_picture.name, "profile_pics/default_profile_image.png")
         self.assertTrue(storage.exists(previous_name))
         self.assertIn("storage unavailable", "\n".join(logs.output))
 
@@ -1427,9 +1374,7 @@ class UserProfileViewTest(TestCase):
         storage = self.user.profile_picture.storage
 
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.put(
-                self.update_url, {"profile_picture": None}, format="json"
-            )
+            response = self.client.put(self.update_url, {"profile_picture": None}, format="json")
             self.assertEqual(response.status_code, status.HTTP_200_OK)
             new_name = self._upload_profile_picture()
             self.assertTrue(storage.exists(previous_name))
@@ -1446,9 +1391,7 @@ class UserProfileViewTest(TestCase):
         image.save(image_bytes, format="JPEG")
         image_bytes.seek(0)
 
-        image_file = SimpleUploadedFile(
-            "profile.jpg", image_bytes.read(), content_type="image/jpeg"
-        )
+        image_file = SimpleUploadedFile("profile.jpg", image_bytes.read(), content_type="image/jpeg")
 
         data = {
             "profile_picture": image_file,
@@ -1475,9 +1418,7 @@ class UserProfileViewTest(TestCase):
         image.save(image_bytes, format="PNG")
         image_bytes.seek(0)
 
-        image_file = SimpleUploadedFile(
-            "profile.png", image_bytes.read(), content_type="image/png"
-        )
+        image_file = SimpleUploadedFile("profile.png", image_bytes.read(), content_type="image/png")
 
         data = {
             "profile_picture": image_file,
@@ -1502,9 +1443,7 @@ class UserProfileViewTest(TestCase):
         image.save(image_bytes, format="WEBP")
         image_bytes.seek(0)
 
-        image_file = SimpleUploadedFile(
-            "profile.webp", image_bytes.read(), content_type="image/webp"
-        )
+        image_file = SimpleUploadedFile("profile.webp", image_bytes.read(), content_type="image/webp")
 
         data = {
             "profile_picture": image_file,

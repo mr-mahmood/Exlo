@@ -1,0 +1,135 @@
+name: exlo_api_load_test
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db:/var/lib/postgresql/data
+    command: [ "postgres", "-c", "max_connections=100" ]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - exlo_network
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    environment:
+      # Database connection
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+
+      # Network listener
+      - LISTEN_ADDR=0.0.0.0
+      - LISTEN_PORT=6432
+
+      # Authentication
+      - AUTH_TYPE=scram-sha-256
+      - ADMIN_USERS=${POSTGRES_USER}
+
+      # Pool configuration
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=200
+      - DEFAULT_POOL_SIZE=90
+      - RESERVE_POOL_SIZE=10
+      - RESERVE_POOL_TIMEOUT=3
+    ports:
+      - "6432:6432"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - exlo_network
+
+  redis:
+    image: redis:latest
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command:
+      - sh
+      - -c
+      - 'exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"'
+    networks:
+      - exlo_network
+
+  backend:
+    image: mrmahmood/exlo-backend:latest
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - backend_static:/app/static
+      - backend_media:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_started
+      redis:
+        condition: service_started
+    command:
+      - sh
+      - -c
+      - >
+        python manage.py collectstatic --noinput && python manage.py migrate --noinput && uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --workers 4
+    ports:
+      - "8000:8000"
+    networks:
+      - exlo_network
+
+  celery:
+    image: mrmahmood/exlo-backend:latest
+    restart: unless-stopped
+    user: "1000:1000"
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - exlo_network
+    command: celery -A config worker --loglevel=info --concurrency=2
+    healthcheck:
+      test: ["CMD", "celery", "-A", "config", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  celery-beat:
+    image: mrmahmood/exlo-backend:latest
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - exlo_network
+    command: celery -A config beat --loglevel=info
+
+
+volumes:
+  db:
+  backend_static:
+  backend_media:
+
+networks:
+  exlo_network:
+    driver: bridge

@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # ======================================================================
 TASK_WAIT_MIN = float(os.getenv("LOCUST_TASK_WAIT_MIN", "2"))
 TASK_WAIT_MAX = float(os.getenv("LOCUST_TASK_WAIT_MAX", "5"))
+OTP_COOLDOWN_LIMIT_SECONDS = 120
 
 # User sees the gym list and decides which gym to open
 GYM_LIST_READ_MIN = float(os.getenv("LOCUST_GYM_LIST_READ_MIN", "2"))
@@ -692,16 +693,20 @@ class AuthenticatedApiUser(HttpUser):
 
         self._clear_auth_cookies()
 
-        self._request(
+        otp_request = {
+            "name": request_name,
+            "json_body": {"phone_number": phone_number},
+            "fatal": fatal,
+        }
+        retry_after = self._request(
             "POST",
             "/api/auth/login/request/",
-            name=request_name,
-            json_body={
-                "phone_number": phone_number,
-            },
-            expected_status=(200,),
-            fatal=fatal,
+            allow_otp_cooldown=True,
+            **otp_request,
         )
+        if type(retry_after) is int:
+            sleep(retry_after)
+            self._request("POST", "/api/auth/login/request/", **otp_request)
 
         data = self._request(
             "POST",
@@ -977,6 +982,7 @@ class AuthenticatedApiUser(HttpUser):
         params: Optional[dict[str, Any]] = None,
         headers: Optional[dict[str, str]] = None,
         fatal: bool = False,
+        allow_otp_cooldown: bool = False,
     ) -> Any:
 
         options: dict[str, Any] = {
@@ -1056,6 +1062,20 @@ class AuthenticatedApiUser(HttpUser):
             # ==========================================================
 
             if response.status_code not in expected_status:
+                if allow_otp_cooldown and response.status_code == 429:
+                    try:
+                        retry_after = int(response.headers.get("Retry-After", ""))
+                        envelope = response.json()
+                    except ValueError:
+                        pass
+                    else:
+                        if (
+                            1 <= retry_after <= OTP_COOLDOWN_LIMIT_SECONDS
+                            and isinstance(envelope, dict)
+                            and envelope.get("error_code") == "OTP-009"
+                        ):
+                            response.success()
+                            return retry_after
 
                 body_preview = response.text[:500]
 

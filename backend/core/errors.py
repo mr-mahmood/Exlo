@@ -5,10 +5,11 @@ from rest_framework.exceptions import APIException
 
 
 class APIError(APIException):
-    def __init__(self, error, data=None):
+    def __init__(self, error, data=None, *, retry_after=None):
         self.error_code = error[0]
         self.message = error[1]
         self.status_code = error[2]
+        self.retry_after = retry_after
 
         self.detail = {
             "error_code": error[0],
@@ -130,6 +131,24 @@ class OTPError(APIError):
         "OTP-008",
         "Failed to send OTP to new phone number.",
         status.HTTP_400_BAD_REQUEST,
+    )
+
+    OTP_ALREADY_ACTIVE = (
+        "OTP-009",
+        "An OTP is already active.",
+        status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+
+    OTP_ATTEMPTS_EXHAUSTED = (
+        "OTP-010",
+        "OTP verification attempts exhausted.",
+        status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+
+    OTP_SERVICE_UNAVAILABLE = (
+        "OTP-011",
+        "OTP service is busy.",
+        status.HTTP_503_SERVICE_UNAVAILABLE,
     )
 
 

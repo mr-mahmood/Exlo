@@ -1,21 +1,22 @@
 # authentication/tests/test_views.py
 
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.core.cache import cache
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory
 from rest_framework import status
 from users.models import User
 from users_sessions.models import Session
 from django.conf import settings
+from authentication.throttles import OTPIPThrottle, OTPPhoneThrottle
+from authentication.views import LoginRequestApiView
 from core.errors import (
     UserValidationError,
     SessionError,
     UserAccountError,
     OTPError,
 )
-from unittest.mock import patch
 
 
 class AuthenticationViewsTest(TestCase):
@@ -24,11 +25,6 @@ class AuthenticationViewsTest(TestCase):
     def setUp(self):
         self.client = APIClient()
         cache.clear()
-
-        # Mock the SMS task to prevent Celery connection
-        self.sms_patcher = patch("core.sms_task.send_sms_verification_task.delay")
-        self.mock_sms = self.sms_patcher.start()
-        self.mock_sms.return_value = None
 
         self.user = User.objects.create_user(
             phone_number="09123456789",
@@ -43,7 +39,6 @@ class AuthenticationViewsTest(TestCase):
         self.refresh_url = reverse("authentication:refresh")
 
     def tearDown(self):
-        self.sms_patcher.stop()
         cache.clear()
 
     def test_login_request_success(self):
@@ -54,7 +49,7 @@ class AuthenticationViewsTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         # OTP should be in cache
-        cache_key = f"otp_09123456789"
+        cache_key = f"otp:login:-:09123456789"
         self.assertIsNotNone(cache.get(cache_key))
 
     def test_login_endpoints_reject_non_string_phones(self):
@@ -64,7 +59,7 @@ class AuthenticationViewsTest(TestCase):
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        otp_key = f"otp_{self.user.phone_number}"
+        otp_key = f"otp:login:-:{self.user.phone_number}"
         original_otp = cache.get(otp_key)
         self.assertIsNotNone(original_otp)
 
@@ -81,22 +76,16 @@ class AuthenticationViewsTest(TestCase):
                 {"phone": "09123456789"},
             ):
                 with self.subTest(url=url, phone=phone):
-                    response = self.client.post(
-                        url, {"phone_number": phone, "otp": "123456"}, format="json"
-                    )
+                    response = self.client.post(url, {"phone_number": phone, "otp": "123456"}, format="json")
                     self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
                     body = response.json()
                     self.assertFalse(body["success"])
                     self.assertIsNone(body["data"])
-                    self.assertEqual(
-                        body["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0]
-                    )
+                    self.assertEqual(body["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])
                     for name in ("access_token", "refresh_token", "signup_token"):
                         self.assertNotIn(name, response.cookies)
                     self.assertEqual(cache.get(otp_key), original_otp)
-                    self.assertIsNone(
-                        cache.get(f"signup_verified_{self.user.phone_number}")
-                    )
+                    self.assertIsNone(cache.get(f"signup_verified_{self.user.phone_number}"))
         self.assertEqual(User.objects.count(), 1)
         self.assertFalse(Session.objects.exists())
 
@@ -106,21 +95,49 @@ class AuthenticationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    @override_settings(CORS_ALLOWED_ORIGINS=["http://localhost:3000"])
+    def test_duplicate_login_request_returns_retry_after(self):
+        data = {"phone_number": self.user.phone_number}
+        self.assertEqual(self.client.post(self.login_request_url, data).status_code, 200)
+
+        response = self.client.post(self.login_request_url, data, HTTP_ORIGIN="http://localhost:3000")
+
+        self.assert_otp_retry(response, OTPError.OTP_ALREADY_ACTIVE[0])
+        self.assertEqual(response["Access-Control-Allow-Origin"], "http://localhost:3000")
+        self.assertIn("retry-after", response["Access-Control-Expose-Headers"].lower())
+
+    def test_login_otp_locks_on_fifth_wrong_entry(self):
+        data = {"phone_number": self.user.phone_number}
+        self.assertEqual(self.client.post(self.login_request_url, data).status_code, 200)
+
+        for _ in range(4):
+            response = self.client.post(self.login_verify_url, {**data, "otp": "999999"})
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["error_code"], OTPError.OTP_INVALID[0])
+
+        response = self.client.post(self.login_verify_url, {**data, "otp": "999999"})
+        self.assert_otp_retry(response, OTPError.OTP_ATTEMPTS_EXHAUSTED[0])
+        response = self.client.post(self.login_verify_url, {**data, "otp": "123456"})
+        self.assert_otp_retry(response, OTPError.OTP_ATTEMPTS_EXHAUSTED[0])
+        self.assertFalse(Session.objects.exists())
+
+    def assert_otp_retry(self, response, code):
+        self.assertEqual(response.status_code, 429)
+        self.assertFalse(response.json()["success"])
+        self.assertIsNone(response.json()["data"])
+        self.assertEqual(response.json()["error_code"], code)
+        self.assertIn(int(response["Retry-After"]), range(1, 121))
+        self.assertNotIn("retry_after", response.json())
+
     def test_login_request_null_phone(self):
-        response = self.client.post(
-            self.login_request_url, {"phone_number": None}, format="json"
-        )
+        response = self.client.post(self.login_request_url, {"phone_number": None}, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.json()["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0]
-        )
+        self.assertEqual(response.json()["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])
 
     def test_login_verify_normalizes_phone(self):
         for phone, new_user in ((self.user.phone_number, False), ("09123456788", True)):
             with self.subTest(new_user=new_user):
-                response = self.client.post(
-                    self.login_request_url, {"phone_number": phone}, format="json"
-                )
+                response = self.client.post(self.login_request_url, {"phone_number": phone}, format="json")
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
 
                 response = self.client.post(
@@ -133,7 +150,6 @@ class AuthenticationViewsTest(TestCase):
                 body = response.json()
                 self.assertTrue(body["success"])
                 self.assertEqual(body["data"]["new_user"], new_user)
-                self.assertIsNone(cache.get(f"otp_{phone}"))
                 if new_user:
                     self.assertIsNotNone(cache.get(f"signup_verified_{phone}"))
                     self.assertIsNone(cache.get(f"signup_verified_ {phone} "))
@@ -206,9 +222,7 @@ class AuthenticationViewsTest(TestCase):
         """Test logout success"""
         # First login to get tokens
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
+        verify_response = self.client.post(self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"})
 
         # Set cookies
         self.client.cookies = verify_response.cookies
@@ -232,9 +246,7 @@ class AuthenticationViewsTest(TestCase):
         """Test refreshing tokens"""
         # Login to get tokens
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
+        verify_response = self.client.post(self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"})
         old_access_token = verify_response.cookies["access_token"].value
         old_refresh_token = verify_response.cookies["refresh_token"].value
         session = Session.objects.get(user=self.user)
@@ -253,18 +265,12 @@ class AuthenticationViewsTest(TestCase):
         self.assertIn("refresh_token", response.cookies)
         self.assertNotEqual(response.cookies["access_token"].value, old_access_token)
         self.assertNotEqual(response.cookies["refresh_token"].value, old_refresh_token)
-        self.assertEqual(
-            response.json(), {"success": True, "data": None, "error_code": None}
-        )
+        self.assertEqual(response.json(), {"success": True, "data": None, "error_code": None})
         for name in ["access_token", "refresh_token"]:
             self.assertTrue(response.cookies[name]["httponly"])
             self.assertEqual(response.cookies[name]["path"], "/")
-            self.assertEqual(
-                bool(response.cookies[name]["secure"]), settings.SESSION_COOKIE_SECURE
-            )
-            self.assertEqual(
-                response.cookies[name]["samesite"], settings.SESSION_COOKIE_SAMESITE
-            )
+            self.assertEqual(bool(response.cookies[name]["secure"]), settings.SESSION_COOKIE_SECURE)
+            self.assertEqual(response.cookies[name]["samesite"], settings.SESSION_COOKIE_SAMESITE)
             self.assertNotIn(response.cookies[name].value, response.content.decode())
         session.refresh_from_db()
         self.assertGreater(session.last_activity_at, old_activity)
@@ -283,7 +289,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_request_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        cache_key = f"otp_09123456788"
+        cache_key = f"otp:login:-:09123456788"
         self.assertIsNotNone(cache.get(cache_key))
 
     def test_login_request_with_whitespace_phone(self):
@@ -293,7 +299,7 @@ class AuthenticationViewsTest(TestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         # OTP should be stored with stripped phone number
-        cache_key = f"otp_09123456789"
+        cache_key = f"otp:login:-:09123456789"
         self.assertIsNotNone(cache.get(cache_key))
 
     def test_login_request_with_whitespace_invalid_phone(self):
@@ -302,9 +308,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_request_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0]
-        )
+        self.assertEqual(response.data["error_code"], UserValidationError.INVALID_PHONE_NUMBER[0])
 
     # --- LOGIN VERIFY TESTS ---
 
@@ -321,9 +325,7 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
-        )
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])
 
     def test_login_verify_missing_otp(self):
         """Test login verify with missing OTP"""
@@ -362,12 +364,8 @@ class AuthenticationViewsTest(TestCase):
         self.assertEqual(response.cookies["refresh_token"]["path"], "/")
         self.assertEqual(set(response.json()["data"]), {"user", "new_user"})
         for name in ["access_token", "refresh_token"]:
-            self.assertEqual(
-                bool(response.cookies[name]["secure"]), settings.SESSION_COOKIE_SECURE
-            )
-            self.assertEqual(
-                response.cookies[name]["samesite"], settings.SESSION_COOKIE_SAMESITE
-            )
+            self.assertEqual(bool(response.cookies[name]["secure"]), settings.SESSION_COOKIE_SECURE)
+            self.assertEqual(response.cookies[name]["samesite"], settings.SESSION_COOKIE_SAMESITE)
             self.assertNotIn(response.cookies[name].value, response.content.decode())
 
     def test_login_verify_new_user_sets_only_signup_cookie(self):
@@ -386,21 +384,25 @@ class AuthenticationViewsTest(TestCase):
         self.assertIn("signup_token", response.cookies)
         self.assertTrue(response.cookies["signup_token"]["httponly"])
         self.assertEqual(response.json()["data"], {"user": None, "new_user": True})
-        self.assertNotIn(
-            response.cookies["signup_token"].value, response.content.decode()
-        )
+        self.assertNotIn(response.cookies["signup_token"].value, response.content.decode())
 
-    def test_login_verify_clears_otp_cache(self):
-        """Test that OTP cache is cleared after successful verification"""
+    def test_login_verify_consumes_otp_and_preserves_cooldown(self):
+        """Test that verification consumes the OTP and preserves its expiry."""
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        cache_key = f"otp_09123456789"
-        self.assertIsNotNone(cache.get(cache_key))
+        cache_key = f"otp:login:-:09123456789"
+        deadline = cache.client.get_client().pexpiretime(cache.make_key(cache_key))
 
         data = {"phone_number": "09123456789", "otp": "123456"}
         response = self.client.post(self.login_verify_url, data)
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIsNone(cache.get(cache_key))
+        self.assertEqual(cache.client.get_client().pexpiretime(cache.make_key(cache_key)), deadline)
+        replay = self.client.post(self.login_verify_url, data)
+        self.assertEqual(replay.status_code, 404)
+        self.assertEqual(replay.json()["error_code"], OTPError.OTP_NOT_FOUND[0])
+        self.assertEqual(Session.objects.filter(user=self.user).count(), 1)
+        duplicate = self.client.post(self.login_request_url, {"phone_number": data["phone_number"]})
+        self.assert_otp_retry(duplicate, OTPError.OTP_ALREADY_ACTIVE[0])
 
     # --- REFRESH TESTS ---
 
@@ -417,9 +419,7 @@ class AuthenticationViewsTest(TestCase):
         """Test refresh for inactive user"""
         # Login to get tokens
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
+        verify_response = self.client.post(self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"})
         self.client.cookies = verify_response.cookies
 
         # Make user inactive
@@ -429,17 +429,13 @@ class AuthenticationViewsTest(TestCase):
         response = self.client.post(self.refresh_url)
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(
-            response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0]
-        )
+        self.assertEqual(response.data["error_code"], UserAccountError.USER_ACCOUNT_INACTIVE[0])
 
     def test_refresh_rotates_tokens(self):
         """Test that refresh rotates the token"""
         # Login to get tokens
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
+        verify_response = self.client.post(self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"})
         self.client.cookies = verify_response.cookies
 
         old_access = verify_response.cookies["access_token"].value
@@ -458,9 +454,7 @@ class AuthenticationViewsTest(TestCase):
         """Test logout deletes the session from database"""
         # Login to create session
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
+        verify_response = self.client.post(self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"})
         self.client.cookies = verify_response.cookies
 
         # Get session count before logout
@@ -479,9 +473,7 @@ class AuthenticationViewsTest(TestCase):
         """Test logout clears cookies"""
         # Login to get cookies
         self.client.post(self.login_request_url, {"phone_number": "09123456789"})
-        verify_response = self.client.post(
-            self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"}
-        )
+        verify_response = self.client.post(self.login_verify_url, {"phone_number": "09123456789", "otp": "123456"})
         self.client.cookies = verify_response.cookies
 
         # Logout
@@ -501,83 +493,66 @@ class AuthenticationViewsTest(TestCase):
         self.assertEqual(response.cookies["access_token"].value, "")
         self.assertEqual(response.cookies["refresh_token"].value, "")
 
-    # --- THROTTLE TESTS ---
+    def test_repeated_login_requests_leave_original_otp_usable(self):
+        data = {"phone_number": self.user.phone_number}
+        response = self.client.post(self.login_request_url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_login_request_throttle_phone(self):
-        """Test rate limiting by phone number"""
-        phone = "09123456789"
-        phone_limit = 5  # Default OTPPhoneThrottle rate
+        for _ in range(2):
+            response = self.client.post(self.login_request_url, data)
+            self.assert_otp_retry(response, OTPError.OTP_ALREADY_ACTIVE[0])
 
-        # Make requests up to the phone limit
-        for _ in range(phone_limit):
-            response = self.client.post(self.login_request_url, {"phone_number": phone})
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response = self.client.post(self.login_verify_url, {**data, "otp": "123456"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        # Next request should be throttled by phone
-        response = self.client.post(self.login_request_url, {"phone_number": phone})
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
-
-    def test_login_request_throttle_different_phones(self):
-        phones = ["09123456789", "09123456788", "09123456787"]
-        phone_limit = 5
-
-        for idx, phone in enumerate(phones):
-            # Use a separate client with custom HTTP headers
-            client = APIClient()
-            # Set IP via META in the request method
-            client.extra = {"REMOTE_ADDR": f"192.168.1.{idx + 10}"}
-
-            for _ in range(phone_limit):
-                response = client.post(
-                    self.login_request_url,
-                    {"phone_number": phone},
-                    REMOTE_ADDR=f"192.168.1.{idx + 10}",
-                )
+    def test_active_login_otp_is_independent_for_each_phone(self):
+        for phone in ("09123456789", "09123456788", "09123456787"):
+            with self.subTest(phone=phone):
+                data = {"phone_number": phone}
+                response = self.client.post(self.login_request_url, data)
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-            response = client.post(
-                self.login_request_url,
-                {"phone_number": phone},
-                REMOTE_ADDR=f"192.168.1.{idx + 10}",
-            )
-            self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+                response = self.client.post(self.login_request_url, data)
+                self.assert_otp_retry(response, OTPError.OTP_ALREADY_ACTIVE[0])
 
-    def test_login_request_throttle_ip(self):
-        """Test rate limiting by IP address"""
-        phone = "09123456789"
-        ip_limit = 10
+    # --- THROTTLE TESTS ---
 
-        # Make requests up to the IP limit
-        for i in range(ip_limit):
+    def test_login_requests_share_throttle_history_by_ip(self):
+        for phone in ("09123456789", "09123456788"):
             response = self.client.post(self.login_request_url, {"phone_number": phone})
-            # After IP throttle limit, should be throttled
-            if i >= ip_limit - 1:
-                pass
+            self.assertEqual(response.status_code, 200)
 
-        # Try with different phone but same IP
-        response = self.client.post(
-            self.login_request_url, {"phone_number": "09123456788"}
-        )
-        # Should be throttled because IP limit is reached
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertEqual(len(cache.get("throttle_otp_ip_127.0.0.1")), 2)
+        self.assertEqual(len(cache.get("throttle_otp_phone_09123456789")), 1)
+        self.assertEqual(len(cache.get("throttle_otp_phone_09123456788")), 1)
 
-    def test_login_verify_throttle(self):
-        """Test rate limiting on verify endpoint"""
-        # First request OTP
-        self.client.post(self.login_request_url, {"phone_number": "09123456789"})
+    def test_login_request_and_verify_share_normalized_phone_throttle(self):
+        phone = "09123456789"
+        self.assertEqual(self.client.post(self.login_request_url, {"phone_number": phone}).status_code, 200)
+        response = self.client.post(self.login_verify_url, {"phone_number": f" {phone} ", "otp": "999999"})
+        self.assertEqual(response.json()["error_code"], OTPError.OTP_INVALID[0])
+        self.assertEqual(len(cache.get(f"throttle_otp_phone_{phone}")), 2)
 
-        limit = 5  # Default throttle rate
+    def test_login_request_returns_429_at_an_explicit_view_throttle_limit(self):
+        class OneRequestPerPhone(OTPPhoneThrottle):
+            rate = "1/day"
 
-        # Make verify requests with wrong OTP
-        for _ in range(limit - 1):
-            data = {"phone_number": "09123456789", "otp": "999999"}
-            response = self.client.post(self.login_verify_url, data)
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        class OneRequestPerIP(OTPIPThrottle):
+            rate = "1/day"
 
-        # Next request should be throttled
-        data = {"phone_number": "09123456789", "otp": "999999"}
-        response = self.client.post(self.login_verify_url, data)
-        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        view = LoginRequestApiView.as_view(throttle_classes=[OneRequestPerPhone, OneRequestPerIP])
+        factory = APIRequestFactory()
+
+        def request(phone, ip):
+            return view(factory.post(self.login_request_url, {"phone_number": phone}, REMOTE_ADDR=ip))
+
+        self.assertEqual(request("09123456789", "192.0.2.1").status_code, 200)
+        for phone, ip in (("09123456789", "192.0.2.2"), ("09123456788", "192.0.2.1")):
+            with self.subTest(phone=phone, ip=ip):
+                response = request(phone, ip)
+                self.assertEqual(response.status_code, 429)
+                self.assertEqual(response.data["error_code"], "RATE_LIMIT_EXCEEDED")
+                self.assertGreater(int(response["Retry-After"]), 0)
 
     # --- EDGE CASES ---
 

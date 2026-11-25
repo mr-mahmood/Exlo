@@ -10,7 +10,7 @@ from django.db.models.deletion import ProtectedError
 from gym.models import Gym
 from gym_auth.models import UserGymRole
 from users.models import User
-from core.errors import APIError
+from core.errors import APIError, UserGymRoleError
 
 
 class UserGymRoleModelTests(TestCase):
@@ -197,7 +197,7 @@ class UserGymRoleModelTests(TestCase):
                     with transaction.atomic():
                         create_role(user=self.user, gym=self.gym)
 
-                self.assertEqual(raised.exception.error_code, "ROLE_002")
+                self.assertEqual(raised.exception.error_code, UserGymRoleError.ROLE_ALREADY_EXISTS[0])
                 self.assertEqual(raised.exception.status_code, 400)
                 self.assertEqual(
                     UserGymRole.objects.get(

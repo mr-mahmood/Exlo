@@ -80,12 +80,3 @@ class CancelSubscriptionAPIView(APIView):
         )
         subscription.cancel()
         return Response(status=status.HTTP_200_OK)
-
-
-class RefundSubscriptionAPIView(APIView):
-    def post(self, request, subscription_id):
-        # TODO: implement the avalability of canceling and refunding
-        # with rule that all suncription from active and pendings
-        # can be refund if they are within there first 48 hours and have not been used(no check in and visit consuming)
-        # if the condition fullfill then we refund and cancel the sunsription if not we return error
-        pass

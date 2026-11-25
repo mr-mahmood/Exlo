@@ -177,7 +177,7 @@ class GymAnnouncementSerializerTest(TestCase):
         with self.assertRaises(APIError) as raised:
             serializer.save()
 
-        self.assertEqual(raised.exception.error_code, "ANNOU_003")
+        self.assertEqual(raised.exception.error_code, GymAnnouncementError.INVALID_STATUS_TRANSITION[0])
         self.assertEqual(
             GymAnnouncement.objects.values().get(pk=announcement.pk), original
         )
@@ -193,7 +193,7 @@ class GymAnnouncementSerializerTest(TestCase):
         with self.assertRaises(APIError) as raised:
             serializer.save()
 
-        self.assertEqual(raised.exception.error_code, "ANNOU_001")
+        self.assertEqual(raised.exception.error_code, GymAnnouncementError.ANNOUNCEMENT_NOT_FOUND[0])
         self.assertFalse(GymAnnouncement.objects.filter(pk=announcement.pk).exists())
 
     def test_stale_content_edit_preserves_latest_publication_state(self):

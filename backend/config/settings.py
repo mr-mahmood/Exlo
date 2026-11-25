@@ -249,6 +249,7 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "CONNECTION_POOL_CLASS": "redis.BlockingConnectionPool",
+            "IGNORE_EXCEPTIONS": False,
             "CONNECTION_POOL_KWARGS": {
                 "max_connections": 150,
                 "timeout": 1,
@@ -301,6 +302,8 @@ CELERY_BEAT_SCHEDULE = {
 # ============================================================================
 # Cookies & CORS
 # ============================================================================
+CORS_EXPOSE_HEADERS = ["Retry-After"]
+
 if IS_PRODUCTION:
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
@@ -385,6 +388,12 @@ ZIBAL_EBANK_FEE_MAX = 600_000  # Rial
 # Sms.ir
 # ============================================================================
 SMSIR_API_KEY = os.getenv("SMSIR_API_KEY")
+
+# ============================================================================
+# OTP
+# ============================================================================
+OTP_EXPIRY_SECONDS = 120
+OTP_MAX_ATTEMPTS = 5
 
 # ============================================================================
 # Logging

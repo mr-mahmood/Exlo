@@ -19,6 +19,7 @@ def custom_exception_handler(exc, context):
         return Response(
             data=response_data,
             status=getattr(exc, "status_code", status.HTTP_400_BAD_REQUEST),
+            headers={"Retry-After": str(exc.retry_after)} if exc.retry_after else None,
         )
 
     # Call DRF's default exception handler

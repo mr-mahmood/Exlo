@@ -200,7 +200,7 @@ class UserMeasurementsListViewTest(TestCase):
         self.assertIn("error_code", response.data)
         self.assertEqual(
             response.data["error_code"],
-            "MEAS_022",  # The new error code
+            MeasurementsError.MISSING_MEASUREMENT_DATA[0],  # The new error code
         )
 
     def test_post_measurement_with_null_values(self):

@@ -392,9 +392,9 @@ class GymMembershipPlanSerializerTest(TestCase):
 
     def test_non_positive_numbers_keep_existing_error_codes(self):
         for field, error_code in (
-            ("duration_months", "PLAN_002"),
-            ("visit_limit", "PLAN_003"),
-            ("price", "PLAN_004"),
+            ("duration_months", GymPlansError.INVALID_DURATION[0]),
+            ("visit_limit", GymPlansError.INVALID_VISIT_LIMIT[0]),
+            ("price", GymPlansError.INVALID_PRICE[0]),
         ):
             for value in (0, -1):
                 with self.subTest(field=field, value=value):

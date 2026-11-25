@@ -20,6 +20,7 @@ from gym_plans.models import GymMembershipPlan
 from gym_subscriptions.models import GymSubscription
 from commerce_orders.models import Order
 from django.conf import settings
+from core.errors import GymAnnouncementError
 
 
 class GymAnnouncementViewsTest(TestCase):
@@ -568,7 +569,7 @@ class GymAnnouncementPublicationViewsTest(TestCase):
                 payload = response.json()
                 self.assertFalse(payload["success"])
                 self.assertIsNone(payload["data"])
-                self.assertEqual(payload["error_code"], "ANNOU_003")
+                self.assertEqual(payload["error_code"], GymAnnouncementError.INVALID_STATUS_TRANSITION[0])
                 self.assertEqual(GymAnnouncement.objects.values().get(pk=announcement.pk), original)
                 self.assertEqual(callbacks, [])
                 self.assertEqual(cache_key(GYM_ANNOUNCEMENTS, self.gym.pk), key)
