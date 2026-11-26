@@ -4,13 +4,11 @@
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.core.cache import cache
-from rest_framework.test import APIClient, APIRequestFactory
+from rest_framework.test import APIClient
 from rest_framework import status
 from users.models import User
 from users_sessions.models import Session
 from django.conf import settings
-from authentication.throttles import OTPIPThrottle, OTPPhoneThrottle
-from authentication.views import LoginRequestApiView
 from core.errors import (
     UserValidationError,
     SessionError,
@@ -514,45 +512,6 @@ class AuthenticationViewsTest(TestCase):
 
                 response = self.client.post(self.login_request_url, data)
                 self.assert_otp_retry(response, OTPError.OTP_ALREADY_ACTIVE[0])
-
-    # --- THROTTLE TESTS ---
-
-    def test_login_requests_share_throttle_history_by_ip(self):
-        for phone in ("09123456789", "09123456788"):
-            response = self.client.post(self.login_request_url, {"phone_number": phone})
-            self.assertEqual(response.status_code, 200)
-
-        self.assertEqual(len(cache.get("throttle_otp_ip_127.0.0.1")), 2)
-        self.assertEqual(len(cache.get("throttle_otp_phone_09123456789")), 1)
-        self.assertEqual(len(cache.get("throttle_otp_phone_09123456788")), 1)
-
-    def test_login_request_and_verify_share_normalized_phone_throttle(self):
-        phone = "09123456789"
-        self.assertEqual(self.client.post(self.login_request_url, {"phone_number": phone}).status_code, 200)
-        response = self.client.post(self.login_verify_url, {"phone_number": f" {phone} ", "otp": "999999"})
-        self.assertEqual(response.json()["error_code"], OTPError.OTP_INVALID[0])
-        self.assertEqual(len(cache.get(f"throttle_otp_phone_{phone}")), 2)
-
-    def test_login_request_returns_429_at_an_explicit_view_throttle_limit(self):
-        class OneRequestPerPhone(OTPPhoneThrottle):
-            rate = "1/day"
-
-        class OneRequestPerIP(OTPIPThrottle):
-            rate = "1/day"
-
-        view = LoginRequestApiView.as_view(throttle_classes=[OneRequestPerPhone, OneRequestPerIP])
-        factory = APIRequestFactory()
-
-        def request(phone, ip):
-            return view(factory.post(self.login_request_url, {"phone_number": phone}, REMOTE_ADDR=ip))
-
-        self.assertEqual(request("09123456789", "192.0.2.1").status_code, 200)
-        for phone, ip in (("09123456789", "192.0.2.2"), ("09123456788", "192.0.2.1")):
-            with self.subTest(phone=phone, ip=ip):
-                response = request(phone, ip)
-                self.assertEqual(response.status_code, 429)
-                self.assertEqual(response.data["error_code"], "RATE_LIMIT_EXCEEDED")
-                self.assertGreater(int(response["Retry-After"]), 0)
 
     # --- EDGE CASES ---
 

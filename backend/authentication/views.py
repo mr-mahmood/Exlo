@@ -12,14 +12,12 @@ from .token_services import create_tokens_for_user, refresh_tokens
 from .authentication import RefreshTokenAuthentication
 from .otp_service import OTPPurpose, generate_otp, verify_otp
 from django.conf import settings
-from .throttles import OTPPhoneThrottle, OTPIPThrottle
 from .utils import make_cookie, create_signup_proof, SIGNUP_TTL, SIGNUP_PATH
 
 
 class LoginRequestApiView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
@@ -37,7 +35,6 @@ class LoginVerifyApiView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
     serializer_class = UserProfileSerializer
-    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
 
     def post(self, request):
         phone_number = request.data.get("phone_number")

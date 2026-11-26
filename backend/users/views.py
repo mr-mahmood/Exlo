@@ -11,7 +11,6 @@ from users_referrals.models import Referral
 from users_sessions.models import Session
 from authentication.otp_service import OTPPurpose, generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
-from authentication.throttles import OTPPhoneThrottle, OTPIPThrottle
 from core.errors import APIError, OTPError, SignUpError, UserAccountError
 from users.validators import validate_phone
 from typing import cast
@@ -125,8 +124,6 @@ class UserSignupAPIView(APIView):
 
 
 class PhoneChangeOldRequestAPIView(APIView):
-    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
-
     def post(self, request):
         user: User = request.user
 
@@ -148,8 +145,6 @@ class PhoneChangeOldRequestAPIView(APIView):
 
 
 class PhoneChangeOldVerifyAPIView(APIView):
-    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
-
     def post(self, request):
         user: User = request.user
         otp = request.data.get("otp")
@@ -186,8 +181,6 @@ class PhoneChangeOldVerifyAPIView(APIView):
 
 
 class PhoneChangeNewRequestAPIView(APIView):
-    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
-
     def post(self, request):
         user: User = request.user
         new_phone = request.data.get("phone_number")
@@ -236,8 +229,6 @@ class PhoneChangeNewRequestAPIView(APIView):
 
 
 class PhoneChangeNewVerifyAPIView(APIView):
-    throttle_classes = [OTPPhoneThrottle, OTPIPThrottle]
-
     def post(self, request):
         user: User = request.user
         otp = request.data.get("otp")

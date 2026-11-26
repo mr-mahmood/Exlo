@@ -196,8 +196,6 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "100/min" if IS_PRODUCTION else "10000000/day",
         "user": "200/min" if IS_PRODUCTION else "10000000/day",
-        "otp_phone": "5/day" if IS_PRODUCTION else "10000000/day",
-        "otp_ip": "10/day" if IS_PRODUCTION else "100000000/day",
     },
     "EXCEPTION_HANDLER": "core.exception_handler.custom_exception_handler",
     # Date format

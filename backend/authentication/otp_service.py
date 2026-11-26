@@ -23,10 +23,6 @@ class OTPPurpose(StrEnum):
 
 def _otp_key(phone_number, purpose, user_id):
     purpose = OTPPurpose(purpose)
-
-    if purpose != OTPPurpose.LOGIN and user_id is None:
-        raise ValueError("Phone change OTPs require a user ID")
-
     return f"otp:{purpose}:{user_id or '-'}:{phone_number}"
 
 
@@ -47,7 +43,6 @@ def _is_watch_conflict(exc):
 def _cancel_challenge(cache_key, expected_challenge):
     """Cancel only the exact, unchanged challenge."""
 
-    executing = False
     try:
         client = cache.client.get_client(write=True)
         key = cache.make_key(cache_key)
@@ -65,10 +60,9 @@ def _cancel_challenge(cache_key, expected_challenge):
             pipe.multi()
             pipe.delete(key)
 
-            executing = True
             return bool(pipe.execute()[0])
 
-    except RedisError as exc:
+    except RedisError:
         return False
 
 
@@ -86,22 +80,29 @@ def generate_otp(*, phone_number: str, purpose: OTPPurpose, user_id=None) -> Non
 
     challenge = (uuid4().hex, hash_secret(otp_code), 0)
 
+    # TODO: Reserve paid SMS quotas together with challenge creation using Redis
+    # WATCH/MULTI/EXEC without Lua. Across login and phone changes, allow 10 sends
+    # per validated destination in any 24 hours and 30 per trusted Nginx client IP
+    # in any hour. Add a configurable global cap per Tehran calendar day to protect
+    # provider credit. Rejected sends and verification consume no SMS quota.
+    # Preserve the resend cooldown and verification attempt limit.
     # Atomic SET NX with expiration through django-redis.
+
     try:
         created = cache.add(cache_key, challenge, timeout=settings.OTP_EXPIRY_SECONDS)
         if not created:
             raise APIError(OTPError.OTP_ALREADY_ACTIVE, retry_after=_retry_after(cache.pttl(cache_key)))
-    except RedisError as exc:
-        raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE) from exc
+    except RedisError:
+        raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE)
 
     if settings.IS_PRODUCTION:
         try:
             send_sms_verification_task.delay(phone_number, otp_code)
         except EncodeError:
             _cancel_challenge(cache_key, challenge)
-            raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE) from None
+            raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE)
         except (OperationalError, RedisError):
-            raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE) from None
+            raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE)
 
 
 def verify_otp(*, phone_number: str, otp_code: str, purpose: OTPPurpose, user_id=None) -> None:
@@ -189,6 +190,6 @@ def verify_otp(*, phone_number: str, otp_code: str, purpose: OTPPurpose, user_id
             if executing:
                 if _is_watch_conflict(exc):
                     continue
-            raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE) from None
+            raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE)
 
     raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE)

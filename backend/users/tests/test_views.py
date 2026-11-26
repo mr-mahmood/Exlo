@@ -1027,18 +1027,6 @@ class PhoneChangeFlowTest(TestCase):
         response = self.client.post(self.new_verify_url, {"otp": "123456"})
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
-    # ========== RATE LIMITING TESTS ==========
-    def test_new_phone_request_records_normalized_phone_history(self):
-        for phone in ("09123456711", " 09123456711 "):
-            self.assertEqual(self.client.post(self.new_request_url, {"phone_number": phone}).status_code, 404)
-        self.assertEqual(len(cache.get("throttle_otp_phone_09123456711")), 2)
-
-    def test_old_phone_requests_record_ip_history(self):
-        self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
-        duplicate = self.client.post(self.old_request_url)
-        self.assertEqual(duplicate.json()["error_code"], OTPError.OTP_ALREADY_ACTIVE[0])
-        self.assertEqual(len(cache.get("throttle_otp_ip_127.0.0.1")), 2)
-
     # ========== AUTHENTICATION TESTS ==========
     def test_phone_change_unauthenticated(self):
         """Test phone change endpoints without authentication"""
