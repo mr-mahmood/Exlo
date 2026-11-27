@@ -86,7 +86,6 @@ class SignupTestHelpers:
 
 
 class UserSignupViewTest(SignupTestHelpers, TestCase):
-    """Original signup coverage updated to the one-attempt proof contract."""
 
     def setUp(self):
         self.set_up_signup()
@@ -129,7 +128,7 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
             self.assertTrue(response.cookies[name]["httponly"])
             self.assertNotIn(response.cookies[name].value, response.content.decode())
         self.assertEqual(response.cookies["signup_token"]["max-age"], 0)
-        self.assertEqual(response.cookies["signup_token"]["path"], "/api/users/signup/")
+        self.assertEqual(response.cookies["signup_token"]["path"], self.url)
         self.assert_proof_consumed()
 
     def test_signup_success_with_referral(self):
@@ -212,9 +211,6 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         self.assert_denied(response)
         self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
 
-    # The original missing-fields loop must be split: a valid failed attempt
-    # consumes the proof and each independent field needs a fresh test setup.
-
     def test_signup_missing_phone_number(self):
         data = self.valid_data.copy()
         data.pop("phone_number")
@@ -224,29 +220,18 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         # Missing phone is rejected before proof validation/consumption.
         self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
 
-    def test_signup_missing_first_name(self):
-        self.assert_missing_field_consumes_proof("first_name")
-
-    def test_signup_missing_last_name(self):
-        self.assert_missing_field_consumes_proof("last_name")
-
-    def test_signup_missing_gender(self):
-        self.assert_missing_field_consumes_proof("gender")
-
-    def test_signup_missing_date_of_birth(self):
-        self.assert_missing_field_consumes_proof("date_of_birth")
-
-    def assert_missing_field_consumes_proof(self, field):
-        data = self.valid_data.copy()
-        data.pop(field)
-        response = self.client.post(self.url, data)
-        self.assertEqual(
-            response.status_code,
-            status.HTTP_400_BAD_REQUEST,
-            f"Missing '{field}' must be rejected",
-        )
-        self.assert_proof_consumed()
-        self.assertFalse(User.objects.filter(phone_number=self.phone).exists())
+    def test_missing_profile_fields_preserve_signup_proof(self):
+        key = f"signup_verified_{self.phone}"
+        proof = cache.get(key)
+        self.assertIsNotNone(proof)
+        for field in ("first_name", "last_name", "gender", "date_of_birth"):
+            with self.subTest(field=field):
+                data = self.valid_data.copy()
+                del data[field]
+                response = self.client.post(self.url, data)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertEqual(cache.get(key), proof)
+                self.assert_no_account()
 
     def test_signup_rejects_non_string_phone(self):
         for phone in (9123456789, 1.5, True, [self.phone], {"phone": self.phone}):
@@ -294,7 +279,7 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         response = self.client.post(self.url, self.valid_data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
-        self.assert_proof_consumed()
+        self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
         self.assertEqual(User.objects.filter(phone_number=self.phone).count(), 1)
 
     def test_signup_with_invalid_referral(self):
@@ -302,8 +287,8 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0])
-        self.assert_proof_consumed()
         self.assertFalse(User.objects.filter(phone_number=self.phone).exists())
+        self.assertEqual(self.client.post(self.url, self.valid_data).status_code, status.HTTP_201_CREATED)
 
     # Original names/Unicode cases.
 
@@ -337,10 +322,10 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(response.data["error_code"], SignUpError.PHONE_NUMBER_REUSE[0])
-        self.assert_proof_consumed("09123456788")
+        self.assertIsNotNone(cache.get("signup_verified_09123456788"))
 
     def test_signup_self_referral_prevention(self):
-        """Keep the original self-referral regression and check one-attempt cleanup."""
+        """Reject an unknown referral even if it would match the user's future code."""
         original_create_user = User.objects.create_user
         created_user = None
 
@@ -359,7 +344,8 @@ class UserSignupViewTest(SignupTestHelpers, TestCase):
             self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
             self.assertEqual(response.data["error_code"], SignUpError.REFERRAL_CODE_NOT_VALID[0])
             self.assertFalse(Referral.objects.filter(referred_user=created_user).exists())
-            self.assert_proof_consumed()
+            self.assertIsNone(created_user)
+            self.assertIsNotNone(cache.get(f"signup_verified_{self.phone}"))
         finally:
             User.objects.create_user = original_create_user
 
@@ -396,7 +382,7 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
         self.assertEqual(len(cookie.value), 43)
         self.assertTrue(cookie["httponly"])
         self.assertEqual(cookie["max-age"], 600)
-        self.assertEqual(cookie["path"], "/api/users/signup/")
+        self.assertEqual(cookie["path"], self.signup_url)
         self.assertEqual(cookie["samesite"], settings.SESSION_COOKIE_SAMESITE)
         self.assertEqual(bool(cookie["secure"]), settings.SESSION_COOKIE_SECURE)
         self.assertEqual(verification.json()["data"], {"user": None, "new_user": True})
@@ -421,7 +407,7 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
             self.assertTrue(response.cookies[name]["httponly"])
             self.assertNotIn(response.cookies[name].value, response.content.decode())
         self.assertEqual(response.cookies["signup_token"]["max-age"], 0)
-        self.assertEqual(response.cookies["signup_token"]["path"], "/api/users/signup/")
+        self.assertEqual(response.cookies["signup_token"]["path"], self.signup_url)
 
         user = User.objects.get(phone_number=self.phone)
         self.assertEqual(user.first_name, "Alice")
@@ -504,6 +490,12 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
     def test_expired_proof_is_rejected(self):
         self.verify_phone()
         key = f"signup_verified_{self.phone}"
+        cache.expire(key, 30)
+        redis = cache.client.get_client()
+        expiry = redis.pexpiretime(cache.make_key(key))
+        response = self.client.post(self.signup_url, {**self.data, "first_name": "A"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(redis.pexpiretime(cache.make_key(key)), expiry)
         cache.expire(key, 0)
         self.assertIsNone(cache.get(key))
         self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
@@ -524,6 +516,22 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assert_proof_consumed()
 
+    def test_reverification_during_form_validation_preserves_new_proof(self):
+        self.verify_phone()
+        second_client = APIClient()
+
+        def reverify_during_validation(phone):
+            self.expire_login_cooldown()
+            self.verify_phone(client=second_client)
+            return validate_phone(phone)
+
+        with patch("users.serializers.validate_phone", side_effect=reverify_during_validation):
+            self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
+        self.assert_no_account()
+        response = second_client.post(self.signup_url, self.data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assert_proof_consumed()
+
     def test_legacy_or_inconsistent_cache_records_do_not_authorize_signup(self):
         self.verify_phone()
         key = f"signup_verified_{self.phone}"
@@ -540,17 +548,19 @@ class SignupVerificationTests(SignupTestHelpers, TestCase):
                 self.assert_no_account()
                 self.assertEqual(cache.get(key), record)
 
-    def test_validation_failure_consumes_proof_and_requires_fresh_otp(self):
+    def test_corrected_signup_uses_original_cookie(self):
         self.verify_phone()
-        response = self.client.post(self.signup_url, {**self.data, "first_name": "A"}, format="json")
+        incomplete = self.data.copy()
+        del incomplete["last_name"]
+        response = self.client.post(self.signup_url, incomplete, format="json")
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertNotIn("signup_token", response.cookies)
         self.assert_no_account()
-        self.assert_proof_consumed()
-        self.assert_denied(self.client.post(self.signup_url, self.data, format="json"))
-        self.expire_login_cooldown()
-        self.verify_phone()
         response = self.client.post(self.signup_url, self.data, format="json")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(phone_number=self.phone)
+        self.assertEqual(Wallet.objects.filter(owner=user).count(), 1)
+        self.assertEqual(Session.objects.filter(user=user).count(), 1)
         self.assert_proof_consumed()
 
     def test_creation_failure_rolls_back_and_consumes_proof(self):

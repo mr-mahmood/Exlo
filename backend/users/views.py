@@ -7,6 +7,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
+from django.urls import reverse
 from django.utils import timezone
 from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
@@ -22,8 +23,7 @@ from authentication.utils import (
     make_cookie,
     delete_cookies,
     signup_key,
-    verify_signup_proof,
-    SIGNUP_PATH,
+    get_verified_signup_proof,
 )
 
 
@@ -49,12 +49,8 @@ class UserSignupAPIView(APIView):
             # Validate the signup proof.
             token = request.COOKIES.get("signup_token")
 
-            if not verify_signup_proof(phone_number, token):
-                raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
-
-            # One verified OTP permits one signup attempt.
-            # Consume the proof before processing the signup.
-            if not cache.delete(signup_key(phone_number)):
+            proof = get_verified_signup_proof(phone_number, token)
+            if proof is None:
                 raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
 
             # Validate signup data.
@@ -66,6 +62,10 @@ class UserSignupAPIView(APIView):
                 context={"request": request, "normalized_phone": phone_number},
             )
             serializer.is_valid(raise_exception=True)
+
+            # Verification may expire or be replaced while the form is validated.
+            if not delete_if_unchanged(signup_key(phone_number), proof):
+                raise APIError(SignUpError.SIGN_UP_NOT_ALLOWED)
 
             referral_code = serializer.validated_data.get("referral")
 
@@ -93,10 +93,7 @@ class UserSignupAPIView(APIView):
                     # Prepare response.
                     response = Response(
                         {
-                            "user": self.serializer_class(
-                                user,
-                                context={"request": request},
-                            ).data,
+                            "user": self.serializer_class(user, context={"request": request}).data,
                         },
                         status=status.HTTP_201_CREATED,
                     )
@@ -104,18 +101,11 @@ class UserSignupAPIView(APIView):
                     # Set authentication cookies.
                     make_cookie(
                         response,
-                        {
-                            "access_token": access,
-                            "refresh_token": refresh,
-                        },
+                        {"access_token": access, "refresh_token": refresh},
                     )
 
                 # Clear signup cookie after successful creation.
-                delete_cookies(
-                    response,
-                    ["signup_token"],
-                    path=SIGNUP_PATH,
-                )
+                delete_cookies(response, ["signup_token"], path=reverse("users:user-signup"))
 
                 return response
 
@@ -138,7 +128,7 @@ def _phone_change_state(user):
 class PhoneChangeOldRequestAPIView(APIView):
     def post(self, request):
         with transaction.atomic():
-            user = User.objects.select_for_update().get(pk=request.user.pk)
+            user: User = User.objects.select_for_update().get(pk=request.user.pk)
             cache_key = f"phone_change_step_{user.pk}"
             next_state = {
                 "step": "old_otp_sent",

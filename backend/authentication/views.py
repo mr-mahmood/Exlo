@@ -12,7 +12,8 @@ from .token_services import create_tokens_for_user, refresh_tokens
 from .authentication import RefreshTokenAuthentication
 from .otp_service import OTPPurpose, generate_otp, verify_otp
 from django.conf import settings
-from .utils import make_cookie, create_signup_proof, SIGNUP_TTL, SIGNUP_PATH
+from django.urls import reverse
+from .utils import make_cookie, create_signup_proof, SIGNUP_TTL
 
 
 class LoginRequestApiView(APIView):
@@ -65,7 +66,7 @@ class LoginVerifyApiView(APIView):
         except User.DoesNotExist:
             signup_token = create_signup_proof(phone_number)
             response = Response({"user": None, "new_user": True}, status=status.HTTP_200_OK)
-            make_cookie(response, {"signup_token": signup_token}, path=SIGNUP_PATH, max_age=SIGNUP_TTL)
+            make_cookie(response, {"signup_token": signup_token}, path=reverse("users:user-signup"), max_age=SIGNUP_TTL)
             return response
 
 

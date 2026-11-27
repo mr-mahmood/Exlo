@@ -392,6 +392,7 @@ class AuthenticationViewsTest(TestCase):
         self.assertNotIn("refresh_token", response.cookies)
         self.assertIn("signup_token", response.cookies)
         self.assertTrue(response.cookies["signup_token"]["httponly"])
+        self.assertEqual(response.cookies["signup_token"]["path"], reverse("users:user-signup"))
         self.assertEqual(response.json()["data"], {"user": None, "new_user": True})
         self.assertNotIn(response.cookies["signup_token"].value, response.content.decode())
 

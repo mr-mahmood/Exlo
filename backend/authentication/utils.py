@@ -8,7 +8,6 @@ from django.core.cache import cache
 from rest_framework.response import Response
 
 SIGNUP_TTL = 600
-SIGNUP_PATH = "/api/users/signup/"
 
 
 def make_cookie(response: Response, cookies: dict, path="/", max_age=None) -> Response:
@@ -56,20 +55,20 @@ def create_signup_proof(phone_number):
     return token
 
 
-def verify_signup_proof(phone_number, token):
+def get_verified_signup_proof(phone_number, token):
     if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
-        return False
+        return None
 
     record = cache.get(signup_key(phone_number))
 
     if not isinstance(record, dict):
-        return False
+        return None
 
     stored_hash = record.get("proof_hash")
 
     if record.get("phone_number") != phone_number or not isinstance(stored_hash, str):
-        return False
+        return None
 
     token_hash = hashlib.sha256(token.encode()).hexdigest()
 
-    return hmac.compare_digest(stored_hash, token_hash)
+    return record if hmac.compare_digest(stored_hash, token_hash) else None
