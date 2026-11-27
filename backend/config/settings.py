@@ -3,10 +3,14 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
+load_dotenv(PROJECT_ROOT / ".env")
+
 # ============================================================================
 # Application environment
 # ============================================================================
-APP_ENV = os.getenv("APP_ENV", "development").lower()
+APP_ENV = os.getenv("APP_ENV").lower()
 IS_DEVELOPMENT = APP_ENV == "development"
 IS_LOAD_TEST = APP_ENV == "apiloadtest"
 IS_PRODUCTION = APP_ENV == "production"
@@ -14,11 +18,6 @@ IS_PRODUCTION = APP_ENV == "production"
 # ============================================================================
 # Base
 # ============================================================================
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-PROJECT_ROOT = BASE_DIR.parent
-load_dotenv(PROJECT_ROOT / ".env")
-
 DEBUG = APP_ENV == "development"
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
