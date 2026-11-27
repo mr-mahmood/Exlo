@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from core.errors import APIError, UserAccountError
+from users.utils import normalize_phone
 
 
 class UserManager(BaseUserManager):
@@ -41,7 +42,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", False)
 
         user = User(
-            phone_number=phone_number,
+            phone_number=normalize_phone(phone_number),
             referral_code=self._generate_unique_referral_code(),
             **extra_fields,
         )
@@ -56,7 +57,7 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault("is_superuser", True)
 
         user = User(
-            phone_number=phone_number,
+            phone_number=normalize_phone(phone_number),
             referral_code=self._generate_unique_referral_code(),
             **extra_fields,
         )
@@ -174,6 +175,12 @@ class User(AbstractUser):
             models.Index(fields=["last_login_at"]),
             models.Index(fields=["referral_code"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(phone_number__regex=r"^09[0-9]{9}$"),
+                name="users_phone_ascii_mobile",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.full_name}"
@@ -186,12 +193,7 @@ class User(AbstractUser):
     @property
     def is_admin(self):
         """Check if user is admin"""
-        return bool(
-            self.is_active
-            and self.is_staff
-            and self.is_superuser
-            and self.role == User.Role.ADMIN
-        )
+        return bool(self.is_active and self.is_staff and self.is_superuser and self.role == User.Role.ADMIN)
 
     def validate_account_status(self):
         if not self.is_active:

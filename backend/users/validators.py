@@ -1,28 +1,21 @@
-import re
 from datetime import date
 from core.errors import APIError, UserAccountError, SignUpError, UserValidationError
 from users.models import User
+from users.utils import normalize_phone
 
 
 def validate_phone(value, instance=None, skip_duplicate_check=False):
-    if not isinstance(value, str):
-        raise APIError(UserValidationError.INVALID_PHONE_NUMBER)
-
-    stripped_value = value.strip()
-
-    # Validate format
-    if not stripped_value or not re.fullmatch(r"09\d{9}", stripped_value):
-        raise APIError(UserValidationError.INVALID_PHONE_NUMBER)
+    phone = normalize_phone(value)
 
     # Check for duplicates
     if not skip_duplicate_check:
-        qs = User.objects.filter(phone_number=stripped_value)
+        qs = User.objects.filter(phone_number=phone)
         if instance is not None:
             qs = qs.exclude(pk=instance.pk)
         if qs:
             raise APIError(SignUpError.PHONE_NUMBER_REUSE)
 
-    return stripped_value
+    return phone
 
 
 def validate_name(value):

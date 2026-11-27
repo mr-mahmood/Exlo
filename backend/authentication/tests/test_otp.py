@@ -21,6 +21,19 @@ class OTPServiceTest(SimpleTestCase):
     def setUp(self):
         cache.clear()
 
+    @override_settings(OTP_MAX_ATTEMPTS=2)
+    def test_decimal_scripts_share_cooldown_and_attempts(self):
+        localized = "۰۹۱۲۳۴۵۶۷۸۹"
+        ascii_phone = "09123456789"
+        generate_otp(phone_number=localized, purpose=OTPPurpose.LOGIN)
+        with self.assertRaises(APIError) as resend:
+            generate_otp(phone_number=ascii_phone, purpose=OTPPurpose.LOGIN)
+        self.assertEqual(resend.exception.error_code, OTPError.OTP_ALREADY_ACTIVE[0])
+        for phone, error in ((ascii_phone, OTPError.OTP_INVALID), (localized, OTPError.OTP_ATTEMPTS_EXHAUSTED)):
+            with self.assertRaises(APIError) as failure:
+                verify_otp(phone_number=phone, purpose=OTPPurpose.LOGIN, otp_code="000000")
+            self.assertEqual(failure.exception.error_code, error[0])
+
     def test_generate_otp_success(self):
         """Test generating OTP"""
         result = generate_otp(phone_number="09123456789", purpose=OTPPurpose.LOGIN)

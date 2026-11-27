@@ -21,6 +21,14 @@ class UserModelTest(TestCase):
 
     # ============ CREATION TESTS ============
 
+    def test_manager_normalizes_and_database_enforces_ascii(self):
+        phone = "۰۹۱۲۳۴۵۶۷۸۹"
+        user = User.objects.create_user(phone)
+        user.refresh_from_db()
+        self.assertEqual(user.phone_number, "09123456789")
+        with self.assertRaises(IntegrityError):
+            User.objects.filter(pk=user.pk).update(phone_number=phone)
+
     def test_create_user_success(self):
         """Test successful user creation"""
         user: User = User.objects.create_user(**self.valid_data)

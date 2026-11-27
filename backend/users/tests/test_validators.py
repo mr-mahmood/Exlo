@@ -9,6 +9,11 @@ from core.errors import APIError, UserValidationError, UserAccountError, SignUpE
 class PhoneValidatorTest(TestCase):
     """Test phone number validator"""
 
+    def test_decimal_scripts_share_ascii_identity(self):
+        for phone in ("۰۹۱۲۳۴۵۶۷۸۹", "٠٩١٢٣٤٥٦٧٨٩", "０９１２３４５６７８９", " 09۱٢３456789 "):
+            with self.subTest(phone=phone):
+                self.assertEqual(validate_phone(phone), "09123456789")
+
     def test_valid_phone_numbers(self):
         """Test valid phone numbers"""
         valid_numbers = [
@@ -30,6 +35,7 @@ class PhoneValidatorTest(TestCase):
             "091234567890",  # Too long
             "01123456789",  # Wrong prefix
             "0912345678a",  # Contains letter
+            "0912345678²",
             "0922  2222222",
             "    0922  2222222",
             "",  # Empty
@@ -76,16 +82,12 @@ class PhoneValidatorTest(TestCase):
         )
 
         with self.assertRaises(APIError) as context:
-            validate_phone("09123456789")
-        self.assertEqual(
-            context.exception.error_code, SignUpError.PHONE_NUMBER_REUSE[0]
-        )
+            validate_phone("۰۹۱۲۳۴۵۶۷۸۹")
+        self.assertEqual(context.exception.error_code, SignUpError.PHONE_NUMBER_REUSE[0])
 
     def test_same_user_phone_skip_validation(self):
         """Test same user with same phone passes validation"""
-        user = User.objects.create_user(
-            phone_number="09123456789", first_name="John", last_name="Doe"
-        )
+        user = User.objects.create_user(phone_number="09123456789", first_name="John", last_name="Doe")
 
         result = validate_phone("09123456789", instance=user)
         self.assertEqual(result, "09123456789")
@@ -127,9 +129,7 @@ class NameValidatorTest(TestCase):
         for name in invalid_names:
             with self.assertRaises(APIError) as context:
                 validate_name(name)
-            self.assertEqual(
-                context.exception.error_code, UserValidationError.INVALID_NAME[0]
-            )
+            self.assertEqual(context.exception.error_code, UserValidationError.INVALID_NAME[0])
 
 
 class DateOfBirthValidatorTest(TestCase):
