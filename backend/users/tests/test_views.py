@@ -3,7 +3,7 @@
 import io
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
-from threading import Barrier
+from threading import Barrier, Event
 from unittest.mock import patch
 from django.conf import settings
 from django.core.cache import cache
@@ -12,10 +12,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, close_old_connections, connections, transaction
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
+from kombu.exceptions import EncodeError
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APIClient
 from commerce_wallet.models import Wallet
+from authentication.otp_service import verify_otp
 from core.errors import (
     AuthenticationError,
     OTPError,
@@ -24,6 +26,8 @@ from core.errors import (
     UserAccountError,
 )
 from users.models import User
+from core.hashing import verify_secret
+from users.validators import validate_phone
 from users_referrals.models import Referral
 from users_sessions.models import Session
 
@@ -644,9 +648,7 @@ class SignupConcurrencyTests(SignupTestHelpers, TransactionTestCase):
         self.assert_proof_consumed()
 
 
-class PhoneChangeFlowTest(TestCase):
-    """Test phone change flow (4 steps)"""
-
+class PhoneChangeSetup:
     def setUp(self):
         self.client = APIClient()
         cache.clear()
@@ -678,6 +680,64 @@ class PhoneChangeFlowTest(TestCase):
         response = self.client.post(self.new_request_url, {"phone_number": phone}, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+
+class PhoneChangeConcurrencyTest(PhoneChangeSetup, TransactionTestCase):
+    def test_restart_uses_phone_committed_after_otp_consumption(self):
+        destination = "09123456711"
+        self.request_new_phone(destination)
+        cache.delete(f"otp:old_phone:{self.user.pk}:{self.user.phone_number}")
+        consumed, restart_ready, resume = Event(), Event(), Event()
+
+        def pause_after_verification(**kwargs):
+            verify_otp(**kwargs)
+            consumed.set()
+            self.assertTrue(resume.wait(10))
+
+        def observe_lock(execute, sql, params, many, context):
+            if "FOR UPDATE" in sql.upper():
+                restart_ready.set()
+            return execute(sql, params, many, context)
+
+        def post(confirm):
+            client = APIClient()
+            client.force_authenticate(user=self.user)
+            try:
+                if confirm:
+                    return client.post(self.new_verify_url, {"otp": "123456"})
+                with connections["default"].execute_wrapper(observe_lock):
+                    return client.post(self.old_request_url)
+            finally:
+                if not confirm:
+                    restart_ready.set()
+                connections.close_all()
+
+        with patch("users.views.verify_otp", side_effect=pause_after_verification), ThreadPoolExecutor(2) as pool:
+            confirmation = pool.submit(post, True)
+            try:
+                self.assertTrue(consumed.wait(10))
+                restart = pool.submit(post, False)
+                self.assertTrue(restart_ready.wait(10))
+            finally:
+                resume.set()
+            self.assertEqual(confirmation.result().status_code, 200)
+            self.assertEqual(restart.result().status_code, 200)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, destination)
+        self.assertEqual(cache.get(f"phone_change_step_{self.user.pk}")["old_phone"], destination)
+        self.assertIsNotNone(cache.get(f"otp:old_phone:{self.user.pk}:{destination}"))
+
+
+class PhoneChangeFlowTest(PhoneChangeSetup, TestCase):
+    @override_settings(IS_PRODUCTION=True)
+    def test_restart_publishes_sms_after_commit(self):
+        with patch("core.sms_task.send_sms_verification_task.delay") as publish:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
+                publish.assert_not_called()
+            publish.assert_called_once()
+            self.assertEqual(publish.call_args.args[0], self.user.phone_number)
+
     def assert_confirmation_conflict(self, response, owner):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         body = response.json()
@@ -690,6 +750,119 @@ class PhoneChangeFlowTest(TestCase):
         self.assertIsNone(cache.get(f"phone_change_step_{self.user.id}"))
 
     # ========== SUCCESS FLOW ==========
+    def test_competing_new_phone_requests_reserve_only_one_destination(self):
+        self.verify_old_phone()
+        winner, loser = "09123456711", "09123456712"
+
+        def finish_other_request(phone, instance):
+            validate_phone(phone, instance=instance)
+            if phone == loser:
+                response = self.client.post(self.new_request_url, {"phone_number": winner})
+                self.assertEqual(response.status_code, 200)
+
+        with patch("users.views.validate_phone", side_effect=finish_other_request):
+            response = self.client.post(self.new_request_url, {"phone_number": loser})
+
+        self.assertEqual(response.json()["error_code"], OTPError.OLD_PHONE_VERIFICATION_REQUIRED[0])
+        self.assertEqual(cache.get(f"phone_change_step_{self.user.pk}")["new_phone"], winner)
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}:{loser}"))
+
+    def test_delayed_confirmation_cleanup_preserves_restarted_flow(self):
+        self.request_new_phone("09123456711")
+        key = f"phone_change_step_{self.user.pk}"
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+            self.assertEqual(response.status_code, 200)
+            self.user.refresh_from_db()
+            self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
+            restarted_state = cache.get(key)
+
+        self.assertEqual(cache.get(key), restarted_state)
+
+    def test_restart_during_confirmation_preserves_challenge_and_phone(self):
+        self.request_new_phone("09123456711")
+        challenge_key = f"otp:new_phone:{self.user.pk}:09123456711"
+        original_challenge = cache.get(challenge_key)
+        cache.delete(f"otp:old_phone:{self.user.pk}:{self.user.phone_number}")
+
+        def restart_before_otp_commit(code, stored_hash):
+            self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
+            return verify_secret(code, stored_hash)
+
+        with patch("authentication.otp_service.verify_secret", side_effect=restart_before_otp_commit):
+            response = self.client.post(self.new_verify_url, {"otp": "123456"})
+
+        self.assertEqual(response.json()["error_code"], OTPError.INVALID_STEP[0])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456789")
+        self.assertEqual(cache.get(challenge_key), original_challenge)
+
+    def test_sms_encoding_failure_preserves_verified_step_and_expiry(self):
+        self.verify_old_phone()
+        state_key = f"phone_change_step_{self.user.pk}"
+        state = cache.get(state_key)
+        cache.touch(state_key, 60)
+        with override_settings(IS_PRODUCTION=True):
+            with patch("core.sms_task.send_sms_verification_task.delay", side_effect=EncodeError):
+                response = self.client.post(self.new_request_url, {"phone_number": "09123456711"})
+
+        self.assertEqual(response.json()["error_code"], OTPError.OTP_SERVICE_UNAVAILABLE[0])
+        self.assertEqual(cache.get(state_key), state)
+        self.assertLessEqual(cache.ttl(state_key), 60)
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}:09123456711"))
+
+    def test_failed_publication_releases_destination_after_wrong_otp(self):
+        self.verify_old_phone()
+        state_key = f"phone_change_step_{self.user.pk}"
+        state = cache.get(state_key)
+        cache.touch(state_key, 60)
+
+        def fail_after_wrong_attempt(phone, code):
+            wrong_code = "000000"  # Issued production codes start at 100000.
+            response = self.client.post(self.new_verify_url, {"otp": wrong_code})
+            self.assertEqual(response.json()["error_code"], OTPError.OTP_INVALID[0])
+            raise EncodeError()
+
+        with override_settings(IS_PRODUCTION=True):
+            with patch("core.sms_task.send_sms_verification_task.delay", side_effect=fail_after_wrong_attempt):
+                response = self.client.post(self.new_request_url, {"phone_number": "09123456711"})
+        self.assertEqual(response.json()["error_code"], OTPError.OTP_SERVICE_UNAVAILABLE[0])
+        self.assertEqual(cache.get(state_key), state)
+        self.assertLessEqual(cache.ttl(state_key), 60)
+        self.assertIsNone(cache.get(f"otp:new_phone:{self.user.pk}:09123456711"))
+        self.assertEqual(self.client.post(self.new_request_url, {"phone_number": "09123456712"}).status_code, 200)
+
+    def test_late_encoding_failure_preserves_resent_challenge(self):
+        self.verify_old_phone()
+        phone = "09123456711"
+        otp_key = f"otp:new_phone:{self.user.pk}:{phone}"
+
+        def resend_before_failure(destination, code):
+            self.assertTrue(cache.delete(otp_key))
+            publish.side_effect = None
+            response = self.client.post(self.new_request_url, {"phone_number": destination})
+            self.assertEqual(response.status_code, 200)
+            raise EncodeError()
+
+        with override_settings(IS_PRODUCTION=True):
+            with patch("core.sms_task.send_sms_verification_task.delay", side_effect=resend_before_failure) as publish:
+                response = self.client.post(self.new_request_url, {"phone_number": phone})
+                self.assertEqual(response.json()["error_code"], OTPError.OTP_SERVICE_UNAVAILABLE[0])
+                self.assertEqual(publish.call_count, 2)
+                resent_code = publish.call_args.args[1]
+
+        self.assertEqual(self.client.post(self.new_verify_url, {"otp": resent_code}).status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, phone)
+
+    def test_confirmation_preserves_a_concurrently_updated_database_phone(self):
+        self.request_new_phone("09123456711")
+        User.objects.filter(pk=self.user.pk).update(phone_number="09123456712")
+        response = self.client.post(self.new_verify_url, {"otp": "123456"})
+        self.assertEqual(response.json()["error_code"], OTPError.INVALID_STEP[0])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, "09123456712")
+
     def test_repeat_new_phone_request_preserves_state(self):
         phone = "09123456711"
         self.request_new_phone(phone)

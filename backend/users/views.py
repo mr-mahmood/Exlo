@@ -1,3 +1,6 @@
+from uuid import uuid7
+
+from redis.exceptions import RedisError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
@@ -9,7 +12,7 @@ from users.serializers import UserSignupSerializer, UserProfileSerializer
 from users.models import User
 from users_referrals.models import Referral
 from users_sessions.models import Session
-from authentication.otp_service import OTPPurpose, generate_otp, verify_otp
+from authentication.otp_service import OTPPurpose, OTPWorkflow, delete_if_unchanged, generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
 from core.errors import APIError, OTPError, SignUpError, UserAccountError
 from users.utils import normalize_phone
@@ -124,23 +127,32 @@ class UserSignupAPIView(APIView):
                 lock.release()
 
 
+def _phone_change_state(user):
+    key = f"phone_change_step_{user.pk}"
+    try:
+        return key, cache.get(key)
+    except RedisError as exc:
+        raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE) from exc
+
+
 class PhoneChangeOldRequestAPIView(APIView):
     def post(self, request):
-        user: User = request.user
-
-        # Generate OTP for current phone
-        generate_otp(phone_number=user.phone_number, purpose=OTPPurpose.OLD_PHONE, user_id=user.pk)
-
-        # Set state: step 1
-        cache_key = f"phone_change_step_{user.id}"
-        cache.set(
-            cache_key,
-            {
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            cache_key = f"phone_change_step_{user.pk}"
+            next_state = {
                 "step": "old_otp_sent",
                 "user_id": user.id,
-            },
-            timeout=300,
-        )
+                "flow_id": uuid7(),
+                "old_phone": user.phone_number,
+            }
+            generate_otp(
+                phone_number=user.phone_number,
+                purpose=OTPPurpose.OLD_PHONE,
+                user_id=user.pk,
+                workflow=OTPWorkflow(cache_key, expected=None, next_state=next_state),
+                publish_after_commit=True,
+            )
 
         return Response(status=status.HTTP_200_OK)
 
@@ -154,31 +166,23 @@ class PhoneChangeOldVerifyAPIView(APIView):
             raise APIError(OTPError.PHONE_REQUIRED)
 
         # Check state: must be at step 1
-        cache_key = f"phone_change_step_{user.id}"
-        state = cache.get(cache_key)
+        cache_key, state = _phone_change_state(user)
 
         if not state:
             raise APIError(OTPError.OTP_NOT_FOUND)
 
-        if state.get("step") != "old_otp_sent":
+        if state.get("step") != "old_otp_sent" or state.get("old_phone", user.phone_number) != user.phone_number:
             raise APIError(OTPError.INVALID_STEP)
 
-        # Verify OTP
-        verify_otp(phone_number=user.phone_number, otp_code=otp, purpose=OTPPurpose.OLD_PHONE, user_id=user.pk)
-
-        # Update state: step 2
-        cache.set(
-            cache_key,
-            {
-                "step": "old_verified",
-                "user_id": user.id,
-            },
-            timeout=300,
+        verify_otp(
+            phone_number=user.phone_number,
+            otp_code=otp,
+            purpose=OTPPurpose.OLD_PHONE,
+            user_id=user.pk,
+            workflow=OTPWorkflow(cache_key, state, {**state, "step": "old_verified", "old_phone": user.phone_number}),
         )
 
-        return Response(
-            status=status.HTTP_200_OK,
-        )
+        return Response(status=status.HTTP_200_OK)
 
 
 class PhoneChangeNewRequestAPIView(APIView):
@@ -190,14 +194,14 @@ class PhoneChangeNewRequestAPIView(APIView):
             raise APIError(OTPError.PHONE_REQUIRED)
 
         # Check state: must have verified old phone (step 2)
-        cache_key = f"phone_change_step_{user.id}"
-        state = cache.get(cache_key)
+        cache_key, state = _phone_change_state(user)
 
         if not state:
             raise APIError(OTPError.OTP_NOT_FOUND)
 
         step = state.get("step")
-        if step not in ("old_verified", "new_otp_sent"):
+        old_phone = state.get("old_phone", user.phone_number)
+        if step not in ("old_verified", "new_otp_sent") or old_phone != user.phone_number:
             raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
 
         new_phone = normalize_phone(new_phone)
@@ -208,21 +212,15 @@ class PhoneChangeNewRequestAPIView(APIView):
         if user.phone_number == new_phone:
             raise APIError(UserAccountError.SAME_PHONE_AS_CURRENT)
 
-        # Generate OTP for new phone
-        generate_otp(phone_number=new_phone, purpose=OTPPurpose.NEW_PHONE, user_id=user.pk)
-
-        if step == "new_otp_sent":
-            return Response(status=status.HTTP_200_OK)
-
-        # Update state: step 3 (store new phone)
-        cache.set(
-            cache_key,
-            {
-                "step": "new_otp_sent",
-                "user_id": user.id,
-                "new_phone": new_phone,
-            },
-            timeout=300,
+        # A resend keeps the original verification window.
+        next_state = None
+        if step == "old_verified":
+            next_state = {**state, "step": "new_otp_sent", "old_phone": user.phone_number, "new_phone": new_phone}
+        generate_otp(
+            phone_number=new_phone,
+            purpose=OTPPurpose.NEW_PHONE,
+            user_id=user.pk,
+            workflow=OTPWorkflow(cache_key, state, next_state, conflict_error=OTPError.OLD_PHONE_VERIFICATION_REQUIRED),
         )
 
         return Response(status=status.HTTP_200_OK)
@@ -230,51 +228,49 @@ class PhoneChangeNewRequestAPIView(APIView):
 
 class PhoneChangeNewVerifyAPIView(APIView):
     def post(self, request):
-        user: User = request.user
         otp = request.data.get("otp")
 
         if not otp:
             raise APIError(OTPError.PHONE_REQUIRED)
 
-        # Check state: must be at step 3
-        cache_key = f"phone_change_step_{user.id}"
-        state = cache.get(cache_key)
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=request.user.pk)
+            cache_key, state = _phone_change_state(user)
+            if not state:
+                raise APIError(OTPError.OTP_NOT_FOUND)
+            if state.get("step") != "new_otp_sent" or state.get("old_phone", user.phone_number) != user.phone_number:
+                raise APIError(OTPError.INVALID_STEP)
 
-        if not state:
-            raise APIError(OTPError.OTP_NOT_FOUND)
+            new_phone = state.get("new_phone")
+            if not new_phone:
+                raise APIError(OTPError.NEW_PHONE_NOT_FOUND)
 
-        if state.get("step") != "new_otp_sent":
-            raise APIError(OTPError.INVALID_STEP)
+            try:
+                validate_phone(new_phone, instance=user)
+            except APIError as exc:
+                if exc.error_code == SignUpError.PHONE_NUMBER_REUSE[0]:
+                    delete_if_unchanged(cache_key, state)
+                raise
 
-        new_phone = state.get("new_phone")
-
-        if not new_phone:
-            raise APIError(OTPError.NEW_PHONE_NOT_FOUND)
-
-        try:
-            validate_phone(new_phone, instance=user)
-        except APIError as exc:
-            if exc.error_code == SignUpError.PHONE_NUMBER_REUSE[0]:
-                cache.delete(cache_key)
-            raise
-
-        # Verify OTP from new phone
-        verify_otp(phone_number=new_phone, otp_code=otp, purpose=OTPPurpose.NEW_PHONE, user_id=user.pk)
-
-        old_phone = user.phone_number
-        try:
-            with transaction.atomic():
-                user.phone_number = new_phone
-                user.save(update_fields=["phone_number", "updated_at"])
-                transaction.on_commit(lambda: cache.delete(cache_key))
-        except IntegrityError:
-            user.phone_number = old_phone
-            # Another account may claim the phone after validation. Query only
-            # after the failed update's savepoint has been rolled back.
-            if User.objects.filter(phone_number=new_phone).exclude(pk=user.pk).exists():
-                cache.delete(cache_key)
+            verify_otp(
+                phone_number=new_phone,
+                otp_code=otp,
+                purpose=OTPPurpose.NEW_PHONE,
+                user_id=user.pk,
+                workflow=OTPWorkflow(cache_key, state),
+            )
+            try:
+                with transaction.atomic():
+                    user.phone_number = new_phone
+                    user.save(update_fields=["phone_number", "updated_at"])
+            except IntegrityError:
+                # Another account may claim the phone after validation. Query only
+                # after the failed update's savepoint has been rolled back.
+                if not User.objects.filter(phone_number=new_phone).exclude(pk=user.pk).exists():
+                    raise
+                delete_if_unchanged(cache_key, state)
                 raise APIError(SignUpError.PHONE_NUMBER_REUSE)
-            raise
+            transaction.on_commit(lambda: delete_if_unchanged(cache_key, state))
 
         return Response(
             {

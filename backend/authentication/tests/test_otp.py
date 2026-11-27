@@ -11,7 +11,7 @@ from kombu.exceptions import EncodeError, OperationalError
 from redis.client import Pipeline
 from redis.exceptions import ConnectionError
 
-from authentication.otp_service import OTPPurpose, _cancel_challenge, generate_otp, verify_otp
+from authentication.otp_service import OTPPurpose, delete_if_unchanged, generate_otp, verify_otp
 from core.errors import APIError, OTPError
 
 
@@ -86,7 +86,7 @@ class OTPServiceTest(SimpleTestCase):
         with patch.object(cache.client, "get_client", side_effect=ConnectionError):
             with self.assertRaises(APIError) as verification:
                 verify_otp(otp_code="123456", **scope)
-            self.assertFalse(_cancel_challenge(key, ("id", "hash", 0)))
+            self.assertFalse(delete_if_unchanged(key, ("id", "hash", 0)))
         for unavailable in (issuance, verification):
             self.assertEqual(unavailable.exception.status_code, 503)
             self.assertEqual(unavailable.exception.error_code, "OTP-011")
