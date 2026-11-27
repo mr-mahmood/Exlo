@@ -7,7 +7,7 @@ from authentication.permissions import IsAdmin
 from core.pagination import CustomPagination
 from .permissions import IsAdminOrGymOwner
 from users.models import User
-from users.validators import validate_phone
+from users.utils import normalize_phone
 from gym.models import Gym
 from .models import UserGymRole
 from .serializers import UserGymRoleSerializer
@@ -43,9 +43,7 @@ class GymOwnerCreateAPIView(APIView):
     permission_classes = [IsAdmin]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
@@ -58,9 +56,7 @@ class GymCoachCreateAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
@@ -73,9 +69,7 @@ class GymStaffCreateAPIView(APIView):
     permission_classes = [IsAdminOrGymOwner]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)

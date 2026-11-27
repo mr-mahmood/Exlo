@@ -4,6 +4,7 @@ from rest_framework import serializers
 from commerce_wallet.models import Wallet
 from users.models import User
 from core.errors import APIError, SignUpError
+from users.utils import normalize_phone
 from users.validators import validate_name, validate_date_of_birth, validate_phone
 from rest_framework import serializers
 from django.conf import settings
@@ -49,7 +50,10 @@ class UserSignupSerializer(serializers.ModelSerializer):
         ]
 
     def validate_phone_number(self, value):
-        return validate_phone(value)
+        phone = self.context.get("normalized_phone")
+        if phone is None:
+            phone = normalize_phone(value)
+        return validate_phone(phone)
 
     def validate_first_name(self, value):
         return validate_name(value)
@@ -155,10 +159,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         if profile_picture is None:
             default_picture = instance._meta.get_field("profile_picture").get_default()
-            if (
-                instance.profile_picture
-                and instance.profile_picture.name != default_picture
-            ):
+            if instance.profile_picture and instance.profile_picture.name != default_picture:
                 previous_picture = instance.profile_picture
             instance.profile_picture = default_picture
         elif profile_picture is not serializers.empty:

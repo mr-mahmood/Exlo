@@ -50,6 +50,17 @@ class AuthenticationViewsTest(TestCase):
         cache_key = f"otp:login:-:09123456789"
         self.assertIsNotNone(cache.get(cache_key))
 
+    @override_settings(OTP_MAX_ATTEMPTS=2)
+    def test_decimal_scripts_share_cooldown_and_attempts(self):
+        localized = "۰۹۱۲۳۴۵۶۷۸۹"
+        response = self.client.post(self.login_request_url, {"phone_number": localized})
+        self.assertEqual(response.status_code, 200)
+        response = self.client.post(self.login_request_url, {"phone_number": self.user.phone_number})
+        self.assertEqual(response.json()["error_code"], OTPError.OTP_ALREADY_ACTIVE[0])
+        for phone, error in ((self.user.phone_number, OTPError.OTP_INVALID), (localized, OTPError.OTP_ATTEMPTS_EXHAUSTED)):
+            response = self.client.post(self.login_verify_url, {"phone_number": phone, "otp": "000000"})
+            self.assertEqual(response.json()["error_code"], error[0])
+
     def test_login_endpoints_reject_non_string_phones(self):
         response = self.client.post(
             self.login_request_url,

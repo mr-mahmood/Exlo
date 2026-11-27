@@ -10,7 +10,6 @@ from redis.exceptions import RedisError, WatchError
 
 from core.errors import APIError, OTPError
 from core.hashing import hash_secret, verify_secret
-from users.validators import validate_phone
 
 MAX_WATCH_RETRIES = 3
 
@@ -67,8 +66,8 @@ def _cancel_challenge(cache_key, expected_challenge):
 
 
 def generate_otp(*, phone_number: str, purpose: OTPPurpose, user_id=None) -> None:
+    """Use the canonical phone number supplied by the caller."""
 
-    phone_number = validate_phone(phone_number, skip_duplicate_check=True)
     cache_key = _otp_key(phone_number, purpose, user_id)
 
     if settings.IS_PRODUCTION:
@@ -106,8 +105,8 @@ def generate_otp(*, phone_number: str, purpose: OTPPurpose, user_id=None) -> Non
 
 
 def verify_otp(*, phone_number: str, otp_code: str, purpose: OTPPurpose, user_id=None) -> None:
+    """Use the canonical phone number supplied by the caller."""
 
-    phone_number = validate_phone(phone_number, skip_duplicate_check=True)
     cache_key = _otp_key(phone_number, purpose, user_id)
 
     max_attempts = settings.OTP_MAX_ATTEMPTS

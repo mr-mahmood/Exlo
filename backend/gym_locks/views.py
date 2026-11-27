@@ -13,7 +13,7 @@ from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymLocker
 from users_nfc_cards.models import UserNfcCard
 from users.models import User
-from users.validators import validate_phone
+from users.utils import normalize_phone
 from core.cache import GYM_LOCKERS, cache_key, get_cache, invalidate_gym_locker_caches
 
 
@@ -92,9 +92,7 @@ class ManualLockerOpenAPIView(APIView):
     permission_classes = [IsAdminOrGymOwnerOrGymStaff]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         # look open dont need user to be active
         user = User.objects.get_user_by_phone(phone_number)
         gym = Gym.objects.get_gym(gym_id)

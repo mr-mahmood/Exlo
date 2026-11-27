@@ -12,6 +12,7 @@ from users_sessions.models import Session
 from authentication.otp_service import OTPPurpose, generate_otp, verify_otp
 from authentication.token_services import create_tokens_for_user
 from core.errors import APIError, OTPError, SignUpError, UserAccountError
+from users.utils import normalize_phone
 from users.validators import validate_phone
 from typing import cast
 from authentication.utils import (
@@ -34,7 +35,7 @@ class UserSignupAPIView(APIView):
         if not phone_number:
             raise APIError(OTPError.PHONE_REQUIRED)
 
-        phone_number = validate_phone(phone_number, skip_duplicate_check=True)
+        phone_number = normalize_phone(phone_number)
 
         # Lock concurrent signup attempts for the same phone.
         lock = cache.lock(f"signup_verification_lock_{phone_number}", timeout=10)
@@ -59,7 +60,7 @@ class UserSignupAPIView(APIView):
 
             serializer = self.serializer_class(
                 data=data,
-                context={"request": request},
+                context={"request": request, "normalized_phone": phone_number},
             )
             serializer.is_valid(raise_exception=True)
 
@@ -196,14 +197,13 @@ class PhoneChangeNewRequestAPIView(APIView):
             raise APIError(OTPError.OTP_NOT_FOUND)
 
         step = state.get("step")
-        if step == "new_otp_sent":
-            new_phone = validate_phone(new_phone, skip_duplicate_check=True)
-            if new_phone != state.get("new_phone"):
-                raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
-        elif step != "old_verified":
+        if step not in ("old_verified", "new_otp_sent"):
             raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
 
-        new_phone = validate_phone(new_phone, instance=user)
+        new_phone = normalize_phone(new_phone)
+        if step == "new_otp_sent" and new_phone != state.get("new_phone"):
+            raise APIError(OTPError.OLD_PHONE_VERIFICATION_REQUIRED)
+        validate_phone(new_phone, instance=user)
 
         if user.phone_number == new_phone:
             raise APIError(UserAccountError.SAME_PHONE_AS_CURRENT)
@@ -252,7 +252,7 @@ class PhoneChangeNewVerifyAPIView(APIView):
             raise APIError(OTPError.NEW_PHONE_NOT_FOUND)
 
         try:
-            new_phone = validate_phone(new_phone, instance=user)
+            validate_phone(new_phone, instance=user)
         except APIError as exc:
             if exc.error_code == SignUpError.PHONE_NUMBER_REUSE[0]:
                 cache.delete(cache_key)

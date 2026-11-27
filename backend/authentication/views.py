@@ -3,7 +3,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-from users.validators import validate_phone
+from users.utils import normalize_phone
 from core.errors import APIError, OTPError, SessionError
 from users.models import User
 from users.serializers import UserProfileSerializer
@@ -21,10 +21,7 @@ class LoginRequestApiView(APIView):
 
     def post(self, request):
         phone_number = request.data.get("phone_number")
-        phone_number = validate_phone(phone_number, skip_duplicate_check=True)
-
-        if not phone_number:
-            raise APIError(OTPError.PHONE_REQUIRED)
+        phone_number = normalize_phone(phone_number)
 
         # Generate and send OTP
         generate_otp(phone_number=phone_number, purpose=OTPPurpose.LOGIN)
@@ -43,7 +40,7 @@ class LoginVerifyApiView(APIView):
         if phone_number is None or phone_number == "" or not otp_code:
             raise APIError(OTPError.PHONE_REQUIRED)
 
-        phone_number = validate_phone(phone_number, skip_duplicate_check=True)
+        phone_number = normalize_phone(phone_number)
 
         # Verify OTP
         verify_otp(phone_number=phone_number, otp_code=otp_code, purpose=OTPPurpose.LOGIN)

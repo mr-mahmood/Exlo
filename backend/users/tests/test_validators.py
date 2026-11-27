@@ -1,18 +1,19 @@
 # users/tests/test_validators.py
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
+from users.utils import normalize_phone
 from datetime import date, timedelta
 from users.validators import validate_phone, validate_name, validate_date_of_birth
 from users.models import User
 from core.errors import APIError, UserValidationError, UserAccountError, SignUpError
 
 
-class PhoneValidatorTest(TestCase):
+class NormalizePhoneTest(SimpleTestCase):
     """Test phone number validator"""
 
     def test_decimal_scripts_share_ascii_identity(self):
         for phone in ("۰۹۱۲۳۴۵۶۷۸۹", "٠٩١٢٣٤٥٦٧٨٩", "０９１２３４５６７８９", " 09۱٢３456789 "):
             with self.subTest(phone=phone):
-                self.assertEqual(validate_phone(phone), "09123456789")
+                self.assertEqual(normalize_phone(phone), "09123456789")
 
     def test_valid_phone_numbers(self):
         """Test valid phone numbers"""
@@ -25,7 +26,7 @@ class PhoneValidatorTest(TestCase):
         ]
 
         for phone in valid_numbers:
-            result = validate_phone(phone)
+            result = normalize_phone(phone)
             self.assertEqual(result, phone.strip())
 
     def test_invalid_phone_formats(self):
@@ -45,7 +46,7 @@ class PhoneValidatorTest(TestCase):
 
         for phone in invalid_numbers:
             with self.assertRaises(APIError) as context:
-                validate_phone(phone)
+                normalize_phone(phone)
             self.assertEqual(
                 context.exception.error_code,
                 UserValidationError.INVALID_PHONE_NUMBER[0],
@@ -65,14 +66,16 @@ class PhoneValidatorTest(TestCase):
             {"phone": "09123456789"},
             b"09123456789",
         ):
-            with self.subTest(phone=phone), self.assertNumQueries(0):
+            with self.subTest(phone=phone):
                 with self.assertRaises(APIError) as context:
-                    validate_phone(phone)
+                    normalize_phone(phone)
                 self.assertEqual(
                     context.exception.error_code,
                     UserValidationError.INVALID_PHONE_NUMBER[0],
                 )
 
+
+class PhoneValidatorTest(TestCase):
     def test_duplicate_phone_raises_error(self):
         """Test duplicate phone number raises error"""
         User.objects.create_user(
@@ -81,8 +84,8 @@ class PhoneValidatorTest(TestCase):
             last_name="Doe",
         )
 
-        with self.assertRaises(APIError) as context:
-            validate_phone("۰۹۱۲۳۴۵۶۷۸۹")
+        with self.assertNumQueries(1), self.assertRaises(APIError) as context:
+            validate_phone("09123456789")
         self.assertEqual(context.exception.error_code, SignUpError.PHONE_NUMBER_REUSE[0])
 
     def test_same_user_phone_skip_validation(self):

@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from users_nfc_cards.permissions import CanAssignUserNfcCard
 from users.models import User
-from users.validators import validate_phone
+from users.utils import normalize_phone
 from gym_subscriptions.models import GymSubscription
 from core.errors import APIError, UserNfcCardError, GymSubscriptionError
 
@@ -16,9 +16,7 @@ class UserNfcCardAssignRequestView(APIView):
     permission_classes = [CanAssignUserNfcCard]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
 

@@ -1,21 +1,16 @@
 from datetime import date
 from core.errors import APIError, UserAccountError, SignUpError, UserValidationError
 from users.models import User
-from users.utils import normalize_phone
 
 
-def validate_phone(value, instance=None, skip_duplicate_check=False):
-    phone = normalize_phone(value)
-
-    # Check for duplicates
-    if not skip_duplicate_check:
-        qs = User.objects.filter(phone_number=phone)
-        if instance is not None:
-            qs = qs.exclude(pk=instance.pk)
-        if qs:
-            raise APIError(SignUpError.PHONE_NUMBER_REUSE)
-
-    return phone
+def validate_phone(normalized_phone, instance=None):
+    """Reject a canonical phone number already assigned to another user."""
+    users = User.objects.filter(phone_number=normalized_phone)
+    if instance is not None:
+        users = users.exclude(pk=instance.pk)
+    if users.exists():
+        raise APIError(SignUpError.PHONE_NUMBER_REUSE)
+    return normalized_phone
 
 
 def validate_name(value):

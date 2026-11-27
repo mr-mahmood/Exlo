@@ -12,7 +12,7 @@ from redis.client import Pipeline
 from redis.exceptions import ConnectionError
 
 from authentication.otp_service import OTPPurpose, _cancel_challenge, generate_otp, verify_otp
-from core.errors import APIError, OTPError, UserValidationError
+from core.errors import APIError, OTPError
 
 
 class OTPServiceTest(SimpleTestCase):
@@ -20,19 +20,6 @@ class OTPServiceTest(SimpleTestCase):
 
     def setUp(self):
         cache.clear()
-
-    @override_settings(OTP_MAX_ATTEMPTS=2)
-    def test_decimal_scripts_share_cooldown_and_attempts(self):
-        localized = "۰۹۱۲۳۴۵۶۷۸۹"
-        ascii_phone = "09123456789"
-        generate_otp(phone_number=localized, purpose=OTPPurpose.LOGIN)
-        with self.assertRaises(APIError) as resend:
-            generate_otp(phone_number=ascii_phone, purpose=OTPPurpose.LOGIN)
-        self.assertEqual(resend.exception.error_code, OTPError.OTP_ALREADY_ACTIVE[0])
-        for phone, error in ((ascii_phone, OTPError.OTP_INVALID), (localized, OTPError.OTP_ATTEMPTS_EXHAUSTED)):
-            with self.assertRaises(APIError) as failure:
-                verify_otp(phone_number=phone, purpose=OTPPurpose.LOGIN, otp_code="000000")
-            self.assertEqual(failure.exception.error_code, error[0])
 
     def test_generate_otp_success(self):
         """Test generating OTP"""
@@ -116,7 +103,7 @@ class OTPServiceTest(SimpleTestCase):
         original_challenge = cache.get(key)
 
         with self.assertRaises(APIError) as duplicate:
-            generate_otp(phone_number=f" {phone} ", purpose=OTPPurpose.LOGIN)
+            generate_otp(phone_number=phone, purpose=OTPPurpose.LOGIN)
         self.assertEqual(duplicate.exception.error_code, OTPError.OTP_ALREADY_ACTIVE[0])
         self.assertIn(duplicate.exception.retry_after, range(1, 21))
         self.assertLessEqual(cache.ttl(key), 20)
@@ -148,16 +135,6 @@ class OTPServiceTest(SimpleTestCase):
         generate_otp(phone_number=phone, purpose=OTPPurpose.LOGIN)
         self.assertIsNone(verify_otp(phone_number=phone, otp_code="123456", purpose=OTPPurpose.LOGIN))
 
-    def test_service_validates_phone(self):
-        def verify(*, phone_number, **scope):
-            return verify_otp(phone_number=phone_number, otp_code="123456", **scope)
-
-        for action in (generate_otp, verify):
-            for phone in (None, 9123456789, "09123"):
-                with self.subTest(phone=phone), self.assertRaises(APIError) as invalid:
-                    action(phone_number=phone, purpose=OTPPurpose.LOGIN)
-                self.assertEqual(invalid.exception.error_code, UserValidationError.INVALID_PHONE_NUMBER[0])
-
     def test_purpose_and_user_scope(self):
         phone = "09123456789"
         owner, other = uuid4(), uuid4()
@@ -171,7 +148,7 @@ class OTPServiceTest(SimpleTestCase):
             with self.assertRaises(APIError) as missing:
                 verify_otp(phone_number=phone, otp_code="123456", **scope)
             self.assertEqual(missing.exception.error_code, OTPError.OTP_NOT_FOUND[0])
-            self.assertIsNone(generate_otp(phone_number=f" {phone} ", **scope))
+            self.assertIsNone(generate_otp(phone_number=phone, **scope))
 
         for scope in scopes:
             self.assertIsNone(verify_otp(phone_number=phone, otp_code="123456", **scope))

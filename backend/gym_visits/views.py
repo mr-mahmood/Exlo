@@ -11,7 +11,7 @@ from gym_devices.authentication import DeviceTokenAuthentication
 from gym_devices.permissions import IsGymGate
 from users_nfc_cards.models import UserNfcCard
 from users.models import User
-from users.validators import validate_phone
+from users.utils import normalize_phone
 from gym.models import Gym
 from gym_locks.models import GymLocker
 from gym_auth.permissions import IsAdminOrGymOwnerOrGymStaff
@@ -106,9 +106,7 @@ class ManualCheckInAPIView(APIView):
     permission_classes = [CanManageManualCheckInAndOut]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         user = User.objects.get_user_by_phone(phone_number)
         user.validate_account_status()
         gym = Gym.objects.get_gym(gym_id)
@@ -150,9 +148,7 @@ class ManualCheckOutAPIView(APIView):
     permission_classes = [CanManageManualCheckInAndOut]
 
     def post(self, request, gym_id):
-        phone_number = validate_phone(
-            request.data.get("phone_number"), skip_duplicate_check=True
-        )
+        phone_number = normalize_phone(request.data.get("phone_number"))
         # check out dont need user to be active
         user = User.objects.get_user_by_phone(phone_number)
         gym = Gym.objects.get_gym(gym_id)
