@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 def send_sms_verification_task(phone_number: str, otp_code: str):
     """Send OTP verification code via SMS.ir template"""
     try:
-        conn = http.client.HTTPSConnection("api.sms.ir")
+        conn = http.client.HTTPSConnection("api.sms.ir", timeout=5)
 
         payload = json.dumps(
             {

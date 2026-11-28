@@ -2,7 +2,7 @@ import secrets
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from math import ceil
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from django.conf import settings
 from django.core.cache import cache
@@ -58,6 +58,17 @@ class OTPWorkflow:
 def _otp_key(phone_number, purpose, user_id):
     purpose = OTPPurpose(purpose)
     return f"otp:{purpose}:{user_id or '-'}:{phone_number}"
+
+
+def _phone_change_flow_id(purpose, user_id, state):
+    if purpose == OTPPurpose.LOGIN:
+        return None
+    if user_id is None or not state or state.get("user_id") != user_id:
+        raise APIError(OTPError.OTP_NOT_FOUND)
+    flow_id = state.get("flow_id")
+    if not isinstance(flow_id, UUID):
+        raise APIError(OTPError.OTP_NOT_FOUND)
+    return flow_id
 
 
 def _retry_after(ttl_ms):
@@ -176,13 +187,19 @@ def generate_otp(
     """Use the canonical phone number supplied by the caller."""
 
     cache_key = _otp_key(phone_number, purpose, user_id)
+    state = None
+    if workflow is not None:
+        state = workflow.next_state if purpose == OTPPurpose.OLD_PHONE else workflow.expected
+    flow_id = _phone_change_flow_id(purpose, user_id, state)
 
     if settings.IS_PRODUCTION:
         otp_code = str(secrets.randbelow(900000) + 100000)
     else:
         otp_code = "123456"
 
-    challenge = (uuid4().hex, hash_secret(otp_code), 0)
+    issuance_id = uuid4().hex
+    challenge_id = (flow_id, issuance_id) if flow_id is not None else issuance_id
+    challenge = (challenge_id, hash_secret(otp_code), 0)
 
     # TODO: Reserve paid SMS quotas together with challenge creation using Redis
     # WATCH/MULTI/EXEC without Lua. Across login and phone changes, allow 10 sends
@@ -238,6 +255,7 @@ def verify_otp(
 
     cache_key = _otp_key(phone_number, purpose, user_id)
 
+    flow_id = _phone_change_flow_id(purpose, user_id, workflow.expected if workflow else None)
     max_attempts = settings.OTP_MAX_ATTEMPTS
     original_challenge_id = None
 
@@ -265,6 +283,9 @@ def verify_otp(
                     raise APIError(OTPError.OTP_NOT_FOUND)
 
                 challenge_id, stored_hash, failures = challenge
+                if flow_id is not None:
+                    if not isinstance(challenge_id, tuple) or len(challenge_id) != 2 or challenge_id[0] != flow_id:
+                        raise APIError(OTPError.OTP_NOT_FOUND)
                 if original_challenge_id is None:
                     original_challenge_id = challenge_id
                 elif challenge_id != original_challenge_id:

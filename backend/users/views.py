@@ -1,5 +1,4 @@
 from uuid import uuid7
-
 from redis.exceptions import RedisError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,12 +18,7 @@ from core.errors import APIError, OTPError, SignUpError, UserAccountError
 from users.utils import normalize_phone
 from users.validators import validate_phone
 from typing import cast
-from authentication.utils import (
-    make_cookie,
-    delete_cookies,
-    signup_key,
-    get_verified_signup_proof,
-)
+from authentication.utils import make_cookie, delete_cookies, signup_key, get_verified_signup_proof
 
 
 class UserSignupAPIView(APIView):
@@ -121,8 +115,8 @@ def _phone_change_state(user):
     key = f"phone_change_step_{user.pk}"
     try:
         return key, cache.get(key)
-    except RedisError as exc:
-        raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE) from exc
+    except RedisError:
+        raise APIError(OTPError.OTP_SERVICE_UNAVAILABLE)
 
 
 class PhoneChangeOldRequestAPIView(APIView):
@@ -206,6 +200,7 @@ class PhoneChangeNewRequestAPIView(APIView):
         next_state = None
         if step == "old_verified":
             next_state = {**state, "step": "new_otp_sent", "old_phone": user.phone_number, "new_phone": new_phone}
+            
         generate_otp(
             phone_number=new_phone,
             purpose=OTPPurpose.NEW_PHONE,
@@ -224,7 +219,7 @@ class PhoneChangeNewVerifyAPIView(APIView):
             raise APIError(OTPError.PHONE_REQUIRED)
 
         with transaction.atomic():
-            user = User.objects.select_for_update().get(pk=request.user.pk)
+            user: User = User.objects.select_for_update().get(pk=request.user.pk)
             cache_key, state = _phone_change_state(user)
             if not state:
                 raise APIError(OTPError.OTP_NOT_FOUND)
@@ -266,9 +261,7 @@ class PhoneChangeNewVerifyAPIView(APIView):
             {
                 "user": UserProfileSerializer(
                     user,
-                    context={
-                        "request": request,
-                    },
+                    context={"request": request},
                 ).data,
             },
             status=status.HTTP_200_OK,
@@ -303,9 +296,7 @@ class UserProfileUpdateAPIView(APIView):
         serializer.save()
 
         return Response(
-            {
-                "user": serializer.data,
-            },
+            {"user": serializer.data},
             status=status.HTTP_200_OK,
         )
 

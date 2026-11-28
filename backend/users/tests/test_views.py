@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from threading import Barrier, Event
 from unittest.mock import patch
+from uuid import uuid7
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.base import ContentFile
@@ -739,6 +740,48 @@ class PhoneChangeConcurrencyTest(PhoneChangeSetup, TransactionTestCase):
 
 
 class PhoneChangeFlowTest(PhoneChangeSetup, TestCase):
+    def assert_otp_rejects_other_flow(self, verify_url, challenge_key):
+        state_key = f"phone_change_step_{self.user.pk}"
+        issuing_state = cache.get(state_key)
+        challenge = cache.get(challenge_key)
+        other_state = {**issuing_state, "flow_id": uuid7()}
+        cache.set(state_key, other_state, 300)
+
+        for code in ("000000", "123456"):
+            response = self.client.post(verify_url, {"otp": code})
+            self.assertEqual(response.json()["error_code"], OTPError.OTP_NOT_FOUND[0])
+            self.assertEqual(cache.get(challenge_key), challenge)
+            self.assertEqual(cache.get(state_key), other_state)
+            self.user.refresh_from_db()
+            self.assertEqual(self.user.phone_number, "09123456789")
+
+        cache.set(state_key, issuing_state, 300)
+        self.assertEqual(self.client.post(verify_url, {"otp": "123456"}).status_code, 200)
+
+    def test_old_phone_otp_requires_issuing_flow(self):
+        self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
+        self.assert_otp_rejects_other_flow(self.old_verify_url, f"otp:old_phone:{self.user.pk}:{self.user.phone_number}")
+
+    def test_new_phone_otp_requires_issuing_flow(self):
+        destination = "09123456711"
+        self.request_new_phone(destination)
+        self.assert_otp_rejects_other_flow(self.new_verify_url, f"otp:new_phone:{self.user.pk}:{destination}")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.phone_number, destination)
+
+    def test_legacy_phone_change_otp_requires_reissue(self):
+        self.assertEqual(self.client.post(self.old_request_url).status_code, 200)
+        key = f"otp:old_phone:{self.user.pk}:{self.user.phone_number}"
+        _, stored_hash, failures = cache.get(key)
+        legacy = (uuid7().hex, stored_hash, failures)
+        cache.set(key, legacy, 120)
+        response = self.client.post(self.old_verify_url, {"otp": "123456"})
+        self.assertEqual(response.json()["error_code"], OTPError.OTP_NOT_FOUND[0])
+        self.assertEqual(cache.get(key), legacy)
+        self.assertEqual(self.client.post(self.old_request_url).status_code, 429)
+        cache.touch(key, -1)
+        self.verify_old_phone()
+
     @override_settings(IS_PRODUCTION=True)
     def test_restart_publishes_sms_after_commit(self):
         with patch("core.sms_task.send_sms_verification_task.delay") as publish:

@@ -11,7 +11,7 @@ from kombu.exceptions import EncodeError, OperationalError
 from redis.client import Pipeline
 from redis.exceptions import ConnectionError
 
-from authentication.otp_service import OTPPurpose, delete_if_unchanged, generate_otp, verify_otp
+from authentication.otp_service import OTPPurpose, OTPWorkflow, delete_if_unchanged, generate_otp, verify_otp
 from core.errors import APIError, OTPError
 
 
@@ -138,11 +138,17 @@ class OTPServiceTest(SimpleTestCase):
     def test_purpose_and_user_scope(self):
         phone = "09123456789"
         owner, other = uuid4(), uuid4()
+        workflows = {}
+        for user_id in (owner, other):
+            key = f"phone_change_step_{user_id}"
+            state = {"user_id": user_id, "flow_id": uuid4()}
+            cache.set(key, state, 300)
+            workflows[user_id] = OTPWorkflow(key, expected=state, next_state=state)
         scopes = [
             {"purpose": OTPPurpose.LOGIN},
-            {"purpose": OTPPurpose.OLD_PHONE, "user_id": owner},
-            {"purpose": OTPPurpose.NEW_PHONE, "user_id": owner},
-            {"purpose": OTPPurpose.NEW_PHONE, "user_id": other},
+            {"purpose": OTPPurpose.OLD_PHONE, "user_id": owner, "workflow": workflows[owner]},
+            {"purpose": OTPPurpose.NEW_PHONE, "user_id": owner, "workflow": workflows[owner]},
+            {"purpose": OTPPurpose.NEW_PHONE, "user_id": other, "workflow": workflows[other]},
         ]
         for scope in scopes:
             with self.assertRaises(APIError) as missing:
@@ -152,6 +158,26 @@ class OTPServiceTest(SimpleTestCase):
 
         for scope in scopes:
             self.assertIsNone(verify_otp(phone_number=phone, otp_code="123456", **scope))
+
+    def test_phone_change_requires_user_and_workflow(self):
+        phone = "09123456789"
+        owner = uuid4()
+        state = {"user_id": owner, "flow_id": uuid4()}
+        workflow = OTPWorkflow(f"phone_change_step_{owner}", state, state)
+        cache.set(workflow.key, state, 300)
+        for purpose in (OTPPurpose.OLD_PHONE, OTPPurpose.NEW_PHONE):
+            valid_scope = dict(phone_number=phone, purpose=purpose, user_id=owner, workflow=workflow)
+            generate_otp(**valid_scope)
+            for user_id, context in ((None, workflow), (uuid4(), workflow), (owner, None)):
+                with self.subTest(purpose=purpose, user_id=user_id):
+                    scope = dict(phone_number=phone, purpose=purpose, user_id=user_id, workflow=context)
+                    with self.assertRaises(APIError) as missing:
+                        generate_otp(**scope)
+                    self.assertEqual(missing.exception.error_code, OTPError.OTP_NOT_FOUND[0])
+                    with self.assertRaises(APIError) as missing:
+                        verify_otp(otp_code="123456", **scope)
+                    self.assertEqual(missing.exception.error_code, OTPError.OTP_NOT_FOUND[0])
+            self.assertIsNone(verify_otp(otp_code="123456", **valid_scope))
 
     def concurrent_results(self, count, operation):
         start = Barrier(count, timeout=5)
